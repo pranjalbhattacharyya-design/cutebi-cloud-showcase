@@ -38,6 +38,7 @@ export async function convertExcelToCSV(file) {
   const csvString = XLSX.utils.sheet_to_csv(worksheet, {
     blankrows: false,   // skip completely empty rows
     defval: '',         // empty cells become empty string (not undefined)
+    dateNF: 'YYYY-MM-DD', // Force ISO dates so DuckDB TRY_CAST(x AS DATE) works for YTD/LYTD
   });
 
   if (!csvString || csvString.trim().length === 0) {
