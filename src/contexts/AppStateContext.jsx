@@ -309,6 +309,19 @@ export const AppStateProvider = ({ children }) => {
       }
 
       setWorkspaceDatasets(ds || []);
+      
+      // --- EAGER DUCKDB REGISTRATION ---
+      // Cloud Hardening: Automatically register cloud-hosted Parquet files in the client WASM engine
+      // This ensures that slicers and charts 'find' their data instantly after a refresh.
+      if (ds && ds.length > 0) {
+        ds.forEach(wsDs => {
+          if (wsDs.public_url && wsDs.table_name) {
+             queryDuckDB(`CREATE OR REPLACE VIEW "${wsDs.table_name}" AS SELECT * FROM read_parquet('${wsDs.public_url}')`)
+               .catch(err => console.error(`[DuckDB] Failed to pre-register ${wsDs.table_name}:`, err));
+          }
+        });
+      }
+
       setPublishedModels((pm || []).map(m => ({
         ...m,
         ...(m.data || {})
@@ -318,7 +331,7 @@ export const AppStateProvider = ({ children }) => {
       // The backend now includes headers + sample_data, so we can run Smart Typing
       // without requiring the user to re-upload the file.
       const derivedWsModels = {};
-      ds.forEach(wsDs => {
+      ds.filter(d => !d.is_deleted).forEach(wsDs => {
         derivedWsModels[wsDs.id] = generateInitModel(wsDs.id, wsDs.headers || [], wsDs.sample_data || []);
       });
       setWorkspaceSemanticModels(derivedWsModels);

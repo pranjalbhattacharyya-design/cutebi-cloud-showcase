@@ -9,6 +9,7 @@ import { registerCSV, registerJSON } from './utils/duckdb.js'
 import { generateInitModel, patchModels } from './utils/dataParser'
 import { storeHandle, deleteHandle, getHandlesForDatasets, requestReadPermission } from './utils/fileHandleStore'
 import { apiClient } from './services/api'
+import { preprocessFilesForUpload } from './utils/excelConverter'
 
 
 import Sidebar from './components/layout/Sidebar'
@@ -339,8 +340,8 @@ function AppContent() {
   };
 
   const handleFileUpload = async (e) => {
-    const files = Array.from(e.target?.files || e.dataTransfer?.files || []);
-    if (!files.length) return;
+    const rawFiles = Array.from(e.target?.files || e.dataTransfer?.files || []);
+    if (!rawFiles.length) return;
     setIsUploading(true);
     setIsMutating(true);
     try {
@@ -350,12 +351,35 @@ function AppContent() {
       let lastDsId = null;
       let latestTemplateToApply = pendingRestore;
 
+      // Pre-process: convert any .xlsx/.xls files to CSV in the browser
+      // This avoids server-side Excel parsing (which times out on Vercel)
+      let files;
+      try {
+        files = await preprocessFilesForUpload(rawFiles, (msg) => {
+          window.dispatchEvent(new CustomEvent('cutebi-debug', { detail: { type: 'info', category: 'Upload', message: msg } }));
+          showToast(msg);
+        });
+      } catch (convErr) {
+        window.dispatchEvent(new CustomEvent('cutebi-debug', { detail: { type: 'error', category: 'Upload', message: `Excel conversion failed: ${convErr.message}` } }));
+        showToast(`❌ ${convErr.message}`);
+        setIsUploading(false);
+        setIsMutating(false);
+        return;
+      }
+
+      // Build a map: converted file name → original raw file name
+      // (e.g. 'Fact Sale.csv' → 'Fact Sale.xlsx')
+      const originalNameMap = new Map(
+        rawFiles.map((raw, i) => [files[i]?.name, raw.name])
+      );
+
       for (const file of files) {
-        window.dispatchEvent(new CustomEvent('cutebi-debug', { detail: { type: 'info', category: 'Upload', message: `Platinum Ingestion: ${file.name}` } }));
+        const originalName = originalNameMap.get(file.name) || file.name;
+        window.dispatchEvent(new CustomEvent('cutebi-debug', { detail: { type: 'info', category: 'Upload', message: `Platinum Ingestion: ${originalName}` } }));
         
         try {
-          // ACTION B: Immediate Backend Upload (No client parsing)
-          const backendDs = await apiClient.upload('/upload', file);
+          // Upload to backend — passing original filename so it shows 'Fact Sale.xlsx' not 'Fact Sale.csv'
+          const backendDs = await apiClient.upload('/upload', file, originalName);
           
           const dsId = backendDs.id;
           const tableName = backendDs.table_name;
@@ -364,8 +388,8 @@ function AppContent() {
             id: dsId, 
             name: backendDs.name, 
             tableName, 
-            originalFileName: file.name, 
-            data: backendDs.sample_data || [], // Use sample from backend
+            originalFileName: originalName,    // keep the xlsx display name
+            data: backendDs.sample_data || [],
             headers: backendDs.headers || [], 
             description: '' 
           };
@@ -387,10 +411,9 @@ function AppContent() {
             description: ''
           }).catch(err => console.warn('[Upload] Workspace-dataset registration failed (non-fatal):', err));
 
-
         } catch (err) {
-          window.dispatchEvent(new CustomEvent('cutebi-debug', { detail: { type: 'error', category: 'Upload', message: `Error processing ${file.name}: ${err.message}` } }));
-          showToast(`Error uploading ${file.name}`);
+          window.dispatchEvent(new CustomEvent('cutebi-debug', { detail: { type: 'error', category: 'Upload', message: `Error processing ${originalName}: ${err.message}` } }));
+          showToast(`Error uploading ${originalName}: ${err.message}`);
         }
       }
 

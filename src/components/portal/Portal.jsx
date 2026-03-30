@@ -11,6 +11,7 @@ import { parseFileAsync } from '../../utils/fileParser';
 import { registerCSV, registerJSON } from '../../utils/duckdb.js';
 import { generateInitModel } from '../../utils/dataParser';
 import { apiClient } from '../../services/api';
+import { preprocessFilesForUpload } from '../../utils/excelConverter';
 import DataDetailsModal from '../modals/DataDetailsModal';
 import ThemeSelector from '../ui/ThemeSelector';
 
@@ -225,26 +226,41 @@ export default function Portal() {
   };
 
   const handleWorkspaceFileUpload = async (e) => {
-    const files = Array.from(e.target.files);
-    if (!files.length) return;
+    const rawFiles = Array.from(e.target.files);
+    if (!rawFiles.length) return;
     
-    showToast(`🚀 Uploading ${files.length} file(s) to cloud...`);
+    showToast(`🚀 Processing ${rawFiles.length} file(s)...`);
     setIsMutating(true);
 
+    // Pre-convert any Excel files to CSV in the browser (avoids Vercel timeout)
+    let files;
+    try {
+      files = await preprocessFilesForUpload(rawFiles, (msg) => showToast(msg));
+    } catch (convErr) {
+      showToast(`❌ ${convErr.message}`);
+      setIsMutating(false);
+      return;
+    }
+
+    // Build a map: converted filename → original raw filename
+    const originalNameMap = new Map(
+      rawFiles.map((raw, i) => [files[i]?.name, raw.name])
+    );
+
     for (const file of files) {
+      const originalName = originalNameMap.get(file.name) || file.name;
       try {
-        // 1. Upload file to backend → converts to Parquet → stores in Supabase Storage
-        // NOTE: apiClient.upload() already prepends BASE_URL (/api), so we just pass '/upload'
-        const cloudRes = await apiClient.upload('/upload', file);
+        // Upload — passing original filename so backend stores 'Fact Sale.xlsx' not 'Fact Sale.csv'
+        const cloudRes = await apiClient.upload('/upload', file, originalName);
         
         if (!cloudRes || !cloudRes.id) {
             throw new Error(cloudRes?.message || "Cloud ingestion returned no dataset ID");
         }
 
-        const { id: dsId, headers, public_url } = cloudRes;
+        const { id: dsId, headers } = cloudRes;
         
-        // 2. Register in Workspace Dataset Library (so it appears in sidebar + Data Library tab)
-        const dsName = file.name.replace(/\.[^/.]+$/, "");
+        // Register in Workspace Dataset Library (so it appears in sidebar + Data Library tab)
+        const dsName = dsId; // backend uses filename stem as the ID/name
         await apiClient.post('/workspace-datasets', {
           id: dsId,
           name: dsName,
@@ -252,14 +268,14 @@ export default function Portal() {
           folder_id: currentFolderId || null,
           table_name: dsId,
           headers: headers || [],
-          description: `Uploaded from ${file.name}`
+          description: `Uploaded from ${originalName}`
         });
         
         showToast(`✨ "${dsName}" uploaded & stored in cloud!`);
         
       } catch (err) {
         console.error("Cloud upload failed:", err);
-        showToast(`❌ Failed to upload ${file.name}: ${err.message}`);
+        showToast(`❌ Failed to upload ${originalName}: ${err.message}`);
       }
     }
 
@@ -267,6 +283,7 @@ export default function Portal() {
     await refreshData(true);
     setIsMutating(false);
   };
+
 
 
   const handleDeleteWorkspaceDataset = async (e, dsId) => {

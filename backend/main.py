@@ -551,9 +551,14 @@ def read_library(db: Session = Depends(database.get_db)):
 
 
 @app.post("/api/upload")
-async def upload_file(file: UploadFile = File(...), db: Session = Depends(database.get_db)):
-    # Use exact filename stem as the unique identifier and table name
-    # e.g., 'Fact Sales.csv' -> ds_id = 'Fact Sales'
+async def upload_file(
+    file: UploadFile = File(...),
+    original_filename: str = None,
+    db: Session = Depends(database.get_db)
+):
+    # Use the original filename if provided (frontend sends xlsx name even when converting to CSV)
+    # e.g., original_filename='Fact Sale.xlsx', file.filename='Fact Sale.csv'
+    display_name = original_filename or file.filename
     ds_id = os.path.splitext(file.filename)[0].strip()
     extension = file.filename.split(".")[-1].lower()
     # On Vercel, we must use /tmp for transient storage
@@ -670,7 +675,7 @@ async def upload_file(file: UploadFile = File(...), db: Session = Depends(databa
         db_dataset = db.query(models.Dataset).filter(models.Dataset.id == ds_id).first()
         if db_dataset:
             db_dataset.name = ds_id
-            db_dataset.original_file_name = file.filename
+            db_dataset.original_file_name = display_name
             db_dataset.file_path = public_url
             db_dataset.table_name = ds_id
             db_dataset.headers = headers
@@ -679,7 +684,7 @@ async def upload_file(file: UploadFile = File(...), db: Session = Depends(databa
             db_dataset = models.Dataset(
                 id=ds_id,
                 name=ds_id,
-                original_file_name=file.filename,
+                original_file_name=display_name,
                 file_path=public_url,
                 table_name=ds_id,
                 headers=headers
@@ -692,7 +697,7 @@ async def upload_file(file: UploadFile = File(...), db: Session = Depends(databa
         return {
             "id": ds_id,
             "name": db_dataset.name,
-            "original_file_name": file.filename,
+            "original_file_name": display_name,
             "table_name": ds_id,
             "headers": headers,
             "sample_data": sample_data,

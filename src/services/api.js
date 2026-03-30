@@ -24,9 +24,14 @@ export const apiClient = {
     }
     return res.json();
   },
-  async upload(endpoint, file) {
+  async upload(endpoint, file, originalFilename) {
     const formData = new FormData();
     formData.append('file', file);
+    // Send the original filename (e.g. 'Fact Sale.xlsx') so the backend
+    // can store the correct display name even if we converted to CSV first
+    if (originalFilename) {
+      formData.append('original_filename', originalFilename);
+    }
     const res = await fetch(`${BASE_URL}${endpoint}`, {
       method: 'POST',
       body: formData,
