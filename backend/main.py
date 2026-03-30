@@ -256,12 +256,24 @@ app.add_middleware(
 
 @app.get("/api/status")
 def get_status():
+    import sys
+    # Check which packages are available (helps diagnose Vercel dependency issues)
+    pkg_status = {}
+    for pkg in ["openpyxl", "pandas", "pyarrow", "duckdb"]:
+        try:
+            mod = __import__(pkg)
+            pkg_status[pkg] = getattr(mod, "__version__", "installed")
+        except ImportError:
+            pkg_status[pkg] = "NOT INSTALLED"
+
     return {
         "status": "online",
         "version": "2.0-cloud-showcase",
+        "python": sys.version,
         "engine": "DuckDB/Serverless",
         "deployment": "Vercel/Cloud",
-        "data_dir_exists": os.path.exists("backend/data")
+        "packages": pkg_status,
+        "tmp_writable": os.access("/tmp", os.W_OK),
     }
 
 # --- Workspaces ---

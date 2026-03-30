@@ -4,7 +4,10 @@ const BASE_URL = isProd ? '/api' : 'http://localhost:8000/api';
 export const apiClient = {
   async get(endpoint) {
     const res = await fetch(`${BASE_URL}${endpoint}`);
-    if (!res.ok) throw new Error(`API Error: ${res.statusText}`);
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`HTTP ${res.status}: ${text || 'no response body'}`);
+    }
     return res.json();
   },
   async post(endpoint, data) {
@@ -14,8 +17,10 @@ export const apiClient = {
       body: JSON.stringify(data),
     });
     if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || `API Error: ${res.statusText}`);
+      const text = await res.text().catch(() => '');
+      let detail = '';
+      try { detail = JSON.parse(text)?.detail; } catch {}
+      throw new Error(detail || `HTTP ${res.status}: ${text.slice(0, 300)}`);
     }
     return res.json();
   },
@@ -27,14 +32,19 @@ export const apiClient = {
       body: formData,
     });
     if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || `API Error: ${res.statusText}`);
+      const text = await res.text().catch(() => '');
+      let detail = '';
+      try { detail = JSON.parse(text)?.detail; } catch {}
+      throw new Error(detail || `HTTP ${res.status}: ${text.slice(0, 500)}`);
     }
     return res.json();
   },
   async delete(endpoint) {
     const res = await fetch(`${BASE_URL}${endpoint}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error(`API Error: ${res.statusText}`);
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
+    }
     return res.json();
   }
 };
