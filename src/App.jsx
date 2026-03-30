@@ -10,6 +10,7 @@ import { generateInitModel, patchModels } from './utils/dataParser'
 import { storeHandle, deleteHandle, getHandlesForDatasets, requestReadPermission } from './utils/fileHandleStore'
 import { apiClient } from './services/api'
 import { preprocessFilesForUpload } from './utils/excelConverter'
+import { cloudUploadFile } from './utils/cloudUpload'
 
 
 import Sidebar from './components/layout/Sidebar'
@@ -378,8 +379,10 @@ function AppContent() {
         window.dispatchEvent(new CustomEvent('cutebi-debug', { detail: { type: 'info', category: 'Upload', message: `Platinum Ingestion: ${originalName}` } }));
         
         try {
-          // Upload to backend — passing original filename so it shows 'Fact Sale.xlsx' not 'Fact Sale.csv'
-          const backendDs = await apiClient.upload('/upload', file, originalName);
+          // Direct upload: browser → Supabase (no Vercel relay, no 10s timeout)
+          const backendDs = await cloudUploadFile(file, originalName, (msg) => {
+            window.dispatchEvent(new CustomEvent('cutebi-debug', { detail: { type: 'info', category: 'Upload', message: msg } }));
+          });
           
           const dsId = backendDs.id;
           const tableName = backendDs.table_name;

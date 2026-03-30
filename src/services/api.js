@@ -44,6 +44,32 @@ export const apiClient = {
     }
     return res.json();
   },
+
+  // ── Direct-upload flow (bypasses Vercel for file bytes) ─────────────────
+  // Step 1: Get a Supabase signed upload URL from backend (fast, <1s)
+  async prepareUpload(filename, displayName) {
+    const params = new URLSearchParams({ filename });
+    if (displayName) params.append('display_name', displayName);
+    return this.get(`/upload/prepare?${params}`);
+  },
+
+  // Step 2: PUT the CSV bytes directly to Supabase (browser→Supabase, no Vercel)
+  async uploadToStorage(signedUrl, csvBlob) {
+    const res = await fetch(signedUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'text/csv' },
+      body: csvBlob,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Supabase direct upload failed (${res.status}): ${text.slice(0, 200)}`);
+    }
+  },
+
+  // Step 3: Tell backend to save metadata + register DuckDB view (fast, <1s)
+  async registerDataset(payload) {
+    return this.post('/register-dataset', payload);
+  },
   async delete(endpoint) {
     const res = await fetch(`${BASE_URL}${endpoint}`, { method: 'DELETE' });
     if (!res.ok) {

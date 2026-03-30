@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Request
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 import os
@@ -555,6 +555,108 @@ def read_library(db: Session = Depends(database.get_db)):
     return db.query(models.Dataset).order_by(models.Dataset.timestamp.desc()).all()
 
 # --- Data Engine ---
+
+# ── NEW: Direct-upload architecture ──────────────────────────────────────────
+# Problem: Vercel Hobby plan has a 10-second function timeout.
+# Sending a 900KB file browser→Vercel→Supabase takes >10s → FUNCTION_INVOCATION_FAILED.
+# Solution: browser uploads DIRECTLY to Supabase Storage via a signed URL.
+# Vercel only does two fast operations: generate signed URL (<1s) + save metadata (<1s).
+
+@app.get("/api/upload/prepare")
+async def prepare_upload(filename: str = Query(...), display_name: str = Query(None)):
+    """
+    Step 1 of direct-upload flow.
+    Sanitises the filename, generates a Supabase Storage signed upload URL,
+    and returns it to the browser. No file bytes are handled here.
+    """
+    import re
+    raw_stem = os.path.splitext(filename)[0].strip()
+    ds_id = re.sub(r'[^\w]', '_', raw_stem)
+    ds_id = re.sub(r'_+', '_', ds_id).strip('_')
+    storage_path = f"{ds_id}.csv"
+
+    if not supabase_client:
+        raise HTTPException(status_code=500, detail="Supabase not configured.")
+    try:
+        result = supabase_client.storage.from_(STORAGE_BUCKET).create_signed_upload_url(storage_path)
+        # supabase-py returns either {'signedUrl': ...} or {'signed_url': ...} depending on version
+        signed_url = result.get('signedUrl') or result.get('signed_url') or (result.get('data') or {}).get('signedUrl')
+        if not signed_url:
+            raise ValueError(f"Supabase returned no signed URL: {result}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not create signed upload URL: {e}")
+
+    public_url = f"{SUPABASE_URL}/storage/v1/object/public/{STORAGE_BUCKET}/{storage_path}"
+    return {
+        "ds_id": ds_id,
+        "signed_url": signed_url,
+        "storage_path": storage_path,
+        "public_url": public_url,
+        "display_name": display_name or filename,
+    }
+
+
+@app.post("/api/register-dataset")
+async def register_dataset(payload: dict, db: Session = Depends(database.get_db)):
+    """
+    Step 3 of direct-upload flow (step 2 is the browser PUT to Supabase).
+    Receives dataset metadata, registers a DuckDB read_csv view,
+    and persists the record to Postgres. No file bytes handled here.
+    """
+    ds_id       = payload.get("ds_id")
+    display_name= payload.get("display_name", ds_id)
+    public_url  = payload.get("public_url")
+    headers     = payload.get("headers", [])
+    sample_data = payload.get("sample_data", [])
+
+    if not ds_id or not public_url:
+        raise HTTPException(status_code=400, detail="ds_id and public_url are required.")
+
+    # Register DuckDB view (non-fatal if it fails; self-heals on next query)
+    try:
+        with _db_lock:
+            conn = _get_conn()
+            conn.execute(
+                f'CREATE OR REPLACE VIEW "{ds_id}" AS '
+                f"SELECT * FROM read_csv('{public_url}', header=true, auto_detect=true)"
+            )
+            _registered_views.add(ds_id)
+        print(f"[Engine] Registered CSV view '{ds_id}'")
+    except Exception as e:
+        print(f"[Engine] Warning: could not register view '{ds_id}': {e}")
+
+    # Persist to Postgres
+    try:
+        db_dataset = db.query(models.Dataset).filter(models.Dataset.id == ds_id).first()
+        if db_dataset:
+            db_dataset.name = ds_id
+            db_dataset.original_file_name = display_name
+            db_dataset.file_path = public_url
+            db_dataset.table_name = ds_id
+            db_dataset.headers = headers
+            db_dataset.timestamp = datetime.utcnow()
+        else:
+            db_dataset = models.Dataset(
+                id=ds_id, name=ds_id, original_file_name=display_name,
+                file_path=public_url, table_name=ds_id, headers=headers
+            )
+            db.add(db_dataset)
+        db.commit()
+        db.refresh(db_dataset)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"DB registration failed: {e}")
+
+    return {
+        "id": ds_id,
+        "name": db_dataset.name,
+        "original_file_name": display_name,
+        "table_name": ds_id,
+        "headers": headers,
+        "sample_data": sample_data,
+        "public_url": public_url,
+        "engine": "Platinum/Cloud"
+    }
+
 
 @app.post("/api/upload")
 async def upload_file(
