@@ -587,6 +587,12 @@ async def prepare_upload(filename: str = Query(...), display_name: str = Query(N
     if not supabase_client:
         raise HTTPException(status_code=500, detail="Supabase not configured.")
     try:
+        # Delete existing file first to avoid 409 Duplicate on re-upload (upsert behaviour)
+        try:
+            supabase_client.storage.from_(STORAGE_BUCKET).remove([storage_path])
+            print(f"[Storage] Removed existing file '{storage_path}' before re-upload.")
+        except Exception:
+            pass  # File didn't exist — that's fine, continue
         result = supabase_client.storage.from_(STORAGE_BUCKET).create_signed_upload_url(storage_path)
         # supabase-py returns either {'signedUrl': ...} or {'signed_url': ...} depending on version
         signed_url = result.get('signedUrl') or result.get('signed_url') or (result.get('data') or {}).get('signedUrl')
