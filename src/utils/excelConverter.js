@@ -35,10 +35,26 @@ export async function convertExcelToCSV(file) {
   const worksheet = workbook.Sheets[sheetName];
 
   // Convert to CSV string (SheetJS handles dates, numbers, strings correctly)
+  // Clear the pre-formatted display string (.w) from date cells so that
+  // dateNF takes effect in sheet_to_csv. Without this, cellDates:true causes
+  // SheetJS to use the original Excel format (e.g. "31-Mar-25") and ignore dateNF.
+  const wsRef = worksheet['!ref'];
+  if (wsRef) {
+    const range = XLSX.utils.decode_range(wsRef);
+    for (let r = range.s.r; r <= range.e.r; r++) {
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        const addr = XLSX.utils.encode_cell({ r, c });
+        if (worksheet[addr] && worksheet[addr].t === 'd') {
+          delete worksheet[addr].w; // force re-format with our dateNF below
+        }
+      }
+    }
+  }
+
   const csvString = XLSX.utils.sheet_to_csv(worksheet, {
     blankrows: false,   // skip completely empty rows
     defval: '',         // empty cells become empty string (not undefined)
-    dateNF: 'YYYY-MM-DD', // Force ISO dates so DuckDB TRY_CAST(x AS DATE) works for YTD/LYTD
+    dateNF: 'yyyy-mm-dd', // ISO format — required for DuckDB TRY_CAST(x AS DATE)
   });
 
   if (!csvString || csvString.trim().length === 0) {
