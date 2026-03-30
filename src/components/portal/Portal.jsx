@@ -153,64 +153,50 @@ export default function Portal() {
     const type = showCreateModal;
     const name = newName.trim();
     
-    // Close modal immediately for optimal responsiveness
+    setIsMutating(true);
     setShowCreateModal(null);
     setNewName('');
 
-    setIsMutating(true);
-    if (type === 'workspace') {
-      if (workspaces.some(w => w.name.toLowerCase() === name.toLowerCase())) {
-        showToast("A workspace with this name already exists.");
-        setIsMutating(false);
-        return;
+    try {
+      if (type === 'workspace') {
+        const wsId = `w_${Date.now()}`;
+        const newWs = { id: wsId, name: name, description: '', timestamp: Date.now() };
+        
+        // 1. Force Sync to Backend FIRST
+        await apiClient.post('/workspaces', newWs);
+        
+        // 2. Align Local State
+        setWorkspaces(prev => [...prev.filter(w => w.id !== wsId), newWs]);
+        setCurrentWorkspaceId(wsId);
+        showToast(`Workspace "${name}" created.`);
+      } else if (type === 'folder') {
+        const fId = `f_${Date.now()}`;
+        const newFolder = { 
+          id: fId, 
+          name: name, 
+          workspace_id: currentWorkspaceId, 
+          parent_id: currentFolderId, 
+          workspaceId: currentWorkspaceId,
+          parentId: currentFolderId,
+          timestamp: Date.now() 
+        };
+        
+        // 1. Force Sync to Backend FIRST
+        await apiClient.post('/folders', newFolder);
+        
+        // 2. Align Local State
+        setFolders(prev => [...prev.filter(f => f.id !== fId), newFolder]);
+        showToast(`Folder "${name}" created.`);
       }
       
-      const wsId = `w_${Date.now()}`;
-      const newWs = { id: wsId, name: name, description: '', timestamp: Date.now() };
-      
-      // Responsive Update
-      setWorkspaces(prev => [...prev.filter(w => w.id !== wsId), newWs]);
-      showToast(`Workspace "${name}" created.`);
+      // 3. Trigger Global Refresh to verify cloud sync
+      await refreshData(true);
 
-      try {
-          await apiClient.post('/workspaces', newWs);
-          setCurrentWorkspaceId(wsId);
-      } catch (err) {
-          console.error("Workspace sync error:", err);
-          showToast("Failed to sync workspace to server.");
-      } finally {
-          setTimeout(() => setIsMutating(false), 1000);
-      }
-    } else if (type === 'folder') {
-      if (folders.some(f => f.workspaceId === currentWorkspaceId && f.parentId === currentFolderId && f.name.toLowerCase() === name.toLowerCase())) {
-        showToast("A folder with this name already exists here.");
-        setIsMutating(false);
-        return;
-      }
-
-      const fId = `f_${Date.now()}`;
-      const newFolder = { 
-        id: fId, 
-        name: name, 
-        workspace_id: currentWorkspaceId, 
-        parent_id: currentFolderId, 
-        workspaceId: currentWorkspaceId,
-        parentId: currentFolderId,
-        timestamp: Date.now() 
-      };
-      
-      // Responsive Update
-      setFolders(prev => [...prev.filter(f => f.id !== fId), newFolder]);
-      showToast(`Folder "${name}" created.`);
-
-      try {
-          await apiClient.post('/folders', newFolder);
-      } catch (err) {
-          console.error("Folder sync error:", err);
-          showToast("Failed to sync folder to server.");
-      } finally {
-          setTimeout(() => setIsMutating(false), 1000);
-      }
+    } catch (err) {
+      console.error(`${type} creation failed:`, err);
+      showToast(`Conflict: Name might already exist or server is busy.`);
+    } finally {
+      setIsMutating(false);
     }
   };
 

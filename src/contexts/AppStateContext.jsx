@@ -262,6 +262,7 @@ export const AppStateProvider = ({ children }) => {
     const targetWsId = workspaceIdOverride || currentWorkspaceId;
     
     try {
+      // 1. Fetch Cloud Workspaces - The absolute source of truth
       const [ws, f, r, ds, pm] = await Promise.all([
         apiClient.get(`/workspaces?_t=${t}`),
         apiClient.get(`/folders?_t=${t}`),
@@ -273,10 +274,16 @@ export const AppStateProvider = ({ children }) => {
       // If we are currently mutating, discard the background fetch (race protection)
       if (isMutating && !force) return null;
 
-      // Smart Merge for Workspaces
-      setWorkspaces(ws.length > 0 ? ws : [{ id: 'w_default', name: 'My Workspace', description: 'Your personal workspace' }]);
+      // Smart Merge for Workspaces: Only use placeholder if Cloud is 100% empty
+      const cloudWorkspaces = ws.length > 0 ? ws : [{ id: 'w_default', name: 'My Workspace', description: 'Your personal workspace' }];
+      setWorkspaces(cloudWorkspaces);
       
-      setFolders(f.map(item => ({
+      // Safety: If our current workspace was deleted or is missing, align to the first available cloud workspace
+      if (!cloudWorkspaces.find(w => w.id === targetWsId)) {
+          setCurrentWorkspaceId(cloudWorkspaces[0].id);
+      }
+      
+      setFolders(f.filter(item => !item.is_deleted).map(item => ({
         ...item,
         workspaceId: item.workspace_id,
         parentId: item.parent_id

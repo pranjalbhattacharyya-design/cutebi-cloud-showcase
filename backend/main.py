@@ -88,8 +88,7 @@ app = FastAPI(title="CuteBI Cloud Showcase")
 
 @app.on_event("startup")
 async def startup_event():
-    """Eagerly initialize the persistent DuckDB connection at server startup.
-    This warms up views so the first user query is not cold."""
+    """Eagerly initialize the persistent DuckDB connection at server startup."""
     with _db_lock:
         conn = _get_conn()
         # In Demo Mode, register the bundled mock_data.csv if available
@@ -102,11 +101,18 @@ async def startup_event():
                 print(f"[Demo Mode] Failed to register SalesData: {e}")
 
     # Seed initialization for In-Memory/Cloud Database
-    # We seed if it's a fresh cloud instance (Vercel) or memory DB
+    # Only seed if the database is EXPLICITLY empty to prevent overwriting cloud data.
     db = database.SessionLocal()
     try:
-        if os.getenv("VERCEL") or ":memory:" in str(database.engine.url):
+        # Check if we already have workspaces in Postgres
+        has_data = db.query(models.Workspace).first() is not None
+        if not has_data:
+             print("[Engine] Cloud Database is empty. Seeding demo content...")
              seed_demo_data(db)
+        else:
+             print("[Engine] Cloud Database contains existing data. Skipping seed.")
+    except Exception as e:
+        print(f"[Engine] Seeding check failed: {e}")
     finally:
         db.close()
 
