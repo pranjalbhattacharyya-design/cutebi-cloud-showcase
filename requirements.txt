@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+sqlalchemy
+duckdb
+pydantic
+python-multipart
+psycopg2-binary

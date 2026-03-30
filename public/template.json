@@ -1,0 +1,672 @@
+[
+  {
+    "id": "report_1774373268678_8xydavvlw",
+    "name": "Fact Sale & Others Report",
+    "datasetsMeta": [
+      {
+        "id": "1774357865134j1she",
+        "name": "Fact Sale",
+        "headers": [
+          "Regional_Key",
+          "Date",
+          "MODL_CD",
+          "Booking",
+          "Net Retail",
+          "Retail Cancellation"
+        ],
+        "description": "",
+        "originalFileName": "Fact Sale.xlsx"
+      },
+      {
+        "id": "1774357865209h1ytcy",
+        "name": "Dim Product",
+        "headers": [
+          "MODL_CD",
+          "Fuel Type",
+          "Seating Capacity",
+          "Transmission"
+        ],
+        "description": "",
+        "originalFileName": "Dim Product.xlsx"
+      },
+      {
+        "id": "1774357865326x0fsi",
+        "name": "Dim Dealer",
+        "headers": [
+          "Regional_Key",
+          "Location Name"
+        ],
+        "description": "",
+        "originalFileName": "Dim Dealer.xlsx"
+      },
+      {
+        "id": "17743578653694napjl",
+        "name": "Dim Calender",
+        "headers": [
+          "Date",
+          "Day",
+          "FY",
+          "Month",
+          "Quarter",
+          "Week"
+        ],
+        "description": "",
+        "originalFileName": "Dim Calender.xlsx"
+      }
+    ],
+    "semanticModels": {
+      "1774357865134j1she": [
+        {
+          "id": "Regional_Key",
+          "label": "Regional Key",
+          "type": "dimension",
+          "aggType": "sum",
+          "isHidden": true,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "1774357865134j1she",
+          "originFieldId": "Regional_Key"
+        },
+        {
+          "id": "Date",
+          "label": "Date",
+          "type": "dimension",
+          "aggType": "sum",
+          "isHidden": true,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "1774357865134j1she",
+          "originFieldId": "Date"
+        },
+        {
+          "id": "MODL_CD",
+          "label": "MODL CD",
+          "type": "dimension",
+          "aggType": "sum",
+          "isHidden": true,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "1774357865134j1she",
+          "originFieldId": "MODL_CD"
+        },
+        {
+          "id": "Booking",
+          "label": "Booking",
+          "type": "measure",
+          "aggType": "sum",
+          "isHidden": false,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "1774357865134j1she",
+          "originFieldId": "Booking"
+        },
+        {
+          "id": "Net Retail",
+          "label": "Net Retail",
+          "type": "measure",
+          "aggType": "sum",
+          "isHidden": false,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "1774357865134j1she",
+          "originFieldId": "Net Retail"
+        },
+        {
+          "id": "Retail Cancellation",
+          "label": "Retail Cancellation",
+          "type": "measure",
+          "aggType": "sum",
+          "isHidden": false,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "1774357865134j1she",
+          "originFieldId": "Retail Cancellation"
+        },
+        {
+          "id": "Regional_Key__from_1774357865326x0fsi",
+          "label": "Regional Key (joined)",
+          "type": "dimension",
+          "aggType": "sum",
+          "isHidden": false,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "1774357865326x0fsi",
+          "originFieldId": "Regional_Key",
+          "isJoined": true,
+          "joinRelId": "rel_1774358051719",
+          "originalId": "Regional_Key"
+        },
+        {
+          "id": "Location Name__from_1774357865326x0fsi",
+          "label": "Location Name (joined)",
+          "type": "dimension",
+          "aggType": "sum",
+          "isHidden": false,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "1774357865326x0fsi",
+          "originFieldId": "Location Name",
+          "isJoined": true,
+          "joinRelId": "rel_1774358051719",
+          "originalId": "Location Name"
+        },
+        {
+          "id": "Date__from_17743578653694napjl",
+          "label": "Date (joined)",
+          "type": "dimension",
+          "aggType": "sum",
+          "isHidden": false,
+          "format": "date",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "17743578653694napjl",
+          "originFieldId": "Date",
+          "isJoined": true,
+          "joinRelId": "rel_1774358060779",
+          "originalId": "Date"
+        },
+        {
+          "id": "Day__from_17743578653694napjl",
+          "label": "Day (joined)",
+          "type": "dimension",
+          "aggType": "sum",
+          "isHidden": false,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "17743578653694napjl",
+          "originFieldId": "Day",
+          "isJoined": true,
+          "joinRelId": "rel_1774358060779",
+          "originalId": "Day"
+        },
+        {
+          "id": "FY__from_17743578653694napjl",
+          "label": "FY (joined)",
+          "type": "dimension",
+          "aggType": "sum",
+          "isHidden": false,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "17743578653694napjl",
+          "originFieldId": "FY",
+          "isJoined": true,
+          "joinRelId": "rel_1774358060779",
+          "originalId": "FY"
+        },
+        {
+          "id": "Month__from_17743578653694napjl",
+          "label": "Month (joined)",
+          "type": "dimension",
+          "aggType": "sum",
+          "isHidden": false,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "17743578653694napjl",
+          "originFieldId": "Month",
+          "isJoined": true,
+          "joinRelId": "rel_1774358060779",
+          "originalId": "Month"
+        },
+        {
+          "id": "Quarter__from_17743578653694napjl",
+          "label": "Quarter (joined)",
+          "type": "dimension",
+          "aggType": "sum",
+          "isHidden": false,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "17743578653694napjl",
+          "originFieldId": "Quarter",
+          "isJoined": true,
+          "joinRelId": "rel_1774358060779",
+          "originalId": "Quarter"
+        },
+        {
+          "id": "Week__from_17743578653694napjl",
+          "label": "Week (joined)",
+          "type": "dimension",
+          "aggType": "sum",
+          "isHidden": false,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "17743578653694napjl",
+          "originFieldId": "Week",
+          "isJoined": true,
+          "joinRelId": "rel_1774358060779",
+          "originalId": "Week"
+        },
+        {
+          "id": "MODL_CD__from_1774357865209h1ytcy",
+          "label": "MODL CD (joined)",
+          "type": "dimension",
+          "aggType": "sum",
+          "isHidden": false,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "1774357865209h1ytcy",
+          "originFieldId": "MODL_CD",
+          "isJoined": true,
+          "joinRelId": "rel_1774358073139",
+          "originalId": "MODL_CD"
+        },
+        {
+          "id": "Fuel Type__from_1774357865209h1ytcy",
+          "label": "Fuel Type (joined)",
+          "type": "dimension",
+          "aggType": "sum",
+          "isHidden": false,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "1774357865209h1ytcy",
+          "originFieldId": "Fuel Type",
+          "isJoined": true,
+          "joinRelId": "rel_1774358073139",
+          "originalId": "Fuel Type"
+        },
+        {
+          "id": "Seating Capacity__from_1774357865209h1ytcy",
+          "label": "Seating Capacity (joined)",
+          "type": "dimension",
+          "aggType": "sum",
+          "isHidden": false,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "1774357865209h1ytcy",
+          "originFieldId": "Seating Capacity",
+          "isJoined": true,
+          "joinRelId": "rel_1774358073139",
+          "originalId": "Seating Capacity"
+        },
+        {
+          "id": "Transmission__from_1774357865209h1ytcy",
+          "label": "Transmission (joined)",
+          "type": "dimension",
+          "aggType": "sum",
+          "isHidden": false,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "1774357865209h1ytcy",
+          "originFieldId": "Transmission",
+          "isJoined": true,
+          "joinRelId": "rel_1774358073139",
+          "originalId": "Transmission"
+        },
+        {
+          "id": "diff",
+          "label": "Diff",
+          "type": "measure",
+          "isHidden": false,
+          "isCalculated": true,
+          "format": "auto",
+          "expression": "[Booking] - [Net Retail] ",
+          "filters": [
+            {
+              "dimensionId": "FY__from_17743578653694napjl",
+              "operator": "!=",
+              "value": "2025"
+            },
+            {
+              "dimensionId": "Month__from_17743578653694napjl",
+              "operator": "!=",
+              "value": "Jul"
+            }
+          ],
+          "filterLogic": "AND",
+          "timeConfig": {
+            "enabled": false,
+            "dateDimensionId": "",
+            "period": "MTD"
+          },
+          "originDatasetId": "1774357865134j1she",
+          "originFieldId": "diff",
+          "category": "Uncategorized",
+          "aggType": "sum"
+        },
+        {
+          "id": "conversion_",
+          "label": "Conversion%",
+          "type": "measure",
+          "isHidden": false,
+          "isCalculated": true,
+          "format": "percentage",
+          "expression": "[Net Retail] / [Booking] ",
+          "filters": [],
+          "filterLogic": "AND",
+          "timeConfig": {
+            "enabled": false,
+            "dateDimensionId": "",
+            "period": "MTD"
+          },
+          "originDatasetId": "1774357865134j1she",
+          "originFieldId": "conversion_",
+          "category": "Uncategorized",
+          "aggType": "sum"
+        },
+        {
+          "id": "mtd_retail",
+          "label": "MTD Retail",
+          "type": "measure",
+          "isHidden": false,
+          "isCalculated": true,
+          "format": "auto",
+          "expression": "[Net Retail] ",
+          "filters": [],
+          "filterLogic": "AND",
+          "timeConfig": {
+            "enabled": true,
+            "dateDimensionId": "Date__from_17743578653694napjl",
+            "period": "MTD"
+          },
+          "originDatasetId": "1774357865134j1she",
+          "originFieldId": "mtd_retail",
+          "category": "Uncategorized",
+          "aggType": "sum"
+        },
+        {
+          "id": "ytd_retail",
+          "label": "YTD Retail",
+          "type": "measure",
+          "isHidden": false,
+          "isCalculated": true,
+          "format": "auto",
+          "expression": "[Net Retail] ",
+          "filters": [],
+          "filterLogic": "AND",
+          "timeConfig": {
+            "enabled": true,
+            "dateDimensionId": "Date__from_17743578653694napjl",
+            "period": "YTD"
+          },
+          "originDatasetId": "1774357865134j1she",
+          "originFieldId": "ytd_retail",
+          "category": "Uncategorized",
+          "aggType": "sum"
+        },
+        {
+          "id": "7_seater_retail",
+          "label": "7 Seater Retail",
+          "type": "measure",
+          "isHidden": false,
+          "isCalculated": true,
+          "format": "auto",
+          "expression": "[Net Retail] ",
+          "filters": [
+            {
+              "dimensionId": "Seating Capacity__from_1774357865209h1ytcy",
+              "operator": "=",
+              "value": "7"
+            }
+          ],
+          "filterLogic": "AND",
+          "timeConfig": {
+            "enabled": false,
+            "dateDimensionId": "",
+            "period": "MTD"
+          },
+          "originDatasetId": "1774357865134j1she",
+          "originFieldId": "7_seater_retail",
+          "category": "Uncategorized",
+          "aggType": "sum"
+        }
+      ],
+      "1774357865209h1ytcy": [
+        {
+          "id": "MODL_CD",
+          "label": "MODL CD",
+          "type": "dimension",
+          "aggType": "sum",
+          "isHidden": false,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "1774357865209h1ytcy",
+          "originFieldId": "MODL_CD"
+        },
+        {
+          "id": "Fuel Type",
+          "label": "Fuel Type",
+          "type": "dimension",
+          "aggType": "sum",
+          "isHidden": false,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "1774357865209h1ytcy",
+          "originFieldId": "Fuel Type"
+        },
+        {
+          "id": "Seating Capacity",
+          "label": "Seating Capacity",
+          "type": "dimension",
+          "aggType": "sum",
+          "isHidden": false,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "1774357865209h1ytcy",
+          "originFieldId": "Seating Capacity"
+        },
+        {
+          "id": "Transmission",
+          "label": "Transmission",
+          "type": "dimension",
+          "aggType": "sum",
+          "isHidden": false,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "1774357865209h1ytcy",
+          "originFieldId": "Transmission"
+        }
+      ],
+      "1774357865326x0fsi": [
+        {
+          "id": "Regional_Key",
+          "label": "Regional Key",
+          "type": "dimension",
+          "aggType": "sum",
+          "isHidden": true,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "1774357865326x0fsi",
+          "originFieldId": "Regional_Key"
+        },
+        {
+          "id": "Location Name",
+          "label": "Location Name",
+          "type": "dimension",
+          "aggType": "sum",
+          "isHidden": false,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "1774357865326x0fsi",
+          "originFieldId": "Location Name"
+        }
+      ],
+      "17743578653694napjl": [
+        {
+          "id": "Date",
+          "label": "Date",
+          "type": "dimension",
+          "aggType": "sum",
+          "isHidden": false,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "17743578653694napjl",
+          "originFieldId": "Date"
+        },
+        {
+          "id": "Day",
+          "label": "Day",
+          "type": "dimension",
+          "aggType": "sum",
+          "isHidden": false,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "17743578653694napjl",
+          "originFieldId": "Day"
+        },
+        {
+          "id": "FY",
+          "label": "FY",
+          "type": "dimension",
+          "aggType": "sum",
+          "isHidden": false,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "17743578653694napjl",
+          "originFieldId": "FY"
+        },
+        {
+          "id": "Month",
+          "label": "Month",
+          "type": "dimension",
+          "aggType": "sum",
+          "isHidden": false,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "17743578653694napjl",
+          "originFieldId": "Month"
+        },
+        {
+          "id": "Quarter",
+          "label": "Quarter",
+          "type": "dimension",
+          "aggType": "sum",
+          "isHidden": false,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "17743578653694napjl",
+          "originFieldId": "Quarter"
+        },
+        {
+          "id": "Week",
+          "label": "Week",
+          "type": "dimension",
+          "aggType": "sum",
+          "isHidden": false,
+          "format": "auto",
+          "description": "",
+          "category": "Uncategorized",
+          "originDatasetId": "17743578653694napjl",
+          "originFieldId": "Week"
+        }
+      ]
+    },
+    "dashboards": {
+      "page_1": [
+        {
+          "id": "1774372222936_manual",
+          "title": "booking",
+          "type": "table",
+          "dimension": "",
+          "measure": "",
+          "legend": "",
+          "size": "full",
+          "verticalSize": "normal",
+          "pivotRows": [],
+          "pivotCols": [],
+          "pivotMeasures": [],
+          "tableDimensions": [
+            "FY__from_17743578653694napjl",
+            "Seating Capacity__from_1774357865209h1ytcy"
+          ],
+          "tableMeasures": [
+            "Net Retail",
+            "ytd_retail",
+            "7_seater_retail"
+          ],
+          "xMeasure": "",
+          "yMeasure": "",
+          "colorMeasure": "",
+          "sizeMeasure": "",
+          "showDataLabels": false,
+          "datasetId": "1774357865134j1she"
+        },
+        {
+          "id": "1774372252518_manual",
+          "title": "presales",
+          "type": "pie",
+          "dimension": "Quarter__from_17743578653694napjl",
+          "measure": "Net Retail",
+          "legend": "",
+          "size": "full",
+          "verticalSize": "normal",
+          "pivotRows": [],
+          "pivotCols": [],
+          "pivotMeasures": [],
+          "tableDimensions": [],
+          "tableMeasures": [],
+          "xMeasure": "",
+          "yMeasure": "",
+          "colorMeasure": "",
+          "sizeMeasure": "",
+          "showDataLabels": true,
+          "datasetId": "1774357865134j1she"
+        }
+      ]
+    },
+    "relationships": [
+      {
+        "id": "rel_1774358051719",
+        "fromColumn": "Regional_Key",
+        "toDatasetId": "1774357865326x0fsi",
+        "toColumn": "Regional_Key",
+        "direction": "left",
+        "fromDatasetId": "1774357865134j1she"
+      },
+      {
+        "id": "rel_1774358060779",
+        "fromColumn": "Date",
+        "toDatasetId": "17743578653694napjl",
+        "toColumn": "Date",
+        "direction": "left",
+        "fromDatasetId": "1774357865134j1she"
+      },
+      {
+        "id": "rel_1774358073139",
+        "fromColumn": "MODL_CD",
+        "toDatasetId": "1774357865209h1ytcy",
+        "toColumn": "MODL_CD",
+        "direction": "left",
+        "fromDatasetId": "1774357865134j1she"
+      }
+    ],
+    "pages": [
+      {
+        "id": "page_1",
+        "name": "Page 1"
+      }
+    ],
+    "slicers": [],
+    "theme": "cute",
+    "categories": [
+      "Uncategorized"
+    ],
+    "timestamp": 1774381149814
+  }
+]

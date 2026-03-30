@@ -1,0 +1,502 @@
+import { useMemo, useCallback, useEffect, useRef } from 'react';
+import { useAppState } from '../contexts/AppStateContext';
+import { initDuckDB, queryDuckDB } from '../utils/duckdb.js';
+import { apiClient } from '../services/api';
+
+export const useDataEngine = () => {
+  const {
+    datasets, setDatasets,
+    semanticModels, setSemanticModels,
+    relationships, setRelationships,
+    globalFilters,
+    activeDatasetId, setActiveDatasetId,
+    hiddenDatasetIds,
+    globalSemanticFields, isUnified,
+    isUploading, setIsUploading,
+    maxDatesCache, datesReady,
+    showToast
+  } = useAppState();
+
+  const isLoading = isUploading;
+
+  // Store maxDatesCache in a ref to prevent generateSQL from recreating
+  // when the cache is populated. This stops cascading re-renders across all charts.
+  const maxDatesCacheRef = useRef(maxDatesCache);
+  useEffect(() => {
+    maxDatesCacheRef.current = maxDatesCache;
+  }, [maxDatesCache]);
+
+  // Stable ref to datasets so getUniqueValuesForDim doesn't need datasets in its dep array
+  const datasetsRef = useRef(datasets);
+  useEffect(() => { datasetsRef.current = datasets; }, [datasets]);
+
+  // Session-scoped cache for slicer option queries.
+  // Keys: "datasetId::dimensionId", Values: string[]
+  // Cleared per dataset when it changes (re-upload scenario).
+  const slicerOptionsCache = useRef({});
+
+  // --- Utility: Safe Date Parsing ---
+  const safeParseDate = useCallback((val) => {
+    if (val === null || val === undefined || val === '') return new Date(NaN);
+    if (val === 0 || val === '0') return new Date(NaN);
+    const num = Number(val);
+    if (!isNaN(num) && num > 1900 && num < 2100) return new Date(Date.UTC(num, 0, 1));
+    if (!isNaN(num) && num > 30000 && num < 60000) return new Date(Math.round((num - 25569) * 86400 * 1000));
+    if (typeof val === 'string' && (val.includes('/') || val.includes('-'))) {
+        const parts = val.split(/[\/\-]/);
+        if (parts.length === 3) {
+            let d = parseInt(parts[0]), m = parseInt(parts[1]) - 1, y = parseInt(parts[2]);
+            if (parts[0].length === 4) { y = parseInt(parts[0]); d = parseInt(parts[2]); }
+            if (m + 1 > 12) { const tmp = d; d = m + 1; m = tmp - 1; }
+            const date = new Date(Date.UTC(y, m, d));
+            if (!isNaN(date.getTime())) return date;
+        }
+    }
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? new Date(NaN) : d;
+  }, []);
+
+  // --- Dataset Loading ---
+  const loadDataset = useCallback(async (file, customName) => {
+    const { parseFileAsync } = await import('../utils/fileParser.js');
+    setIsUploading(true);
+    try {
+      const parsed = await parseFileAsync(file);
+      if (!parsed) { if (showToast) showToast('Could not parse file.'); return; }
+      
+      let backendDs;
+      try {
+          backendDs = await apiClient.upload('/upload', file);
+      } catch (err) {
+          console.error("Backend upload failed:", err);
+          if (showToast) showToast('Backend upload failed.');
+          return;
+      }
+      
+      const id = backendDs.id;
+      const tableName = backendDs.table_name;
+      const name = customName || file.name;
+
+      const newDs = { 
+        id, 
+        name, 
+        tableName,
+        originalFileName: file.name, 
+        data: parsed.data.slice(0, 5), 
+        headers: backendDs.headers || parsed.headers 
+      };
+
+      const sampleRow = parsed.data[0] || {};
+      const model = parsed.headers.map(h => {
+        const v = sampleRow[h];
+        const isNum = typeof v === 'number' || (!isNaN(Number(v)) && v !== '' && v !== null);
+        const lh = h.toLowerCase();
+        const couldBeDate = lh.includes('date') || lh.includes('time') || lh.includes('day') || lh.includes('month') || lh.includes('year');
+        return {
+          id: h, label: h, type: isNum && !couldBeDate ? 'measure' : 'dimension',
+          format: couldBeDate ? 'date' : (isNum ? 'number' : 'text'),
+          aggType: 'sum', isCalculated: false, isJoined: false, isHidden: false,
+          originDatasetId: id, originFieldId: h,
+          filters: [], filterLogic: 'AND',
+          timeConfig: { enabled: false, dateDimensionId: '', period: 'YTD' }
+        };
+      });
+
+      setDatasets(prev => {
+        const existing = prev.findIndex(d => d.id === id);
+        if (existing !== -1) { const up = [...prev]; up[existing] = newDs; return up; }
+        return [...prev, newDs];
+      });
+      setSemanticModels(prev => ({ ...prev, [id]: model }));
+      setActiveDatasetId(id);
+      if (showToast) showToast(`'${name}' loaded into SQL Engine!`);
+    } catch (e) {
+      console.error('Load failed:', e);
+      if (showToast) showToast('Error loading file.');
+    } finally {
+      setIsUploading(false);
+    }
+  }, [setDatasets, setSemanticModels, setActiveDatasetId, setIsUploading, showToast]);
+
+  const deleteDataset = useCallback((datasetId) => {
+    setDatasets(prev => prev.filter(d => d.id !== datasetId));
+    setSemanticModels(prev => { const n = { ...prev }; delete n[datasetId]; return n; });
+    setRelationships(prev => prev.filter(r => r.fromDatasetId !== datasetId && r.toDatasetId !== datasetId));
+    if (activeDatasetId === datasetId) setActiveDatasetId(null);
+  }, [setDatasets, setSemanticModels, setRelationships, activeDatasetId, setActiveDatasetId]);
+
+  const joinDatasets = useCallback((fromId, toId, fromCol, toCol, direction = 'left') => {
+    const relId = `${fromId}_${toId}_${Date.now()}`;
+    setRelationships(prev => [...prev, { id: relId, fromDatasetId: fromId, toDatasetId: toId, fromColumn: fromCol, toColumn: toCol, direction }]);
+  }, [setRelationships]);
+
+  const getCleanTableName = useCallback((id) => {
+      const target = datasets.find(d => d.id === id);
+      return target?.tableName || id;
+  }, [datasets]);
+
+  // --- Dynamic CTE Generator: BFS Join Traversal ---
+  const generateUnifiedCTE = useCallback((rootId = null) => {
+    const startId = rootId || activeDatasetId;
+    if (!startId) return "";
+    const activeDs = datasets.find(d => d.id === startId);
+    if (!activeDs) return "";
+
+    const baseTable = getCleanTableName(startId);
+    const joinedTables = new Set([startId]);
+    const queue = [startId];
+    
+    let selectItems = [`"${baseTable}".*`];
+    let joinStrings = [];
+    const usedJoinKeys = new Set(); // Prevent duplicate join keys in select if possible
+
+    // Breadth-First Search to traverse the relationship graph starting from the active dataset
+    while (queue.length > 0) {
+        const currentDsId = queue.shift();
+        const currentTableName = getCleanTableName(currentDsId);
+        
+        // Find all relationships connected to the current table in our traversal
+        const rels = relationships.filter(r => r.fromDatasetId === currentDsId || r.toDatasetId === currentDsId);
+        
+        rels.forEach(rel => {
+            const isFrom = rel.fromDatasetId === currentDsId;
+            const targetId = isFrom ? rel.toDatasetId : rel.fromDatasetId;
+            const targetTable = getCleanTableName(targetId);
+            
+            if (!joinedTables.has(targetId)) {
+                joinedTables.add(targetId);
+                queue.push(targetId);
+                
+                const sourceCol = isFrom ? rel.fromColumn : rel.toColumn;
+                const targetCol = isFrom ? rel.toColumn : rel.fromColumn;
+                
+                // Add the table's data, excluding the join key to avoid naming collisions
+                selectItems.push(`"${targetTable}".* EXCLUDE ("${targetCol}")`);
+                
+                // Construct the join back to the current table in the traversal path
+                joinStrings.push(` LEFT JOIN "${targetTable}" ON "${currentTableName}"."${sourceCol}" = "${targetTable}"."${targetCol}"`);
+            }
+        });
+    }
+
+    const sql = `WITH ds_unified AS (SELECT ${selectItems.join(', ')} FROM "${baseTable}"${joinStrings.join('')}) `;
+    
+    // --- Unified Model Debug Trace: Log the exact join path to the debug panel ---
+    if (joinStrings.length > 0) {
+        window.dispatchEvent(new CustomEvent('cutebi-debug', { 
+            detail: { 
+                type: 'success', 
+                category: 'Join Trace', 
+                message: `Unified Model Active: [${Array.from(joinedTables).map(id => datasets.find(d=>d.id===id)?.name || id).join(' -> ')}]`,
+                details: { tableCount: joinedTables.size, joins: joinStrings.length }
+            } 
+        }));
+    }
+
+    return sql;
+  }, [activeDatasetId, relationships, getCleanTableName, datasets]);
+
+  const updateSemanticModel = useCallback((datasetId, updatedModel) => {
+    setSemanticModels(prev => ({ ...prev, [datasetId]: updatedModel }));
+  }, [setSemanticModels]);
+  
+  const getJoinGroup = useCallback((startId) => {
+    if (!startId) return [];
+    const group = new Set([startId]);
+    let added = true;
+    while (added) {
+        added = false;
+        relationships.forEach(r => {
+            if (group.has(r.fromDatasetId) && !group.has(r.toDatasetId)) { group.add(r.toDatasetId); added = true; }
+            if (group.has(r.toDatasetId) && !group.has(r.fromDatasetId)) { group.add(r.fromDatasetId); added = true; }
+        });
+    }
+    return Array.from(group);
+  }, [relationships]);
+
+
+
+
+  // --- SQL Generator Helper: Unified Approach ---
+  const generateSQL = useCallback((datasetId, dimensions = [], measures = [], filters = []) => {
+    const activeJoinGroup = getJoinGroup(activeDatasetId);
+    const isMasterView = activeJoinGroup.includes(datasetId);
+    const activeDs = datasets.find(d => d.id === datasetId);
+    const sourceTable = isMasterView ? "ds_unified" : (activeDs?.tableName || datasetId);
+    const ctePrefix = isMasterView ? generateUnifiedCTE(datasetId) : "";
+
+    window.dispatchEvent(new CustomEvent('cutebi-debug', { detail: { type: 'info', category: 'Engine', message: `Generating SQL. Source: ${sourceTable}`, details: { dimensions, measures, ctePresent: !!ctePrefix } } }));
+
+    let selectClause = [];
+    const sm = semanticModels[datasetId] || [];
+
+    dimensions.forEach(dimId => {
+       if (dimId.includes('::')) {
+           const [oDsId, oFId] = dimId.split('::');
+           if (isMasterView) {
+               selectClause.push(`"${sourceTable}"."${oFId}" AS "${dimId}"`);
+           } else {
+               const targetDs = datasets.find(d => d.id === oDsId);
+               const targetTable = targetDs?.tableName || oDsId;
+               selectClause.push(`"${targetTable}"."${oFId}" AS "${dimId}"`);
+           }
+       } else {
+           selectClause.push(`"${sourceTable}"."${dimId}" AS "${dimId}"`);
+       }
+    });
+
+    const resolveMeasureSQL = (measId, conditions = [], visited = new Set()) => {
+        // --- Cycle Protection: Stop infinite recursion if a formula references itself ---
+        if (visited.has(measId)) {
+            console.warn(`Circular reference detected for measure: ${measId}. Returning NULL.`);
+            return "NULL";
+        }
+        visited.add(measId);
+        // Search across all models in the active join group to resolve the measure definition
+        const activeJoinGroup = getJoinGroup(activeDatasetId);
+        let f = null;
+        for (const dsId of activeJoinGroup) {
+            f = semanticModels[dsId]?.find(x => x.id === measId);
+            if (f) break;
+        }
+
+        if (!f && measId.includes('::')) {
+            const [oDsId, oFId] = measId.split('::');
+            if (isMasterView) {
+                return `SUM("${sourceTable}"."${oFId}")`;
+            } else {
+                const targetDs = datasets.find(d => d.id === oDsId);
+                const targetTable = targetDs?.tableName || oDsId;
+                return `SUM("${targetTable}"."${oFId}")`; 
+            }
+        }
+        if (!f) return "NULL";
+        const localConds = [...conditions];
+
+        if (f.filters && f.filters.length > 0) {
+            const filterParts = f.filters.map(filt => {
+                if (!filt.dimensionId) return 'TRUE';
+                const col = `"${sourceTable}"."${filt.dimensionId}"`;
+                let val = filt.value;
+                if (filt.operator === '=') return `${col} = '${String(val).replace(/'/g, "''")}'`;
+                if (filt.operator === '!=') return `${col} <> '${String(val).replace(/'/g, "''")}'`;
+                if (filt.operator === 'contains') return `CAST(${col} AS VARCHAR) ILIKE '%${String(val).replace(/'/g, "''")}%'`;
+                if (filt.operator === 'IN') {
+                    if (!Array.isArray(val) || val.length === 0) return 'FALSE';
+                    return `${col} IN (${val.map(v => `'${String(v).replace(/'/g, "''")}'`).join(', ')})`;
+                }
+                return 'TRUE';
+            });
+            localConds.push(`(${filterParts.join(` ${f.filterLogic || 'AND'} `)})`);
+        }
+
+        if (f.timeConfig && f.timeConfig.enabled && f.timeConfig.dateDimensionId) {
+            const dateCol = `TRY_CAST("${sourceTable}"."${f.timeConfig.dateDimensionId}" AS DATE)`;
+            const baseKey = `${f.originDatasetId || datasetId}::${f.timeConfig.dateDimensionId}`;
+            const mdc = maxDatesCacheRef.current[baseKey];
+            let refDateStr = new Date().toISOString().split('T')[0];
+            if (mdc && /^\d{4}-\d{2}-\d{2}$/.test(String(mdc))) refDateStr = String(mdc);
+            const refDate = `CAST('${refDateStr}' AS DATE)`;
+            const _now = new Date(); 
+            const todayStr = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}-${String(_now.getDate()).padStart(2,'0')}`;
+            const staticRef = `CAST('${todayStr}' AS DATE)`;
+            const fyRow = `(CASE WHEN date_part('month', ${dateCol}) >= 4 THEN date_part('year', ${dateCol}) + 1 ELSE date_part('year', ${dateCol}) END)`;
+            const fyRefStatic = `(CASE WHEN date_part('month', ${staticRef}) >= 4 THEN date_part('year', ${staticRef}) + 1 ELSE date_part('year', ${staticRef}) END)`;
+            const mo = `date_part('month', ${dateCol})`;
+            const moRefStatic = `date_part('month', ${staticRef})`;
+
+            switch (f.timeConfig.period) {
+                case 'YTD':   localConds.push(`(${fyRow} = ${fyRefStatic} AND ${dateCol} <= ${staticRef})`); break;
+                case 'LYYTD': localConds.push(`(${fyRow} = ${fyRefStatic} - 1 AND ${dateCol} <= ${staticRef} - INTERVAL 1 YEAR)`); break;
+                case 'MTD':   localConds.push(`(${fyRow} = ${fyRefStatic} AND ${mo} = ${moRefStatic} AND ${dateCol} <= ${staticRef})`); break;
+                case 'LY':    localConds.push(`(${fyRow} = ${fyRefStatic} - 1)`); break;
+                case 'DYTD':  localConds.push(`(${fyRow} = (CASE WHEN date_part('month', ${refDate}) >= 4 THEN date_part('year', ${refDate}) + 1 ELSE date_part('year', ${refDate}) END) AND ${dateCol} <= ${refDate})`); break;
+            }
+        }
+        
+        if (!f.isCalculated) {
+            const col = `"${sourceTable}"."${f.id}"`;
+            const agg = f.aggType === 'countDistinct' ? 'COUNT(DISTINCT ' : (f.aggType === 'count' ? 'COUNT(' : `${(f.aggType || 'SUM').toUpperCase()}(`);
+            if (localConds.length > 0) return `${agg}CASE WHEN ${localConds.join(' AND ')} THEN ${col} ELSE NULL END)`;
+            return `${agg}${col})`;
+        } else {
+            let exprSQL = "NULL";
+            if (f.expression) {
+                let evalStr = f.expression;
+                const matches = evalStr.match(/\[(.*?)\]/g) || [];
+                for (const match of matches) {
+                    const innerId = match.slice(1, -1);
+                    const innerSQL = resolveMeasureSQL(innerId, localConds, new Set(visited));
+                    evalStr = evalStr.replace(match, `CAST((${innerSQL}) AS DOUBLE)`);
+                }
+                exprSQL = evalStr || "NULL";
+            }
+            return `(${exprSQL})`;
+        }
+    };
+
+    measures.forEach(measId => { selectClause.push(`${resolveMeasureSQL(measId)} AS "${measId}"`); });
+
+    let whereClause = "";
+    const filterParts = [];
+    Object.entries(globalFilters).forEach(([originKey, vals]) => {
+      if (!vals || vals.length === 0) return;
+      const [oDsId, oFId] = originKey.split('::');
+      const colName = oFId ?? oDsId; // if no '::' separator, the whole key IS the column name
+      const table = datasets.find(d => d.id === oDsId)?.tableName || oDsId;
+      const colIdent = isMasterView ? `"${colName}"` : `"${table}"."${colName}"`;
+      const valList = vals.map(v => typeof v === 'string' ? `'${String(v).replace(/'/g, "''")}'` : v).join(', ');
+      filterParts.push(`${colIdent} IN (${valList})`);
+    });
+    if (filterParts.length > 0) whereClause = ` WHERE ${filterParts.join(' AND ')}`;
+
+    const groupByClause = dimensions.length > 0 ? ` GROUP BY ${dimensions.map((_, i) => i + 1).join(', ')}` : "";
+    return `${ctePrefix}SELECT ${selectClause.join(', ')} FROM "${sourceTable}"${whereClause}${groupByClause}`;
+  }, [datasets, semanticModels, activeDatasetId, relationships, globalFilters, generateUnifiedCTE]);
+
+  const applyFilters = useCallback((data, datasetId) => {
+      let filteredData = data;
+      const sm = semanticModels[datasetId] || [];
+      Object.entries(globalFilters).forEach(([originKey, filterVals]) => {
+        if (!filterVals || filterVals.length === 0) return;
+        const [oDsId, oFId] = originKey.split('::');
+        const localField = sm.find(f => (f.originDatasetId || datasetId).toLowerCase() === oDsId.toLowerCase() && (f.originFieldId || f.id).toLowerCase() === oFId.toLowerCase());
+        if (localField) {
+           const localDimId = localField.id;
+           filteredData = filteredData.filter(row => filterVals.includes(String(row[localDimId])));
+        }
+      });
+      return filteredData;
+  }, [globalFilters, semanticModels]);
+
+  const getAggregatedData = useCallback(async (datasetId, dimensionId, measureId, legendId) => {
+    if (!datasetId || !dimensionId || !measureId) return { data: [], legendKeys: [] };
+    const dimensions = [dimensionId];
+    if (legendId) dimensions.push(legendId);
+    const sql = generateSQL(datasetId, dimensions, [measureId]);
+    try {
+      const results = await queryDuckDB(sql);
+      const dataMap = new Map();
+      
+      results.forEach(row => {
+        const xVal = row[dimensionId];
+        let item = dataMap.get(xVal);
+        if (!item) {
+          item = { name: xVal };
+          dataMap.set(xVal, item);
+        }
+        if (legendId) item[row[legendId]] = row[measureId];
+        else item.value = row[measureId];
+      });
+
+      const data = Array.from(dataMap.values());
+      const legendKeys = legendId ? [...new Set(results.map(r => r[legendId]))] : ['value'];
+      return { data, legendKeys };
+    } catch (e) { console.error("Agg Error:", e); throw e; }
+  }, [generateSQL]);
+
+  const getPivotData = useCallback(async (datasetId, rowDims, colDims, measureIds) => {
+     if (!datasetId || !rowDims?.length || !measureIds?.length) return { rowKeys: [], colKeys: [], matrix: {} };
+     const sql = generateSQL(datasetId, [...(rowDims || []), ...(colDims || [])], measureIds);
+     try {
+       const results = await queryDuckDB(sql);
+       const matrix = {};
+       const colKeysSet = new Set();
+       const rowKeysSet = new Set();
+       results.forEach(row => {
+          const rowKey = rowDims.map(d => row[d]).join(' | ');
+          const baseColKey = colDims?.length ? colDims.map(d => row[d]).join(' | ') : 'All';
+          rowKeysSet.add(rowKey);
+          if (!matrix[rowKey]) matrix[rowKey] = {};
+          measureIds.forEach(mId => {
+             const fullColKey = measureIds.length > 1 ? `${baseColKey} | ${mId}` : baseColKey;
+             colKeysSet.add(fullColKey);
+             matrix[rowKey][fullColKey] = row[mId];
+          });
+       });
+       return { rowKeys: Array.from(rowKeysSet).sort(), colKeys: Array.from(colKeysSet).sort(), matrix };
+     } catch (e) { console.error("Pivot Error:", e); throw e; }
+  }, [generateSQL]);
+
+  const getTableData = useCallback(async (datasetId, dimensions, measures) => {
+     if (!datasetId || (!dimensions?.length && !measures?.length)) return { headers: [], headerIds: [], rows: [] };
+     const sql = generateSQL(datasetId, dimensions, measures);
+     const sm = semanticModels[datasetId] || [];
+     try {
+       const rows = await queryDuckDB(`${sql} LIMIT 100`) || [];
+       const resolveLabel = (id) => {
+           const localField = sm.find(x => x.id === id);
+           if (localField) return localField.label;
+           if (id.includes('::')) {
+               const [oDsId, oFId] = id.split('::');
+               const ds = datasets.find(d => d.id === oDsId);
+               return ds ? `${oFId} (${ds.name})` : oFId;
+           }
+           return id;
+       };
+       const headers = [...(dimensions || []).map(resolveLabel), ...(measures || []).map(resolveLabel)];
+       const headerIds = [...(dimensions || []), ...(measures || [])];
+       return { headers, headerIds, rows };
+     } catch (e) { console.error("Table Error:", e); throw e; }
+  }, [generateSQL, semanticModels, datasets]);
+
+  const getScatterData = useCallback(async (datasetId, dimensionId, xMeas, yMeas, cMeas, sMeas) => {
+    if (!datasetId || !dimensionId || !xMeas || !yMeas) return [];
+    const measures = [xMeas, yMeas];
+    if (cMeas) measures.push(cMeas);
+    if (sMeas) measures.push(sMeas);
+    const sql = generateSQL(datasetId, [dimensionId], measures);
+    try {
+      const results = await queryDuckDB(sql);
+      return results.map(row => ({ name: row[dimensionId], x: row[xMeas], y: row[yMeas], color: cMeas ? row[cMeas] : null, size: sMeas ? row[sMeas] : null }));
+    } catch (e) { console.error("Scatter Error:", e); throw e; }
+  }, [generateSQL]);
+
+  const getUniqueValuesForDim = useCallback(async (datasetId, dimensionId) => {
+    if (!datasetId || !dimensionId) return [];
+    const cacheKey = `${datasetId}::${dimensionId}`;
+
+    // Return cached result immediately — handles StrictMode double-invoke and re-opens
+    if (slicerOptionsCache.current[cacheKey]) return slicerOptionsCache.current[cacheKey];
+
+    // Query the raw source table directly (no expensive join needed for dropdown population)
+    const ds = datasetsRef.current.find(d => d.id === datasetId);
+    const tableName = ds?.tableName || datasetId;
+    const sql = `SELECT DISTINCT "${dimensionId}" FROM "${tableName}" WHERE "${dimensionId}" IS NOT NULL ORDER BY 1 LIMIT 1000`;
+    
+    try {
+      const results = await queryDuckDB(sql);
+      const values = results.map(r => String(r[dimensionId] ?? Object.values(r)[0] ?? ''));
+      slicerOptionsCache.current[cacheKey] = values; // Populate cache
+      return values;
+    } catch (e) { 
+      console.error("Unique Values Error:", e); 
+      return []; 
+    }
+  }, []); // Empty deps: stable reference for the lifetime of the hook instance
+
+  // Auto-initialize DuckDB on mount
+  useEffect(() => {
+    initDuckDB().catch(e => console.error("DuckDB Init failed:", e));
+  }, []);
+
+  return {
+    datasets,
+    semanticModels,
+    maxDatesCache,
+    isLoading,
+    loadDataset,
+    deleteDataset,
+    joinDatasets,
+    updateSemanticModel,
+    getUniqueValuesForDim,
+    globalSemanticFields,
+    applyFilters,
+    getAggregatedData,
+    getPivotData,
+    getTableData,
+    getScatterData,
+    executeExploreQuery: async (dsId, dims, meass, filts) => await queryDuckDB(generateSQL(dsId, dims, meass, filts)),
+    datesReady
+  };
+};
