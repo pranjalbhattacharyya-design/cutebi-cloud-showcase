@@ -8,7 +8,7 @@ const LibraryModal = ({ isOpen, onClose, onSelect, existingDatasetIds = [] }) =>
 
   useEffect(() => {
     if (isOpen) {
-      fetch('http://localhost:8000/api/library')
+      fetch('/api/library')
         .then(res => res.json())
         .then(data => {
           setLibrary(data);
