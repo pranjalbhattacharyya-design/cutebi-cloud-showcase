@@ -9,7 +9,7 @@ class Workspace(Base):
     id = Column(String, primary_key=True, index=True)
     name = Column(String, index=True)
     description = Column(String, nullable=True)
-    timestamp = Column(Float, default=func.now())
+    timestamp = Column(DateTime, default=func.now())
     is_deleted = Column(Boolean, default=False)
 
     
@@ -25,7 +25,7 @@ class Folder(Base):
     name = Column(String, index=True)
     workspace_id = Column(String, ForeignKey("workspaces.id"))
     parent_id = Column(String, ForeignKey("folders.id"), nullable=True)
-    timestamp = Column(Float, default=func.now())
+    timestamp = Column(DateTime, default=func.now())
     is_deleted = Column(Boolean, default=False)
 
 
@@ -46,7 +46,7 @@ class Report(Base):
     # Store all BI metadata (Semantic models, Dashboards, Slicers, etc) as JSON
     data = Column(JSON) 
     
-    timestamp = Column(Float, default=func.now())
+    timestamp = Column(DateTime, default=func.now())
     is_deleted = Column(Boolean, default=False)
 
 
@@ -61,7 +61,7 @@ class PublishedModel(Base):
     name = Column(String, index=True)
     workspace_id = Column(String, ForeignKey("workspaces.id"))
     data = Column(JSON) # Stores field definitions, relationships, etc.
-    timestamp = Column(Float, default=func.now())
+    timestamp = Column(DateTime, default=func.now())
 
     # Relationships
     workspace = relationship("Workspace")
@@ -75,7 +75,7 @@ class Dataset(Base):
     file_path = Column(String)
     table_name = Column(String)
     headers = Column(JSON)
-    timestamp = Column(Float, default=func.now())
+    timestamp = Column(DateTime, default=func.now())
 
 class WorkspaceDataset(Base):
     __tablename__ = "workspace_datasets"
@@ -88,7 +88,7 @@ class WorkspaceDataset(Base):
     headers = Column(JSON)
     description = Column(String, nullable=True)
     is_deleted = Column(Boolean, default=False)
-    timestamp = Column(Float, default=func.now())
+    timestamp = Column(DateTime, default=func.now())
 
     # Relationships
     workspace = relationship("Workspace", back_populates="workspace_datasets")
