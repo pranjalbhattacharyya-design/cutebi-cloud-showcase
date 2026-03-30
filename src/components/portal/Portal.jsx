@@ -157,46 +157,40 @@ export default function Portal() {
     setShowCreateModal(null);
     setNewName('');
 
-    try {
-      if (type === 'workspace') {
-        const wsId = `w_${Date.now()}`;
-        const newWs = { id: wsId, name: name, description: '', timestamp: Date.now() };
-        
-        // 1. Force Sync to Backend FIRST
-        await apiClient.post('/workspaces', newWs);
-        
-        // 2. Align Local State
-        setWorkspaces(prev => [...prev.filter(w => w.id !== wsId), newWs]);
-        setCurrentWorkspaceId(wsId);
-        showToast(`Workspace "${name}" created.`);
-      } else if (type === 'folder') {
-        const fId = `f_${Date.now()}`;
-        const newFolder = { 
-          id: fId, 
-          name: name, 
-          workspace_id: currentWorkspaceId, 
-          parent_id: currentFolderId, 
-          workspaceId: currentWorkspaceId,
-          parentId: currentFolderId,
-          timestamp: Date.now() 
-        };
-        
-        // 1. Force Sync to Backend FIRST
-        await apiClient.post('/folders', newFolder);
-        
-        // 2. Align Local State
-        setFolders(prev => [...prev.filter(f => f.id !== fId), newFolder]);
-        showToast(`Folder "${name}" created.`);
-      }
+    const id = `${type === 'workspace' ? 'w' : 'f'}_${Date.now()}`;
+    
+    // OPTIMISTIC UPDATE: Show it on screen INSTANTLY
+    if (type === 'workspace') {
+      const newWs = { id, name, description: '', timestamp: Date.now() };
+      setWorkspaces(prev => [...prev.filter(w => w.id !== id), newWs]);
+      setCurrentWorkspaceId(id);
+      showToast(`Workspace "${name}" created (Syncing...)`);
       
-      // 3. Trigger Global Refresh to verify cloud sync
-      await refreshData(true);
+      // BACKGROUND SYNC
+      apiClient.post('/workspaces', newWs).then(() => {
+          showToast(`✨ Workspace "${name}" saved to cloud!`);
+          refreshData(true);
+      }).catch(err => {
+          console.error("Sync failed:", err);
+          showToast("Cloud sync failed. It might be local-only.");
+      }).finally(() => setIsMutating(false));
 
-    } catch (err) {
-      console.error(`${type} creation failed:`, err);
-      showToast(`Conflict: Name might already exist or server is busy.`);
-    } finally {
-      setIsMutating(false);
+    } else if (type === 'folder') {
+      const newFolder = { 
+        id, name, workspace_id: currentWorkspaceId, parent_id: currentFolderId, 
+        workspaceId: currentWorkspaceId, parentId: currentFolderId, timestamp: Date.now() 
+      };
+      setFolders(prev => [...prev.filter(f => f.id !== id), newFolder]);
+      showToast(`Folder "${name}" created (Syncing...)`);
+
+      // BACKGROUND SYNC
+      apiClient.post('/folders', newFolder).then(() => {
+          showToast(`✨ Folder "${name}" saved to cloud!`);
+          refreshData(true);
+      }).catch(err => {
+          console.error("Sync failed:", err);
+          showToast("Cloud sync failed. It might be local-only.");
+      }).finally(() => setIsMutating(false));
     }
   };
 
