@@ -580,8 +580,9 @@ async def prepare_upload(filename: str = Query(...), display_name: str = Query(N
     """
     import re
     raw_stem = os.path.splitext(filename)[0].strip()
-    ds_id = re.sub(r'[^\w]', '_', raw_stem)
-    ds_id = re.sub(r'_+', '_', ds_id).strip('_')
+    # Preserve spaces — DuckDB handles them via double-quoted view names.
+    # Only strip truly dangerous characters (quotes, slashes, backslashes).
+    ds_id = re.sub(r'[\"\'\\\/]', '', raw_stem).strip()
     storage_path = f"{ds_id}.csv"
 
     if not supabase_client:
