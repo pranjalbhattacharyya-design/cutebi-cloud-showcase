@@ -71,8 +71,9 @@ def _get_conn() -> duckdb.DuckDBPyConnection:
     return _db_conn
 
 def _refresh_views(conn: duckdb.DuckDBPyConnection | None = None):
-    """Register every cloud-hosted parquet dataset from the database as a DuckDB view.
-    Safe to call after an upload without restarting the server."""
+    """Register every cloud-hosted dataset from the database as a DuckDB view.
+    Safe to call after an upload without restarting the server.
+    Silently skips dead/missing URLs (e.g. old Parquet files from Vercel era)."""
     global _registered_views
     if conn is None:
         conn = _get_conn()
@@ -88,16 +89,24 @@ def _refresh_views(conn: duckdb.DuckDBPyConnection | None = None):
             if ds.file_path.startswith("http"):
                 try:
                     view_name = ds.id.strip().replace('"', '')
+                    # URL-encode spaces so DuckDB can resolve the path correctly
+                    safe_url = ds.file_path.replace(" ", "%20")
                     # Smart detection: CSV files stored directly, Parquet for converted ones
-                    if ds.file_path.endswith('.csv'):
-                        loader = f"read_csv('{ds.file_path}', header=true, auto_detect=true)"
+                    if safe_url.endswith('.csv') or '.csv' in safe_url:
+                        loader = f"read_csv('{safe_url}', header=true, auto_detect=true)"
                     else:
-                        loader = f"read_parquet('{ds.file_path}')"
+                        # Legacy parquet path — try but expect failure for old Vercel files
+                        loader = f"read_parquet('{safe_url}')"
                     conn.execute(f'CREATE OR REPLACE VIEW "{view_name}" AS SELECT * FROM {loader}')
                     registered.add(view_name)
-                    print(f"[Engine] Registered cloud view '{view_name}' ({loader[:30]}...)")
+                    print(f"[Engine] Registered cloud view '{view_name}'")
                 except Exception as e:
-                    print(f"[Engine] Could not register cloud view '{ds.id}': {e}")
+                    err = str(e)
+                    # Silently skip dead URLs (old parquet files that no longer exist)
+                    if "HTTP" in err or "No such file" in err:
+                        print(f"[Engine] Skipping dead URL for '{ds.id}' — file may no longer exist in storage.")
+                    else:
+                        print(f"[Engine] Could not register cloud view '{ds.id}': {e}")
     finally:
         db.close()
 
@@ -754,6 +763,8 @@ async def upload_file(
             file_options={"upsert": "true", "content-type": "text/csv"}
         )
         public_url = f"{SUPABASE_URL}/storage/v1/object/public/{STORAGE_BUCKET}/{storage_key}"
+        # URL-encode spaces so DuckDB can resolve the path correctly
+        public_url = public_url.replace(" ", "%20")
         print(f"[Storage] Uploaded! URL: {public_url}")
     except Exception as e:
         import traceback
