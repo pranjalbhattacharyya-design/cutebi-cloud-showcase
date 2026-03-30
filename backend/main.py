@@ -836,7 +836,12 @@ async def run_query(query_request: dict):
 
     def execute_with_retry(retry_on_missing=True):
         with _db_lock:
-            conn = _get_conn()
+            try:
+                conn = _get_conn()
+            except Exception as conn_err:
+                print(f"[Backend Query] Connection FAILED: {conn_err}")
+                return {"error": f"Database initialization failed. Check your DATABASE_URL? {conn_err}", "sql": sql}
+
             try:
                 cursor = conn.execute(sql)
                 columns = [col[0] for col in cursor.description]
@@ -848,7 +853,10 @@ async def run_query(query_request: dict):
                 # SELF-HEALING: If table is missing, refresh views from DB and try one last time
                 if retry_on_missing and ("Table with name" in err_str or "does not exist" in err_str):
                     print(f"[Engine] Table missing during query. Triggering self-healing refresh...")
-                    _refresh_views(conn)
+                    try:
+                        _refresh_views(conn)
+                    except Exception as refresh_err:
+                        return {"error": f"Table missing and self-healing failed: {refresh_err}", "sql": sql}
                     return execute_with_retry(retry_on_missing=False)
                 
                 print(f" [Backend Query] SQL Execution FAILED: {err_str}")
