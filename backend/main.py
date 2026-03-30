@@ -99,7 +99,14 @@ def _refresh_views(conn: duckdb.DuckDBPyConnection | None = None):
 
 
 
-app = FastAPI(title="CuteBI Cloud Showcase")
+app = FastAPI(title="CuteBI Cloud API")
+
+@app.middleware("http")
+async def add_engine_identity(request: Request, call_next):
+    response = await call_next(request)
+    engine_type = "postgres" if "postgresql" in str(database.engine.url) else "sqlite-transient"
+    response.headers["X-Engine-Identity"] = engine_type
+    return response
 
 @app.on_event("startup")
 async def startup_event():

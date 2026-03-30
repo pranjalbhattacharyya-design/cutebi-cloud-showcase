@@ -278,9 +278,13 @@ export const AppStateProvider = ({ children }) => {
       const cloudWorkspaces = ws.length > 0 ? ws : [{ id: 'w_default', name: 'My Workspace', description: 'Your personal workspace' }];
       setWorkspaces(cloudWorkspaces);
       
-      // Safety: If our current workspace was deleted or is missing, align to the first available cloud workspace
-      if (!cloudWorkspaces.find(w => w.id === targetWsId)) {
-          setCurrentWorkspaceId(cloudWorkspaces[0].id);
+      // PERSISTENCE SHIELD: If we have a target workspace in localStorage, do NOT reset it
+      // unless the cloud fetch IS non-empty AND explicitly missing that ID.
+      if (ws.length > 0 && !ws.find(w => w.id === targetWsId)) {
+           console.warn(`[Persistence] Workspace ${targetWsId} not found in cloud. Returning to default.`);
+           setCurrentWorkspaceId(cloudWorkspaces[0].id);
+      } else if (ws.length === 0) {
+           console.log(`[Persistence] Cloud returned empty. Holding active workspace ${targetWsId}...`);
       }
       
       setFolders(f.filter(item => !item.is_deleted).map(item => ({
