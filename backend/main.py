@@ -557,42 +557,77 @@ async def upload_file(file: UploadFile = File(...), db: Session = Depends(databa
             shutil.copyfileobj(file.file, buffer)
         
         # 2. Platinum Transformation: XLSX/CSV -> Parquet
-        # Excel: use pandas+openpyxl (pure Python, Vercel-safe — no extension install needed)
-        # CSV:   use DuckDB's built-in CSV reader (no extension needed)
+        # Excel: openpyxl reads rows → write temp CSV → DuckDB converts CSV→Parquet
+        #        (avoids pandas/pyarrow which are too large for Vercel's 50MB limit)
+        # CSV:   DuckDB native read_csv_auto → Parquet directly
         import duckdb as _duckdb_tmp
         conv_conn = _duckdb_tmp.connect(':memory:')
 
         if extension in ['xlsx', 'xls']:
             try:
-                import pandas as pd
-                import pyarrow as pa
-                import pyarrow.parquet as pq
-                print(f"[Upload] Reading Excel file: {temp_path}")
-                df = pd.read_excel(temp_path, engine='openpyxl')
-                # Sanitize column names (strip leading/trailing whitespace)
-                df.columns = [str(c).strip() for c in df.columns]
-                table = pa.Table.from_pandas(df, preserve_index=False)
-                pq.write_table(table, final_path)
-                headers = df.columns.tolist()
-                sample_rows_raw = conv_conn.execute(f"SELECT * FROM '{final_path}' LIMIT 5").fetchall()
-                header_map = headers  # already correct order
-                sample_data = [dict(zip(header_map, row)) for row in sample_rows_raw]
-                print(f"[Upload] Excel converted to Parquet via pandas. Columns: {headers}")
+                import openpyxl
+                import csv
+                print(f"[Upload] Reading Excel file via openpyxl: {temp_path}")
+                wb = openpyxl.load_workbook(temp_path, read_only=True, data_only=True)
+                ws = wb.active
+                rows = list(ws.iter_rows(values_only=True))
+                wb.close()
+
+                if not rows:
+                    raise HTTPException(status_code=400, detail="Excel file is empty.")
+
+                # First row = headers; sanitize them
+                raw_headers = [str(h).strip() if h is not None else f"col_{i}" for i, h in enumerate(rows[0])]
+                data_rows = rows[1:]
+
+                # Write a temp CSV (DuckDB will read it)
+                csv_path = os.path.join(storage_root, f"{ds_id}_temp.csv")
+                with open(csv_path, "w", newline="", encoding="utf-8") as f_csv:
+                    writer = csv.writer(f_csv, quoting=csv.QUOTE_MINIMAL)
+                    writer.writerow(raw_headers)
+                    for row in data_rows:
+                        writer.writerow([("" if v is None else v) for v in row])
+
+                print(f"[Upload] CSV written ({len(data_rows)} rows). Converting to Parquet...")
+                conv_conn.execute(
+                    f"COPY (SELECT * FROM read_csv_auto('{csv_path}', header=true)) "
+                    f"TO '{final_path}' (FORMAT PARQUET)"
+                )
+                # Clean up temp CSV
+                try:
+                    os.remove(csv_path)
+                except Exception:
+                    pass
+
+                headers = [c[0] for c in conv_conn.execute(f"SELECT * FROM '{final_path}' LIMIT 0").description]
+                sample_rows = conv_conn.execute(f"SELECT * FROM '{final_path}' LIMIT 5").fetchall()
+                sample_data = [dict(zip(headers, row)) for row in sample_rows]
+                print(f"[Upload] Excel→Parquet complete. Headers: {headers}")
+
             except ImportError as ie:
-                raise HTTPException(status_code=500, detail=f"Excel parsing library missing: {ie}. Ensure pandas, openpyxl, pyarrow are installed.")
+                raise HTTPException(status_code=500, detail=f"openpyxl not installed: {ie}")
+            except HTTPException:
+                raise
             except Exception as xlsx_err:
-                raise HTTPException(status_code=400, detail=f"Failed to parse Excel file: {str(xlsx_err)}")
+                import traceback
+                detail = f"Failed to parse Excel file: {str(xlsx_err)}"
+                print(f"[Upload] Excel error: {traceback.format_exc()}")
+                raise HTTPException(status_code=400, detail=detail)
         else:
-            # CSV path — DuckDB native, no extensions needed
+            # CSV/TXT path — DuckDB native, no extensions needed
             try:
-                conv_conn.execute(f"COPY (SELECT * FROM read_csv_auto('{temp_path}', header=true)) TO '{final_path}' (FORMAT PARQUET)")
+                conv_conn.execute(
+                    f"COPY (SELECT * FROM read_csv_auto('{temp_path}', header=true)) "
+                    f"TO '{final_path}' (FORMAT PARQUET)"
+                )
                 headers = [c[0] for c in conv_conn.execute(f"SELECT * FROM '{final_path}' LIMIT 0").description]
                 sample_rows = conv_conn.execute(f"SELECT * FROM '{final_path}' LIMIT 5").fetchall()
                 sample_data = [dict(zip(headers, row)) for row in sample_rows]
             except Exception as csv_err:
                 raise HTTPException(status_code=400, detail=f"Failed to parse CSV file: {str(csv_err)}")
-        
+
         conv_conn.close()
+
         
         # 3. Cloud Upload: Parquet -> Supabase Storage
         if not supabase_client:
