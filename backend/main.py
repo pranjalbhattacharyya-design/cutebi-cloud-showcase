@@ -61,9 +61,12 @@ def _get_conn() -> duckdb.DuckDBPyConnection:
     if _db_conn is None:
         _db_conn = duckdb.connect(database=':memory:', read_only=False)
         try:
-            _db_conn.execute("INSTALL spatial; LOAD spatial;")
+            # Point DuckDB's temp dir at /tmp — the only writable path on Vercel.
+            # DO NOT run INSTALL/LOAD extensions here — they write to the filesystem
+            # and cause a native SEGFAULT on read-only Lambda environments.
+            _db_conn.execute("SET temp_directory='/tmp'")
         except Exception as e:
-            print(f"[Engine] Spatial extension unavailable: {e}")
+            print(f"[Engine] Could not set temp_directory: {e}")
         _refresh_views(_db_conn)
     return _db_conn
 
