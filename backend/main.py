@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Request
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 import os
@@ -553,18 +553,26 @@ def read_library(db: Session = Depends(database.get_db)):
 @app.post("/api/upload")
 async def upload_file(
     file: UploadFile = File(...),
-    original_filename: str = None,
+    original_filename: str = Form(None),
     db: Session = Depends(database.get_db)
 ):
     # Use the original filename if provided (frontend sends xlsx name even when converting to CSV)
     # e.g., original_filename='Fact Sale.xlsx', file.filename='Fact Sale.csv'
     display_name = original_filename or file.filename
-    ds_id = os.path.splitext(file.filename)[0].strip()
+
+    # Sanitize ds_id: strip extension, replace spaces/special chars with underscores
+    # This is used as the DuckDB view name, Supabase Storage key, and DB record id.
+    # Spaces in these identifiers cause DuckDB SQL errors and Supabase path issues.
+    import re
+    raw_stem = os.path.splitext(file.filename)[0].strip()
+    ds_id = re.sub(r'[^\w]', '_', raw_stem)  # replace non-word chars with _
+    ds_id = re.sub(r'_+', '_', ds_id).strip('_')  # collapse repeated underscores
+
     extension = file.filename.split(".")[-1].lower()
     # On Vercel, we must use /tmp for transient storage
     storage_root = "/tmp" if os.getenv("VERCEL") else "backend/data"
     os.makedirs(storage_root, exist_ok=True)
-    
+
     temp_path = os.path.join(storage_root, f"{ds_id}_temp.{extension}")
     final_path = os.path.join(storage_root, f"{ds_id}.parquet")
     
