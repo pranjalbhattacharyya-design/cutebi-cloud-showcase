@@ -84,11 +84,15 @@ def _refresh_views(conn: duckdb.DuckDBPyConnection | None = None):
         for ds in cloud_datasets:
             if ds.file_path.startswith("http"):
                 try:
-                    # Clean the view name
                     view_name = ds.id.strip().replace('"', '')
-                    conn.execute(f'CREATE OR REPLACE VIEW "{view_name}" AS SELECT * FROM read_parquet(\'{ds.file_path}\')')
+                    # Smart detection: CSV files stored directly, Parquet for converted ones
+                    if ds.file_path.endswith('.csv'):
+                        loader = f"read_csv('{ds.file_path}', header=true, auto_detect=true)"
+                    else:
+                        loader = f"read_parquet('{ds.file_path}')"
+                    conn.execute(f'CREATE OR REPLACE VIEW "{view_name}" AS SELECT * FROM {loader}')
                     registered.add(view_name)
-                    print(f"[Engine] Registered cloud view '{view_name}' from {ds.file_path[:50]}...")
+                    print(f"[Engine] Registered cloud view '{view_name}' ({loader[:30]}...)")
                 except Exception as e:
                     print(f"[Engine] Could not register cloud view '{ds.id}': {e}")
     finally:
@@ -555,125 +559,116 @@ async def upload_file(
     original_filename: str = Form(None),
     db: Session = Depends(database.get_db)
 ):
+    """
+    Upload pipeline (Cloud/Vercel path):
+      1. Read uploaded file bytes via await file.read()
+      2. If XLSX: use openpyxl to convert to CSV bytes in-memory
+      3. Parse headers + 5 sample rows using Python csv module (NO DuckDB)
+      4. Upload the CSV directly to Supabase Storage
+      5. Register a DuckDB read_csv() view
+      6. Persist to Postgres
+
+    DuckDB is NOT used for conversion — it was SEGFAULTing on Vercel's Lambda.
+    DuckDB CAN query the CSV over HTTP later via read_csv().
+    """
+    import re, csv as _csv, io
+
     display_name = original_filename or file.filename
-    import re
     raw_stem = os.path.splitext(file.filename)[0].strip()
     ds_id = re.sub(r'[^\w]', '_', raw_stem)
     ds_id = re.sub(r'_+', '_', ds_id).strip('_')
+    extension = file.filename.split('.')[-1].lower()
 
-    extension = file.filename.split(".")[-1].lower()
-    storage_root = "/tmp"
-    os.makedirs(storage_root, exist_ok=True)
+    print(f"[Upload] Starting: display='{display_name}' ds_id='{ds_id}' ext='{extension}'")
 
-    temp_path = os.path.join(storage_root, f"{ds_id}_temp.{extension}")
-    final_path = os.path.join(storage_root, f"{ds_id}.parquet")
-
-    print(f"[Upload] Starting upload: display='{display_name}' ds_id='{ds_id}' ext='{extension}'")
-
-    # ── Step 1: Read file into memory and write to disk ─────────────────────
+    # ── Step 1: Read file bytes ───────────────────────────────────────────────
     try:
-        contents = await file.read()
-        if not contents:
-            raise HTTPException(status_code=400, detail="Uploaded file is empty (0 bytes received).")
-        with open(temp_path, "wb") as buffer:
-            buffer.write(contents)
-        print(f"[Upload] Saved {len(contents)} bytes to {temp_path}")
+        raw_bytes = await file.read()
+        if not raw_bytes:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty (0 bytes).")
+        print(f"[Upload] Received {len(raw_bytes)} bytes")
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"[Step 1] Failed to save uploaded file: {e}")
+        raise HTTPException(status_code=500, detail=f"[Step 1] Read failed: {e}")
 
-    headers = []
-    sample_data = []
-
-    # ── Step 2: CSV/XLSX → Parquet via DuckDB ───────────────────────────────
+    # ── Step 2: Normalise to CSV bytes (no DuckDB, no temp files on Vercel) ──
     try:
-        import duckdb as _duckdb_tmp
-        conv_conn = _duckdb_tmp.connect(':memory:')
-        conv_conn.execute("SET temp_directory='/tmp'")
-
         if extension in ['xlsx', 'xls']:
-            import openpyxl, csv as _csv
-            print(f"[Upload] Reading Excel via openpyxl (fallback)...")
-            wb = openpyxl.load_workbook(temp_path, read_only=True, data_only=True)
+            # XLSX → CSV in-memory using openpyxl
+            import openpyxl
+            print("[Upload] XLSX detected — converting via openpyxl...")
+            wb = openpyxl.load_workbook(io.BytesIO(raw_bytes), read_only=True, data_only=True)
             ws = wb.active
-            rows = list(ws.iter_rows(values_only=True))
+            xl_rows = list(ws.iter_rows(values_only=True))
             wb.close()
-            if not rows:
+            if not xl_rows:
                 raise HTTPException(status_code=400, detail="Excel file is empty.")
-            raw_headers = [str(h).strip() if h is not None else f"col_{i}" for i, h in enumerate(rows[0])]
-            data_rows = rows[1:]
-            csv_path = os.path.join(storage_root, f"{ds_id}_temp2.csv")
-            with open(csv_path, "w", newline="", encoding="utf-8") as f_csv:
-                writer = _csv.writer(f_csv, quoting=_csv.QUOTE_MINIMAL)
-                writer.writerow(raw_headers)
-                for row in data_rows:
-                    writer.writerow([("" if v is None else v) for v in row])
-            conv_conn.execute(
-                f"COPY (SELECT * FROM read_csv('{csv_path}', header=true, auto_detect=true)) "
-                f"TO '{final_path}' (FORMAT PARQUET)"
-            )
-            try: os.remove(csv_path)
-            except Exception: pass
+            out = io.StringIO()
+            writer = _csv.writer(out, quoting=_csv.QUOTE_MINIMAL)
+            for row in xl_rows:
+                writer.writerow([("" if v is None else v) for v in row])
+            csv_bytes = out.getvalue().encode('utf-8')
+            print(f"[Upload] openpyxl→CSV: {len(csv_bytes)} bytes, {len(xl_rows)} rows")
         else:
-            print(f"[Upload] Converting CSV→Parquet: {temp_path} → {final_path}")
-            conv_conn.execute(
-                f"COPY (SELECT * FROM read_csv('{temp_path}', header=true, auto_detect=true)) "
-                f"TO '{final_path}' (FORMAT PARQUET)"
-            )
-
-        result = conv_conn.execute(f"SELECT * FROM '{final_path}' LIMIT 5")
-        headers = [c[0] for c in result.description]
-        rows5 = result.fetchall()
-        sample_data = [dict(zip(headers, r)) for r in rows5]
-        conv_conn.close()
-        print(f"[Upload] Parquet written. Headers: {headers}")
-
+            # Already CSV — use as-is
+            csv_bytes = raw_bytes
+            print(f"[Upload] CSV received: {len(csv_bytes)} bytes")
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
-        tb = traceback.format_exc()
-        print(f"[Upload] Step 2 FAILED:\n{tb}")
-        raise HTTPException(status_code=500, detail=f"[Step 2] CSV→Parquet conversion failed: {e}")
-    finally:
-        try: os.remove(temp_path)
-        except Exception: pass
+        raise HTTPException(status_code=500, detail=f"[Step 2] CSV normalisation failed: {e}")
 
-    # ── Step 3: Upload Parquet → Supabase Storage ────────────────────────────
-    if not supabase_client:
-        raise HTTPException(status_code=500, detail="Supabase not configured (missing SUPABASE_URL/KEY env vars).")
-
+    # ── Step 3: Parse headers + sample rows (pure Python, no DuckDB) ─────────
     try:
-        print(f"[Storage] Uploading {ds_id}.parquet → Supabase bucket '{STORAGE_BUCKET}'...")
-        with open(final_path, "rb") as f:
-            supabase_client.storage.from_(STORAGE_BUCKET).upload(
-                path=f"{ds_id}.parquet",
-                file=f,
-                file_options={"upsert": "true", "content-type": "application/octet-stream"}
-            )
-        public_url = f"{SUPABASE_URL}/storage/v1/object/public/{STORAGE_BUCKET}/{ds_id}.parquet"
+        text = csv_bytes.decode('utf-8-sig')  # strip BOM if present
+        reader = _csv.reader(io.StringIO(text))
+        headers = [h.strip() for h in next(reader)]
+        if not headers:
+            raise HTTPException(status_code=400, detail="CSV has no headers.")
+        sample_data = []
+        for i, row in enumerate(reader):
+            if i >= 5:
+                break
+            sample_data.append(dict(zip(headers, row)))
+        print(f"[Upload] Headers parsed: {headers[:5]}...")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"[Step 3] Header parsing failed: {e}")
+
+    # ── Step 4: Upload CSV → Supabase Storage ────────────────────────────────
+    if not supabase_client:
+        raise HTTPException(status_code=500, detail="Supabase not configured (missing env vars).")
+    try:
+        storage_key = f"{ds_id}.csv"
+        print(f"[Storage] Uploading {storage_key} → bucket '{STORAGE_BUCKET}'...")
+        supabase_client.storage.from_(STORAGE_BUCKET).upload(
+            path=storage_key,
+            file=csv_bytes,
+            file_options={"upsert": "true", "content-type": "text/csv"}
+        )
+        public_url = f"{SUPABASE_URL}/storage/v1/object/public/{STORAGE_BUCKET}/{storage_key}"
         print(f"[Storage] Uploaded! URL: {public_url}")
     except Exception as e:
         import traceback
-        tb = traceback.format_exc()
-        print(f"[Storage] Upload FAILED:\n{tb}")
-        raise HTTPException(status_code=500, detail=f"[Step 3] Supabase Storage upload failed: {e}")
-    finally:
-        try: os.remove(final_path)
-        except Exception: pass
+        print(f"[Storage] FAILED:\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"[Step 4] Supabase upload failed: {e}")
 
-    # ── Step 4: Register DuckDB cloud view ───────────────────────────────────
+    # ── Step 5: Register DuckDB cloud view (read_csv, not read_parquet) ───────
     try:
         with _db_lock:
             conn = _get_conn()
-            conn.execute(f'CREATE OR REPLACE VIEW "{ds_id}" AS SELECT * FROM read_parquet(\'{public_url}\')')
+            conn.execute(
+                f'CREATE OR REPLACE VIEW "{ds_id}" AS '
+                f"SELECT * FROM read_csv('{public_url}', header=true, auto_detect=true)"
+            )
             _registered_views.add(ds_id)
-        print(f"[Engine] Registered cloud view '{ds_id}'")
+        print(f"[Engine] Registered CSV view '{ds_id}'")
     except Exception as e:
         print(f"[Engine] Warning: could not register view '{ds_id}': {e}")
 
-    # ── Step 5: Persist to Postgres dataset catalog ──────────────────────────
+    # ── Step 6: Persist to Postgres dataset catalog ───────────────────────────
     try:
         db_dataset = db.query(models.Dataset).filter(models.Dataset.id == ds_id).first()
         if db_dataset:
@@ -696,8 +691,8 @@ async def upload_file(
         db.commit()
         db.refresh(db_dataset)
     except Exception as e:
-        print(f"[DB] Dataset catalog write failed: {e}")
-        raise HTTPException(status_code=500, detail=f"[Step 5] Failed to register dataset in database: {e}")
+        print(f"[DB] Catalog write failed: {e}")
+        raise HTTPException(status_code=500, detail=f"[Step 6] DB registration failed: {e}")
 
     return {
         "id": ds_id,
