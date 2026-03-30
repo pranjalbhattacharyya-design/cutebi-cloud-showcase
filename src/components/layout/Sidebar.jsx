@@ -1,8 +1,8 @@
 import React from 'react';
 import {
-  Sparkles, Menu, Database, Pencil, Trash2, UploadCloud, Upload,
-  FolderArchive, Download, Palette, Settings2, Link as LinkIcon, Save, Zap, FolderOpen,
-  Plus, Calculator, Library, LayoutGrid, LogOut
+  Sparkles, Menu, Database, Pencil, Trash2, Download,
+  FolderArchive, Palette, Settings2, Link as LinkIcon, Save, FolderOpen,
+  Plus, Calculator, Library, LayoutGrid, LogOut, CloudDownload
 } from 'lucide-react';
 import { useAppState } from '../../contexts/AppStateContext';
 import { THEMES } from '../../utils/themeEngine';
@@ -13,7 +13,7 @@ import { generateInitModel } from '../../utils/dataParser';
 export default function Sidebar({
   handleRemoveDataset,
   saveDatasetName,
-  handleFileUpload,
+  openGetDataModal,
   handleOpenFiles,
   handleAutoLoadTemplate,
   handleImportTemplates,
@@ -157,12 +157,15 @@ export default function Sidebar({
             );
           })}
 
-          {/* Action B: Simple Platinum Upload */}
-          <label className="flex items-center gap-2.5 w-full text-left px-3 py-2 border border-dashed t-border t-text-muted hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)] hover:bg-black/5 transition-all cursor-pointer font-medium mt-1.5" style={{ borderRadius: 'var(--theme-radius-button)' }}>
-            <UploadCloud size={16} />
-            <span className="text-xs">Upload Data...</span>
-            <input type="file" multiple className="hidden" accept=".csv,.txt,.xlsx,.xls" onChange={(e) => {setPendingRestore(null); handleFileUpload(e);}} />
-          </label>
+          {/* ── Get Data (BigQuery) ── */}
+          <button
+            onClick={openGetDataModal}
+            className="flex items-center gap-2.5 w-full text-left px-3 py-2 border border-dashed t-border t-text-muted hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)] hover:bg-black/5 transition-all cursor-pointer font-medium mt-1.5"
+            style={{ borderRadius: 'var(--theme-radius-button)' }}
+          >
+            <CloudDownload size={16} />
+            <span className="text-xs">Get Data…</span>
+          </button>
 
           {/* Platinum Library Picker */}
           <button

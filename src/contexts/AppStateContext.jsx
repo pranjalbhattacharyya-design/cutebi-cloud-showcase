@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { apiClient } from '../services/api';
-import { queryDuckDB } from '../utils/duckdb.js';
 import { generateInitModel, patchModels } from '../utils/dataParser';
 import { syncSemanticModels } from '../utils/semanticSync';
 import { applyTheme } from '../utils/themeEngine';
@@ -149,17 +148,14 @@ export const AppStateProvider = ({ children }) => {
   const [pendingRestore, setPendingRestore] = useState(null);
   const [currentTemplateId, setCurrentTemplateId] = useState(null);
 
-  // --- Shared Engine Warmup State ---
-  // maxDatesCache and datesReady live here (not in useDataEngine) so the
-  // date-scan runs exactly ONCE regardless of how many hook instances exist.
-  // In the enterprise future, this gets replaced by a backend-cached metadata
-  // field read from Postgres/GCS catalog — no frontend scan needed at all.
+  // --- Engine Warmup: Fetch MAX dates for Time Intelligence ---
+  // BQ mode: calls backend /api/bq/maxdates instead of browser WASM DuckDB.
+  // This runs once whenever datasets or semantic models change.
   const [maxDatesCache, setMaxDatesCache] = useState({});
   const [datesReady, setDatesReady] = useState(false);
   const warmupAbortRef = useRef(false);
 
   useEffect(() => {
-    // Reset abort flag on each run
     warmupAbortRef.current = false;
 
     const fetchMaxDates = async () => {
@@ -167,9 +163,9 @@ export const AppStateProvider = ({ children }) => {
         detail: { type: 'info', category: 'Backend', message: `[${Date.now()}] Engine Warmup Started: Scanning datasets for Time Intelligence...` }
       }));
 
-      const newCache = {};
-      const seen = new Set();
-      const queryTasks = []; // { originKey, table, col, aliases[] }
+      const seen     = new Set();
+      const queries  = [];  // { key, ds_id, col }
+      const aliasMap = {};  // originKey -> [localKey]
 
       // --- Pass 1: Build deduplicated query task list ---
       for (const [dsId, model] of Object.entries(semanticModels)) {
@@ -181,55 +177,47 @@ export const AppStateProvider = ({ children }) => {
         for (const f of dateFields) {
           if (warmupAbortRef.current) return;
 
-          let table = ds.tableName;
-          let col = f.id;
-          let originKey = `${dsId}::${f.id}`;
+          let targetDsId = dsId;
+          let col        = f.id;
+          let originKey  = `${dsId}::${f.id}`;
           const localKey = `${dsId}::${f.id}`;
 
           if (f.isJoined && f.originDatasetId && f.originFieldId) {
-            const originDs = datasets.find(d => d.id === f.originDatasetId);
-            if (originDs) { table = originDs.tableName; col = f.originFieldId; originKey = `${f.originDatasetId}::${f.originFieldId}`; }
+            targetDsId = f.originDatasetId;
+            col        = f.originFieldId;
+            originKey  = `${f.originDatasetId}::${f.originFieldId}`;
           }
 
           if (seen.has(originKey)) {
-            // Alias this local key onto the primary task so it gets populated too
-            const primary = queryTasks.find(t => t.originKey === originKey);
-            if (primary) primary.aliases.push(localKey);
+            if (!aliasMap[originKey]) aliasMap[originKey] = [];
+            if (localKey !== originKey) aliasMap[originKey].push(localKey);
             continue;
           }
           seen.add(originKey);
-          // If originKey differs from localKey (joined field), alias it from the start
-          queryTasks.push({ originKey, table, col, aliases: localKey !== originKey ? [localKey] : [] });
+          queries.push({ key: originKey, ds_id: targetDsId, col });
+
+          if (localKey !== originKey) {
+            aliasMap[originKey] = [localKey];
+          }
         }
       }
 
-      if (warmupAbortRef.current) return;
+      if (warmupAbortRef.current || queries.length === 0) {
+        setDatesReady(true);
+        return;
+      }
 
-      // --- Pass 2: Fire all unique date queries in parallel ---
-      const results = await Promise.allSettled(
-        queryTasks.map(task =>
-          queryDuckDB(`SELECT MAX(TRY_CAST("${task.col}" AS DATE)) as m FROM "${task.table}"`)
-            .then(res => ({ task, res }))
-        )
-      );
+      // --- Pass 2: Ask backend for MAX dates (BigQuery) ---
+      try {
+        const bqResult = await apiClient.getBqMaxDates(queries);
+        if (warmupAbortRef.current) return;
 
-      if (warmupAbortRef.current) return;
-
-      // --- Pass 3: Populate the cache from parallel results ---
-      results.forEach(result => {
-        if (result.status === 'fulfilled') {
-          const { task, res } = result.value;
-          if (res && res[0] && res[0].m) {
-            const dateStr = new Date(res[0].m).toISOString().split('T')[0];
-            newCache[task.originKey] = dateStr;
-            task.aliases.forEach(alias => { newCache[alias] = dateStr; });
-          }
-        } else {
-          console.error('[MaxDates] Query Error:', result.reason);
+        const newCache = { ...bqResult };
+        // Populate aliases from the primary result
+        for (const [originKey, dateStr] of Object.entries(bqResult)) {
+          (aliasMap[originKey] || []).forEach(alias => { newCache[alias] = dateStr; });
         }
-      });
 
-      if (!warmupAbortRef.current) {
         setMaxDatesCache(newCache);
         setDatesReady(true);
         window.dispatchEvent(new CustomEvent('cutebi-debug', {
@@ -239,17 +227,17 @@ export const AppStateProvider = ({ children }) => {
             details: { cachedKeys: Object.keys(newCache) }
           }
         }));
+      } catch (err) {
+        console.error('[MaxDates/BQ] Failed:', err);
+        // Gracefully degrade: mark ready so charts still render
+        setDatesReady(true);
       }
     };
 
     if (datasets.length > 0) {
-      setDatesReady(false); // reset while rescanning
+      setDatesReady(false);
       fetchMaxDates();
     }
-    // If datasets is empty, we keep datesReady as false.
-    // Charts have nothing to query anyway until datasets are loaded.
-    // When datasets arrive (upload or report restore), this effect re-fires
-    // and datesReady becomes true only after the real scan completes.
 
     return () => { warmupAbortRef.current = true; };
   }, [datasets, semanticModels]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -309,24 +297,9 @@ export const AppStateProvider = ({ children }) => {
       }
 
       setWorkspaceDatasets(ds || []);
-      
-      // --- EAGER DUCKDB REGISTRATION ---
-      // Cloud Hardening: Automatically register cloud-hosted Parquet files in the client WASM engine
-      // This ensures that slicers and charts 'find' their data instantly after a refresh.
-      if (ds && ds.length > 0) {
-        ds.forEach(wsDs => {
-          if (wsDs.public_url && wsDs.table_name) {
-             // URL-encode spaces and detect file type for correct DuckDB reader
-             const safeUrl = wsDs.public_url.replace(/ /g, '%20');
-             const isCsv = safeUrl.toLowerCase().includes('.csv');
-             const reader = isCsv
-               ? `read_csv('${safeUrl}', header=true, auto_detect=true)`
-               : `read_parquet('${safeUrl}')`;
-             queryDuckDB(`CREATE OR REPLACE VIEW "${wsDs.table_name}" AS SELECT * FROM ${reader}`)
-               .catch(err => console.error(`[DuckDB] Failed to pre-register ${wsDs.table_name}:`, err));
-          }
-        });
-      }
+
+      // Note: In BigQuery mode we do NOT pre-register DuckDB views — all
+      // queries are routed to BQ by the backend SQL transformer.
 
       setPublishedModels((pm || []).map(m => ({
         ...m,

@@ -5,12 +5,12 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { THEMES } from './utils/themeEngine'
 import { parseFileAsync } from './utils/fileParser'
 import { syncSemanticModels } from './utils/semanticSync'
-import { registerCSV, registerJSON } from './utils/duckdb.js'
 import { generateInitModel, patchModels } from './utils/dataParser'
 import { storeHandle, deleteHandle, getHandlesForDatasets, requestReadPermission } from './utils/fileHandleStore'
 import { apiClient } from './services/api'
 import { preprocessFilesForUpload } from './utils/excelConverter'
 import { cloudUploadFile } from './utils/cloudUpload'
+import GetDataModal from './components/ui/GetDataModal'
 
 
 import Sidebar from './components/layout/Sidebar'
@@ -25,7 +25,7 @@ import RelationshipsModal from './components/ui/modals/RelationshipsModal'
 import SemanticModeler from './components/ui/modals/SemanticModeler'
 import Portal from './components/portal/Portal'
 import LandingPage from './components/auth/LandingPage'
-import { Sparkles, MessageCircleHeart, X, Loader2, RotateCcw, Database, ArrowLeft, UploadCloud, Menu, LayoutGrid, Library, LogOut } from 'lucide-react'
+import { Sparkles, MessageCircleHeart, X, Loader2, RotateCcw, Database, ArrowLeft, CloudDownload, Menu, LayoutGrid, Library, LogOut } from 'lucide-react'
 import LibraryModal from './components/modals/LibraryModal'
 
 import { useAI } from './hooks/useAI'
@@ -53,7 +53,9 @@ function AppContent() {
     workspaces,
     refreshData, setIsMutating,
     isLibraryOpen, setIsLibraryOpen, importLibraryDataset
-  } = useAppState()
+  } = useAppState();
+
+  const [showGetDataModal, setShowGetDataModal] = useState(false);
 
   const { handleGenerateInfographic, executeExploreDataLogic, handleAutoFillDescriptions } = useAI()
   const { getUniqueValuesForDim } = useDataEngine()
@@ -638,7 +640,7 @@ function AppContent() {
       {showSidebar && !isViewer && <Sidebar 
           handleRemoveDataset={handleRemoveDataset}
           saveDatasetName={saveDatasetName}
-          handleFileUpload={handleFileUpload}
+          openGetDataModal={() => setShowGetDataModal(true)}
           handleOpenFiles={handleOpenFiles}
           handleAutoLoadTemplate={handleAutoLoadTemplate}
           handleImportTemplates={handleImportTemplates}
@@ -744,13 +746,19 @@ function AppContent() {
                 </div>
             ) : (!activeDatasetId && datasets?.length === 0) ? (
                 <div className="flex-1 overflow-y-auto w-full p-8 scrollbar-hide">
-                    <div className={`relative max-w-xl mx-auto p-12 border-4 border-dashed transition-all duration-300 shadow-xl ${dragActive ? 'border-pink-400 bg-pink-50 scale-105' : 't-border t-panel hover:border-pink-300'}`} onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop}>
+                    <div className="relative max-w-xl mx-auto p-12 border-4 border-dashed transition-all duration-300 shadow-xl t-border t-panel">
                       <div className="absolute -top-6 -left-6 bg-yellow-100 text-yellow-600 p-4 rounded-full shadow-sm animate-bounce"><Sparkles size={32} /></div>
-                      <UploadCloud size={64} className="mx-auto t-text-muted mb-6" />
-                      <h2 className="text-3xl font-extrabold t-text-main mb-4">Drop your magical data here!</h2>
-                      <p className="t-text-muted mb-8 font-medium">Supports CSV, TXT, and Excel files. We'll handle the rest! 🪄</p>
+                      <CloudDownload size={64} className="mx-auto t-text-muted mb-6" />
+                      <h2 className="text-3xl font-extrabold t-text-main mb-4">Connect your BigQuery data</h2>
+                      <p className="t-text-muted mb-8 font-medium">Browse your cutebi_gold tables and add them to your report in one click. ✨</p>
                       <div className="flex flex-wrap justify-center gap-4">
-                        <label className="cursor-pointer t-accent-bg px-8 py-4 font-bold shadow-lg hover:shadow-xl hover:scale-105 transition-all" style={{ borderRadius: 'var(--theme-radius-button)' }}>Browse Files <input type="file" multiple className="hidden" accept=".csv,.txt,.xlsx,.xls" onChange={handleFileUpload} /></label>
+                        <button
+                          onClick={() => setShowGetDataModal(true)}
+                          className="t-accent-bg px-8 py-4 font-bold shadow-lg hover:shadow-xl hover:scale-105 transition-all flex items-center gap-2"
+                          style={{ borderRadius: 'var(--theme-radius-button)' }}
+                        >
+                          <CloudDownload size={20} /> Get Data
+                        </button>
                         <button onClick={() => setIsLibraryOpen(true)} className="t-button px-8 py-4 font-bold shadow-lg hover:shadow-xl hover:scale-105 transition-all flex items-center gap-2" style={{ borderRadius: 'var(--theme-radius-button)' }}><Library size={20} /> Pick from Library</button>
                       </div>
                     </div>
@@ -836,6 +844,44 @@ function AppContent() {
         onClose={() => setIsLibraryOpen(false)}
         onSelect={importLibraryDataset}
         existingDatasetIds={datasets.map(d => d.id)}
+      />
+
+      {/* Get Data Modal (BigQuery Table Browser) */}
+      <GetDataModal
+        isOpen={showGetDataModal}
+        onClose={() => setShowGetDataModal(false)}
+        onDatasetAdded={(bqDs) => {
+          // Build a dataset object from the BQ registration response
+          const dsId    = bqDs.id;
+          const newDs   = {
+            id:               dsId,
+            name:             bqDs.name,
+            tableName:        bqDs.table_name || dsId,
+            originalFileName: bqDs.original_file_name || bqDs.name,
+            data:             bqDs.sample_data || [],
+            headers:          bqDs.headers || [],
+            description:      '',
+            engine:           'BigQuery',
+          };
+          setDatasets(prev => {
+            const idx = prev.findIndex(x => x.id === dsId);
+            if (idx >= 0) { const next = [...prev]; next[idx] = newDs; return next; }
+            return [...prev, newDs];
+          });
+          setSemanticModels(prev => ({
+            ...prev,
+            [dsId]: generateInitModel(dsId, bqDs.headers || [], bqDs.sample_data || []),
+          }));
+          setActiveDatasetId(dsId);
+          // Register into workspace library (non-blocking)
+          apiClient.post('/workspace-datasets', {
+            id: dsId, name: bqDs.name, workspace_id: currentWorkspaceId,
+            folder_id: currentFolderId || null,
+            table_name: bqDs.table_name || dsId,
+            headers: bqDs.headers || [], description: '',
+          }).catch(err => console.warn('[BQ] Workspace-dataset registration failed:', err));
+          showToast(`✨ "${bqDs.name}" added from BigQuery!`);
+        }}
       />
     </div>
     </div>

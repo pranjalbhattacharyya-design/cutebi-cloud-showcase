@@ -27,8 +27,6 @@ export const apiClient = {
   async upload(endpoint, file, originalFilename) {
     const formData = new FormData();
     formData.append('file', file);
-    // Send the original filename (e.g. 'Fact Sale.xlsx') so the backend
-    // can store the correct display name even if we converted to CSV first
     if (originalFilename) {
       formData.append('original_filename', originalFilename);
     }
@@ -45,15 +43,12 @@ export const apiClient = {
     return res.json();
   },
 
-  // ── Direct-upload flow (bypasses Vercel for file bytes) ─────────────────
-  // Step 1: Get a Supabase signed upload URL from backend (fast, <1s)
+  // ── Direct-upload flow (legacy — kept for local/Supabase mode) ────────────
   async prepareUpload(filename, displayName) {
     const params = new URLSearchParams({ filename });
     if (displayName) params.append('display_name', displayName);
     return this.get(`/upload/prepare?${params}`);
   },
-
-  // Step 2: PUT the CSV bytes directly to Supabase (browser→Supabase, no Vercel)
   async uploadToStorage(signedUrl, csvBlob) {
     const res = await fetch(signedUrl, {
       method: 'PUT',
@@ -65,11 +60,32 @@ export const apiClient = {
       throw new Error(`Supabase direct upload failed (${res.status}): ${text.slice(0, 200)}`);
     }
   },
-
-  // Step 3: Tell backend to save metadata + register DuckDB view (fast, <1s)
   async registerDataset(payload) {
     return this.post('/register-dataset', payload);
   },
+
+  // ── BigQuery "Get Data" flow ──────────────────────────────────────────────
+
+  /** List all tables available in the cutebi_gold BQ dataset */
+  async getBqTables() {
+    return this.get('/bq/tables');
+  },
+
+  /** Register a BQ table as a CuteBI dataset (persists to Postgres) */
+  async registerBqTable(bqTable, displayName) {
+    return this.post('/bq/register', { bq_table: bqTable, display_name: displayName });
+  },
+
+  /**
+   * Fetch MAX(date) for a list of BQ dataset/column pairs.
+   * Replaces the browser WASM DuckDB date warmup scan.
+   * @param {Array<{key, ds_id, col}>} queries
+   * @returns {Object} e.g. { "Fact Sale::Date": "2026-03-31" }
+   */
+  async getBqMaxDates(queries) {
+    return this.post('/bq/maxdates', { queries });
+  },
+
   async delete(endpoint) {
     const res = await fetch(`${BASE_URL}${endpoint}`, { method: 'DELETE' });
     if (!res.ok) {
