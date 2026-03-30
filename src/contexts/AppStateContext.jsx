@@ -21,9 +21,35 @@ export const AppStateProvider = ({ children }) => {
   const [globalFilters, setGlobalFilters] = useState({});
   const [relationships, setRelationships] = useState([]);
   const [slicers, setSlicers] = useState([]);
-  const [hiddenDatasetIds, setHiddenDatasetIds] = useState([]);
-  const [workspaces, setWorkspaces] = useState([{ id: 'w_default', name: 'My Workspace', description: 'Your personal workspace' }]);
-  const [folders, setFolders] = useState([]);
+  const [hiddenDatasetIds, setHiddenDatasetIds] = useState([]);  // Persistence & Library State
+  const [workspaces, setWorkspaces] = useState(() => {
+    const cached = localStorage.getItem('cutebi_ws_cache');
+    return cached ? JSON.parse(cached) : [{ id: 'w_default', name: 'My Workspace', description: 'Your personal workspace' }];
+  });
+  const [currentWorkspaceId, setCurrentWorkspaceId] = useState(() => localStorage.getItem('cutebi_last_ws') || 'w_default');
+  
+  const [folders, setFolders] = useState(() => {
+    const cached = localStorage.getItem('cutebi_folder_cache');
+    return cached ? JSON.parse(cached) : [];
+  });
+  const [currentFolderId, setCurrentFolderId] = useState(() => localStorage.getItem('cutebi_last_folder') || null);
+  
+  const [savedReports, setSavedReports] = useState(() => {
+    const cached = localStorage.getItem('cutebi_reports_cache');
+    return cached ? JSON.parse(cached) : [];
+  });
+  
+  const [isMutating, setIsMutating] = useState(false);
+
+  // Sync session to localStorage
+  useEffect(() => {
+    localStorage.setItem('cutebi_last_ws', currentWorkspaceId);
+    localStorage.setItem('cutebi_last_folder', currentFolderId || '');
+    localStorage.setItem('cutebi_ws_cache', JSON.stringify(workspaces));
+    localStorage.setItem('cutebi_folder_cache', JSON.stringify(folders));
+    localStorage.setItem('cutebi_reports_cache', JSON.stringify(savedReports));
+  }, [currentWorkspaceId, currentFolderId, workspaces, folders, savedReports]);
+
   const [showPortal, setShowPortal] = useState(true);
   
   // Theme State with Persistence
@@ -35,23 +61,6 @@ export const AppStateProvider = ({ children }) => {
     localStorage.setItem('cutebi_theme', theme);
     applyTheme(theme);
   }, [theme]);
-
-  // Persist Workspace Selection
-  const [currentWorkspaceId, setCurrentWorkspaceId] = useState(() => {
-    return localStorage.getItem('cutebi_last_ws') || 'w_default';
-  });
-  const [currentFolderId, setCurrentFolderId] = useState(() => {
-    return localStorage.getItem('cutebi_last_folder') || null;
-  });
-
-  useEffect(() => {
-    localStorage.setItem('cutebi_last_ws', currentWorkspaceId);
-  }, [currentWorkspaceId]);
-
-  useEffect(() => {
-    if (currentFolderId) localStorage.setItem('cutebi_last_folder', currentFolderId);
-    else localStorage.removeItem('cutebi_last_folder');
-  }, [currentFolderId]);
 
   useEffect(() => {
     window.dispatchEvent(new CustomEvent('cutebi-debug', { 
@@ -137,12 +146,8 @@ export const AppStateProvider = ({ children }) => {
   const [pages, setPages] = useState([{ id: 'page_1', name: 'Page 1' }]);
   const [activePageId, setActivePageId] = useState('page_1');
 
-  const [savedReports, setSavedReports] = useState([]);
   const [pendingRestore, setPendingRestore] = useState(null);
   const [currentTemplateId, setCurrentTemplateId] = useState(null);
-  
-  // mutation lock to prevent background sync from overwriting local state
-  const [isMutating, setIsMutating] = useState(false);
 
   // --- Shared Engine Warmup State ---
   // maxDatesCache and datesReady live here (not in useDataEngine) so the
@@ -274,32 +279,36 @@ export const AppStateProvider = ({ children }) => {
       // If we are currently mutating, discard the background fetch (race protection)
       if (isMutating && !force) return null;
 
-      // Smart Merge for Workspaces: Only use placeholder if Cloud is 100% empty
-      const cloudWorkspaces = ws.length > 0 ? ws : [{ id: 'w_default', name: 'My Workspace', description: 'Your personal workspace' }];
-      setWorkspaces(cloudWorkspaces);
-      
-      // PERSISTENCE SHIELD: If we have a target workspace in localStorage, do NOT reset it
-      // unless the cloud fetch IS non-empty AND explicitly missing that ID.
-      if (ws.length > 0 && !ws.find(w => w.id === targetWsId)) {
-           console.warn(`[Persistence] Workspace ${targetWsId} not found in cloud. Returning to default.`);
-           setCurrentWorkspaceId(cloudWorkspaces[0].id);
-      } else if (ws.length === 0) {
-           console.log(`[Persistence] Cloud returned empty. Holding active workspace ${targetWsId}...`);
+      // --- PERSISTENCE SHIELD 3.0: Only overwrite cache if cloud has real content ---
+      if (ws && ws.length > 0) {
+        setWorkspaces(ws);
+        
+        // Safety: If our current workspace was deleted or is missing, align to the first available cloud workspace
+        if (!ws.find(w => w.id === targetWsId)) {
+            console.warn(`[Persistence] Workspace ${targetWsId} not found in cloud. Returning to default.`);
+            setCurrentWorkspaceId(ws[0].id);
+        }
+      } else {
+        console.log(`[Persistence] Cloud returned empty workspaces. Preserving local cache for ${targetWsId}`);
       }
       
-      setFolders(f.filter(item => !item.is_deleted).map(item => ({
-        ...item,
-        workspaceId: item.workspace_id,
-        parentId: item.parent_id
-      })));
-      
-      setSavedReports(r.map(item => ({
-        ...item,
-        workspaceId: item.workspace_id,
-        folderId: item.folder_id
-      })));
+      if (f && f.length > 0) {
+        setFolders(f.filter(item => !item.is_deleted).map(item => ({
+          ...item,
+          workspaceId: item.workspace_id,
+          parentId: item.parent_id
+        })));
+      }
 
-      setWorkspaceDatasets(ds);
+      if (r && r.length > 0) {
+        setSavedReports(r.map(item => ({
+          ...item,
+          workspaceId: item.workspace_id,
+          folderId: item.folder_id
+        })));
+      }
+
+      setWorkspaceDatasets(ds || []);
       setPublishedModels((pm || []).map(m => ({
         ...m,
         ...(m.data || {})
