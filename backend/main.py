@@ -49,6 +49,7 @@ def transform_sql_for_bq(sql: str, ds_map: dict) -> str:
 
     Transformations applied (in order):
       1. FROM "TableName"  →  FROM `project.dataset.Tbl` AS `TableName`
+                             (skipped for CTE aliases like ds_unified)
       2. JOIN "TableName"  →  JOIN `project.dataset.Tbl` AS `TableName`
       3. EXCLUDE (col)     →  EXCEPT (col)
       4. "identifier"      →  `identifier`  (all remaining double-quoted ids)
@@ -57,18 +58,31 @@ def transform_sql_for_bq(sql: str, ds_map: dict) -> str:
       7. AS DOUBLE)        →  AS FLOAT64)
     """
 
+    # 0. Extract CTE alias names so we never BQ-qualify them
+    #    e.g. WITH ds_unified AS ( ... ) → cte_names = {'ds_unified'}
+    cte_names = set(_re.findall(
+        r'(?:WITH|,)\s+([\w]+)\s+AS\s*\(',
+        sql, _re.IGNORECASE
+    ))
+
     # 1. Replace FROM "TableName"
     def _sub_from(m):
-        prefix   = m.group(1)  # whitespace/newline before FROM
+        prefix   = m.group(1)   # whitespace/newline before FROM
         tbl_name = m.group(2)
-        bq_ref   = _bq_full_ref(tbl_name, ds_map)
+        if tbl_name in cte_names:
+            # It's a CTE alias — just backtick it, no project prefix
+            return f"{prefix}FROM `{tbl_name}`"
+        bq_ref = _bq_full_ref(tbl_name, ds_map)
         return f"{prefix}FROM `{bq_ref}` AS `{tbl_name}`"
     sql = _re.sub(r'(\s*)FROM\s+"([^"]+)"', _sub_from, sql)
 
     # 2. Replace JOIN "TableName"  (LEFT / RIGHT / INNER / FULL / CROSS or bare JOIN)
     def _sub_join(m):
-        join_kw  = m.group(1).strip()  # e.g. "LEFT", "RIGHT", ""
+        join_kw  = m.group(1).strip()   # e.g. "LEFT", "RIGHT", ""
         tbl_name = m.group(2)
+        if tbl_name in cte_names:
+            prefix = f"{join_kw} " if join_kw else ""
+            return f"{prefix}JOIN `{tbl_name}`"
         bq_ref   = _bq_full_ref(tbl_name, ds_map)
         prefix   = f"{join_kw} " if join_kw else ""
         return f"{prefix}JOIN `{bq_ref}` AS `{tbl_name}`"
@@ -95,6 +109,7 @@ def transform_sql_for_bq(sql: str, ds_map: dict) -> str:
     sql = sql.replace(' AS DOUBLE)', ' AS FLOAT64)')
 
     return sql
+
 
 # --- Pydantic Schemas for Strict Parsing ---
 class WorkspaceCreate(BaseModel):
