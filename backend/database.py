@@ -11,9 +11,7 @@ from sqlalchemy.orm import sessionmaker
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not SQLALCHEMY_DATABASE_URL:
-    # Fallback to local memory only if no cloud DB is provided, 
-    # but the primary expectation for Project 2 is Cloud Postgres.
-    SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
+    raise RuntimeError("Missing DATABASE_URL. CuteBI Cloud requires a permanent Postgres instance (Supabase/Neon).")
 
 # SQLAlchemy requires 'postgresql://' but many providers (like Heroku/Supabase) 
 # provide 'postgres://'. Handle the rewrite here.

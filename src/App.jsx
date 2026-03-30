@@ -181,227 +181,93 @@ function AppContent() {
     setIsMutating(true);
     
     try {
-      // 1. Structural Unwrapping & Deep Fetch
-      // If the report is a summary (no visuals), fetch the full definition by ID
-      let rData = report.data || report;
-      const reportId = report.id || rData.id;
-      const reportName = report.name || rData.name || "Untitled Report";
-
-      if (!rData.dashboards && !rData.datasetsMeta) {
-          window.dispatchEvent(new CustomEvent('cutebi-debug', { 
-             detail: { type: 'info', category: 'Restore', message: `[${Date.now()}] Summary detected. Fetching full report detail from backend...` } 
-          }));
-          const results = await apiClient.get(`/reports?id=${reportId}`);
-          
-          // Strict ID Search: Protect against backend returning the wrong item from a collection.
-          // This ensures that even if the backend ignores the search filter, we pick your ACTUAL report.
-          const fullReport = Array.isArray(results) 
-                             ? results.find(r => r.id === reportId) 
-                             : (results?.id === reportId ? results : null);
-          
-          if (fullReport) {
-              // Schema-Agnostic Unwrapping: Use root visuals if 'data' is missing or empty.
-              const nestedData = fullReport.data;
-              const isNested = nestedData && (nestedData.dashboards || nestedData.datasetsMeta);
-              rData = isNested ? nestedData : fullReport;
-
-              window.dispatchEvent(new CustomEvent('cutebi-debug', { 
-                  detail: { 
-                      type: 'success', 
-                      category: 'Restore', 
-                      message: `[${Date.now()}] Full report metadata retrieved!`,
-                      details: { 
-                         id: rData.id,
-                         hasDashboards: !!rData.dashboards,
-                         pageCount: Object.keys(rData.dashboards || {}).length
-                      }
-                  } 
-              }));
-          }
-      }
-
-       const t_start = Date.now();
-       window.dispatchEvent(new CustomEvent('cutebi-debug', { 
-          detail: { 
-              type: 'info', 
-              category: 'Restore', 
-              message: `[${t_start}] Click captured: Hydrating "${reportName}"`,
-              details: { 
-                  receivedObjectKeys: Object.keys(rData || {}),
-                  hasDashboards: !!(rData.dashboards),
-                  hasDatasetsMeta: !!(rData.datasetsMeta),
-                  rawReport: rData
-              }
-          } 
-       }));
-
-      // 1. Establish Workspace Context first
-      // --- WORKSPACE ALIGNMENT ---
-      // If the report belongs to a different workspace/folder, align the app state immediately.
-      // This ensures that the Library and Semantic Dictionary correctly resolve the artifacts.
-      if (rData.workspaceId && rData.workspaceId !== currentWorkspaceId) {
-          setCurrentWorkspaceId(rData.workspaceId);
-      }
-      if (rData.folderId !== undefined && (rData.folderId || rData.folder_id) !== currentFolderId) {
-          setCurrentFolderId(rData.folderId || rData.folder_id || null);
-      }
-      // Some backend objects use 'workspace_id', some use 'workspaceId'
-      const targetWsId = rData.workspaceId || rData.workspace_id || report.workspaceId || report.workspace_id;
-      const targetFId = rData.folderId || rData.folder_id || report.folderId || report.folder_id;
-      
-      if (targetWsId) setCurrentWorkspaceId(targetWsId);
-      if (targetFId) setCurrentFolderId(targetFId);
-      setCurrentTemplateId(reportId);
-      setPendingRestore(null);
-
-      // 2. Synchronous Library Refresh
-      const refreshResult = await refreshData(true, targetWsId);
-
-      // 2. Metadata Reconstruction
-      // Primary: use datasetsMeta from the saved report.
-      // Fallback 1: derive from semanticModels keys if datasetsMeta is missing.
-      // Fallback 2 (below): supplement with any referenced IDs not in datasetsMeta.
-      let dsMeta = rData.datasetsMeta || [];
-      if (dsMeta.length === 0 && rData.semanticModels) {
-          const derivedIds = Object.keys(rData.semanticModels);
-          dsMeta = derivedIds.map(id => ({
-              id: id,
-              name: id.startsWith('ds_') ? id.substring(3) : id,
-              headers: [],
-              description: 'Reconstructed from model'
-          }));
-      }
-
-      // 3. Hydrate Datasets State (Smart Lineage Mapping)
-      // Normalize backend snake_case fields to camelCase so tableName etc. resolve correctly.
-      const rawPool = refreshResult?.ds || [];
-      const libraryPool = rawPool.map(d => ({
-          ...d,
-          tableName:        d.table_name        || d.tableName        || d.id,
-          originalFileName: d.original_file_name || d.originalFileName || d.name,
-          isFromLibrary: true,
-      }));
-
-      // Supplement dsMeta: find any dataset IDs referenced by semanticModels or dashboard
-      // charts that are missing from datasetsMeta. This recovers reports that were saved
-      // with an incomplete datasetsMeta (e.g. after a manual dedup while library injection
-      // was compensating for missing data).
-      const dsMetaIds = new Set(dsMeta.map(m => m.id));
-      const allReferencedIds = new Set([
-          ...dsMetaIds,
-          ...Object.keys(rData.semanticModels || {}),
-      ]);
-      Object.values(rData.dashboards || {}).forEach(charts => {
-          (charts || []).forEach(c => { if (c.datasetId) allReferencedIds.add(c.datasetId); });
-      });
-      allReferencedIds.forEach(id => {
-          if (!dsMetaIds.has(id)) {
-              const fromLib = libraryPool.find(d => d.id === id || d.tableName === id);
-              if (fromLib) {
-                  window.dispatchEvent(new CustomEvent('cutebi-debug', {
-                      detail: { type: 'info', category: 'Lineage', message: `Supplementing dsMeta with library dataset "${fromLib.name}" (id: ${id})` }
-                  }));
-                  dsMeta.push({
-                      id: fromLib.id,
-                      name: fromLib.name,
-                      tableName: fromLib.tableName,
-                      headers: fromLib.headers || [],
-                      description: fromLib.description || '',
-                      originalFileName: fromLib.originalFileName || fromLib.name,
-                  });
-                  dsMetaIds.add(fromLib.id);
-              }
-          }
-      });
+      const reportId = report.id || report.data?.id;
+      const reportName = report.name || report.data?.name || "Untitled Report";
 
       window.dispatchEvent(new CustomEvent('cutebi-debug', { 
-          detail: { 
-              type: 'info', 
-              category: 'Lineage', 
-              message: `[${Date.now()}] Mapping report artifacts. Library size: ${libraryPool.length}, dsMeta size: ${dsMeta.length}`,
-              details: { 
-                  artifacts: dsMeta.map(m => ({id: m.id, name: m.name})),
-                  pool: libraryPool.map(d => ({id: d.id, name: d.name}))
-              }
-          } 
+         detail: { type: 'info', category: 'Restore', message: `[${Date.now()}] Restoring "${reportName}"...` } 
       }));
 
+      // 1. Fetch Full Detail immediately (Don't trust the summary from the Portal)
+      const results = await apiClient.get(`/reports?id=${reportId}`);
+      const fullReport = Array.isArray(results) 
+                          ? results.find(r => r.id === reportId) 
+                          : (results?.id === reportId ? results : null);
+      
+      if (!fullReport) throw new Error("Could not find report content on server.");
+      
+      const rData = fullReport.data || fullReport;
+
+      // 2. Align Workspace Context
+      const targetWsId = rData.workspaceId || rData.workspace_id;
+      const targetFId = rData.folderId || rData.folder_id;
+      
+      if (targetWsId) setCurrentWorkspaceId(targetWsId);
+      if (targetFId !== undefined) setCurrentFolderId(targetFId);
+      setCurrentTemplateId(reportId);
+
+      // 3. Refresh Library to prepare DuckDB views in background
+      const refreshResult = await refreshData(true, targetWsId);
+      const libraryPool = (refreshResult?.ds || []).map(d => ({
+          ...d,
+          tableName: d.table_name || d.tableName || d.id,
+          originalFileName: d.original_file_name || d.originalFileName || d.name,
+      }));
+
+      // 4. Hydrate Datasets mapping saved IDs to Cloud Table Names
+      const dsMeta = rData.datasetsMeta || [];
       const restoredDatasets = dsMeta.map(m => {
-        const existing = libraryPool.find(d => 
-            d.id === m.id || 
-            d.name === m.name || 
-            d.originalFileName === (m.originalFileName || m.name) ||
-            d.tableName === m.tableName ||
-            d.tableName === m.id
-        );
-
-        if (existing) {
-            window.dispatchEvent(new CustomEvent('cutebi-debug', { 
-                detail: { type: 'success', category: 'Lineage', message: `Mapped "${m.name}" → library "${existing.id}"` } 
-            }));
-        }
-
+        const cloudMatch = libraryPool.find(d => d.id === m.id || d.tableName === m.id || d.name === m.name);
         return {
-          id: existing?.id || m.id,
-          name: m.name,
-          // Prefer library's normalized tableName, then saved meta, then id as last resort
-          tableName: existing?.tableName || m.tableName || m.id,
-          originalFileName: m.originalFileName || existing?.originalFileName || m.name,
-          headers: m.headers?.length > 0 ? m.headers : (existing?.headers || []),
-          description: m.description || existing?.description || '',
-          data: existing?.data || [],
-          isFromLibrary: true,
+          ...m,
+          id: cloudMatch?.id || m.id,
+          tableName: cloudMatch?.tableName || m.tableName || m.id,
+          data: cloudMatch?.data || [],
+          isFromLibrary: true
         };
       });
 
-      const patchedModels = patchModels(rData.semanticModels || {});
-      setSemanticModels(patchedModels);
+      // 5. ATOMIC STATE UPDATE: Flush everything once visuals are ready
+      setSemanticModels(patchModels(rData.semanticModels || {}));
       setRelationships(rData.relationships || []);
-
-      if (restoredDatasets.length > 0) {
-          setDatasets(restoredDatasets);   // Replace entirely — clean slate for this report
-          setActiveDatasetId(restoredDatasets[0].id);
-      }
-      
       setDashboards(rData.dashboards || {});
-      if (rData.pages) setPages(rData.pages);
-      if (rData.pages?.length > 0) setActivePageId(rData.pages[0].id);
-      if (rData.slicers) setSlicers(rData.slicers);
-      if (rData.categories) setCategories(rData.categories);
+      setPages(rData.pages || [{ id: 'page_1', name: 'Page 1' }]);
+      setActivePageId(rData.pages?.[0]?.id || 'page_1');
+      setSlicers(rData.slicers || []);
+      setCategories(rData.categories || []);
+      
+      if (restoredDatasets.length > 0) {
+        setDatasets(restoredDatasets);
+        setActiveDatasetId(restoredDatasets[0].id);
+      }
 
-      window.dispatchEvent(new CustomEvent('cutebi-debug', { 
-          detail: { 
-              type: 'success', 
-              category: 'Restore', 
-              message: `[${Date.now()}] State Injection Complete. Dashboard size: ${Object.keys(rData.dashboards || {}).length} pages.` 
-          } 
-      }));
-
-      // 4. Parallel Local Handle Restoration (If possible)
+      setPendingRestore(null);
+      setShowPortal(false); // Only close portal once state is fully hydrated!
+      
+      // 6. Optional: Parallel Local Handle Restoration (If possible)
       if (window.showOpenFilePicker && dsMeta.length > 0) {
           const datasetIds = dsMeta.map(m => m.id);
-          const handles = await getHandlesForDatasets(datasetIds);
-          for (const [dsId, handle] of Object.entries(handles)) {
-            try {
-              const granted = await requestReadPermission(handle);
-              if (granted) {
-                const file = await handle.getFile();
-                const parsed = await parseFileAsync(file);
-                if (parsed) {
-                  setDatasets(prev => prev.map(d => d.id === dsId ? { ...d, data: parsed.data } : d));
-                }
+          try {
+              const handles = await getHandlesForDatasets(datasetIds);
+              for (const [dsId, handle] of Object.entries(handles)) {
+                try {
+                  const granted = await requestReadPermission(handle);
+                  if (granted) {
+                    const file = await handle.getFile();
+                    const parsed = await parseFileAsync(file);
+                    if (parsed) {
+                      setDatasets(prev => prev.map(d => d.id === dsId ? { ...d, data: parsed.data } : d));
+                    }
+                  }
+                } catch (err) { console.warn(`Local handle failed for ${dsId}:`, err); }
               }
-            } catch (err) { console.warn(`Local handle failed for ${dsId}:`, err); }
-          }
+          } catch (err) { console.warn("Handle retrieval failed:", err); }
       }
 
       showToast(`✨ "${reportName}" restored!`);
     } catch (e) {
       console.error("Report restoration failed:", e);
-      showToast("Failed to restore report content.");
-      window.dispatchEvent(new CustomEvent('cutebi-debug', { 
-          detail: { type: 'error', category: 'Restore', message: `Exception: ${e.message}` } 
-      }));
+      showToast("Restoration failed. Please try again.");
     } finally {
       setIsUploading(false);
       setIsMutating(false);

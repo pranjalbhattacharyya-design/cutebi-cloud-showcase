@@ -53,62 +53,35 @@ def _get_conn() -> duckdb.DuckDBPyConnection:
     return _db_conn
 
 def _refresh_views(conn: duckdb.DuckDBPyConnection | None = None):
-    """(Re-)register every parquet/xlsx file in backend/data as a DuckDB view.
+    """Register every cloud-hosted parquet dataset from the database as a DuckDB view.
     Safe to call after an upload without restarting the server."""
     global _registered_views
     if conn is None:
         conn = _get_conn()
 
-    # On Vercel/Cloud, we typically rely on Demo Mode or Cloud Storage.
-    # We avoid writing to the local app directory.
-    data_dir = "backend/data"
-    if os.getenv("VERCEL") or not os.path.exists(data_dir):
-        # In showcase mode, we might only have pre-bundled data or none.
-        if not os.path.exists(data_dir):
-            return
-
-    # Sort so .parquet overrides any stale .xlsx view for the same stem
-    all_files = sorted(os.listdir(data_dir), key=lambda x: 1 if x.endswith('.parquet') else 0)
     registered = set()
 
-    for filename in all_files:
-        file_path = os.path.join(data_dir, filename)
-        if os.path.isdir(file_path) or '_temp.' in filename:
-            continue
-
-        canonical_name = os.path.splitext(filename)[0]
-
-        if filename.endswith('.parquet'):
-            loader = f"read_parquet('{file_path.replace(chr(92), '/')}')"
-        elif filename.lower().endswith(('.xlsx', '.xls')):
-            loader = f"st_read('{file_path.replace(chr(92), '/')}')"
-        elif filename.lower().endswith('.csv'):
-            loader = f"read_csv_auto('{file_path.replace(chr(92), '/')}')"
-        else:
-            continue
-
-        try:
-            conn.execute(f'CREATE OR REPLACE VIEW "{canonical_name}" AS SELECT * FROM {loader}')
-            registered.add(canonical_name)
-        except Exception as e:
-            print(f"[Engine] Could not register view '{canonical_name}': {e}")
-
-    # 2. Register Cloud-Hosted Datasets from Database
+    # 1. Register Cloud-Hosted Datasets from Database
+    # This is the ONLY source of truth in Cloud mode.
     db = database.SessionLocal()
     try:
         cloud_datasets = db.query(models.Dataset).all()
         for ds in cloud_datasets:
             if ds.file_path.startswith("http"):
                 try:
-                    conn.execute(f'CREATE OR REPLACE VIEW "{ds.id}" AS SELECT * FROM read_parquet(\'{ds.file_path}\')')
-                    registered.add(ds.id)
+                    # Clean the view name
+                    view_name = ds.id.strip().replace('"', '')
+                    conn.execute(f'CREATE OR REPLACE VIEW "{view_name}" AS SELECT * FROM read_parquet(\'{ds.file_path}\')')
+                    registered.add(view_name)
+                    print(f"[Engine] Registered cloud view '{view_name}' from {ds.file_path[:50]}...")
                 except Exception as e:
                     print(f"[Engine] Could not register cloud view '{ds.id}': {e}")
     finally:
         db.close()
 
     _registered_views = registered
-    print(f"[Engine] Views refreshed — {len(registered)} active: {sorted(registered)}")
+    print(f"[Engine] Cloud Registry refreshed — {len(registered)} active views.")
+
 
 
 app = FastAPI(title="CuteBI Cloud Showcase")
@@ -569,26 +542,26 @@ async def upload_file(file: UploadFile = File(...), db: Session = Depends(databa
         conv_conn.close()
         
         # 3. Cloud Extraction: Upload Parquet to Supabase Storage
-        public_url = final_path
-        if supabase_client:
-            try:
-                print(f"[Storage] Uploading {ds_id}.parquet to {STORAGE_BUCKET}...")
-                with open(final_path, "rb") as f:
-                    supabase_client.storage.from_(STORAGE_BUCKET).upload(
-                        path=f"{ds_id}.parquet",
-                        file=f,
-                        file_options={"upsert": "true", "content-type": "application/octet-stream"}
-                    )
-                # Get Public URL (Assumes bucket is Public)
-                public_url = f"{SUPABASE_URL}/storage/v1/object/public/{STORAGE_BUCKET}/{ds_id}.parquet"
-                print(f"[Storage] Uploaded! Public URL: {public_url}")
-            except Exception as e:
-                print(f"[Storage] Upload failed: {e}")
-                # Fallback to local path (which will be temporary)
+        if not supabase_client:
+            raise HTTPException(status_code=500, detail="Supabase Storage not configured. Cloud upload is required.")
+
+        try:
+            print(f"[Storage] Uploading {ds_id}.parquet to {STORAGE_BUCKET}...")
+            with open(final_path, "rb") as f:
+                supabase_client.storage.from_(STORAGE_BUCKET).upload(
+                    path=f"{ds_id}.parquet",
+                    file=f,
+                    file_options={"upsert": "true", "content-type": "application/octet-stream"}
+                )
+            # Get Public URL (Assumed public bucket)
+            public_url = f"{SUPABASE_URL}/storage/v1/object/public/{STORAGE_BUCKET}/{ds_id}.parquet"
+            print(f"[Storage] Uploaded! Public URL: {public_url}")
+        except Exception as e:
+            print(f"[Storage] Upload failed: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to persist dataset to cloud storage: {str(e)}")
         
-        # 4. Refresh persistent engine so the new view is queryable
+        # 4. Refresh persistent engine
         with _db_lock:
-             # Manually register the new parquet view immediately
              conn = _get_conn()
              conn.execute(f'CREATE OR REPLACE VIEW "{ds_id}" AS SELECT * FROM read_parquet(\'{public_url}\')')
              _registered_views.add(ds_id)
@@ -602,7 +575,7 @@ async def upload_file(file: UploadFile = File(...), db: Session = Depends(databa
             db_dataset.file_path = public_url
             db_dataset.table_name = ds_id
             db_dataset.headers = headers
-            db_dataset.timestamp = time.time()
+            db_dataset.timestamp = datetime.utcnow()
         else:
             db_dataset = models.Dataset(
                 id=ds_id,
@@ -629,6 +602,7 @@ async def upload_file(file: UploadFile = File(...), db: Session = Depends(databa
     except Exception as e:
         print(f"Platinum Conversion Failed: {str(e)}")
         if os.path.exists(final_path): os.remove(final_path)
+        if isinstance(e, HTTPException): raise e
         raise HTTPException(status_code=400, detail=f"Platinum Conversion Failed: {str(e)}")
     finally:
         # ABSOLUTE GUARANTEE: Remove the source file immediately
@@ -645,19 +619,27 @@ async def run_query(query_request: dict):
     if not sql:
         raise HTTPException(status_code=400, detail="Missing SQL query")
 
-    with _db_lock:
-        conn = _get_conn()
-        view_list = sorted(_registered_views)
-        try:
-            cursor = conn.execute(sql)
-            columns = [col[0] for col in cursor.description]
-            rows = cursor.fetchall()
-            results = [dict(zip(columns, row)) for row in rows]
-            return {"data": results, "active_views": view_list}
-        except Exception as sql_err:
-            error_msg = str(sql_err)
-            print(f" [Backend Query] SQL Execution FAILED: {error_msg}")
-            return {"error": error_msg, "sql": sql, "active_views": view_list}
+    def execute_with_retry(retry_on_missing=True):
+        with _db_lock:
+            conn = _get_conn()
+            try:
+                cursor = conn.execute(sql)
+                columns = [col[0] for col in cursor.description]
+                rows = cursor.fetchall()
+                results = [dict(zip(columns, row)) for row in rows]
+                return {"data": results, "active_views": sorted(_registered_views)}
+            except Exception as sql_err:
+                err_str = str(sql_err)
+                # SELF-HEALING: If table is missing, refresh views from DB and try one last time
+                if retry_on_missing and ("Table with name" in err_str or "does not exist" in err_str):
+                    print(f"[Engine] Table missing during query. Triggering self-healing refresh...")
+                    _refresh_views(conn)
+                    return execute_with_retry(retry_on_missing=False)
+                
+                print(f" [Backend Query] SQL Execution FAILED: {err_str}")
+                return {"error": err_str, "sql": sql, "active_views": sorted(_registered_views)}
+
+    return execute_with_retry()
 
 
 @app.get("/api/engine/status")
