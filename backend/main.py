@@ -616,45 +616,117 @@ async def prepare_upload(filename: str = Query(...), display_name: str = Query(N
 async def register_dataset(payload: dict, db: Session = Depends(database.get_db)):
     """
     Step 3 of direct-upload flow (step 2 is the browser PUT to Supabase).
-    Receives dataset metadata, registers a DuckDB read_csv view,
-    and persists the record to Postgres. No file bytes handled here.
+    On a VM with a writable /tmp (GCP), converts the CSV to Parquet for
+    maximum DuckDB performance. Falls back to CSV on serverless (Vercel).
     """
-    ds_id       = payload.get("ds_id")
-    display_name= payload.get("display_name", ds_id)
-    public_url  = payload.get("public_url")
-    headers     = payload.get("headers", [])
-    sample_data = payload.get("sample_data", [])
+    ds_id        = payload.get("ds_id")
+    display_name = payload.get("display_name", ds_id)
+    public_url   = payload.get("public_url")   # CSV URL from the browser
+    headers      = payload.get("headers", [])
+    sample_data  = payload.get("sample_data", [])
 
     if not ds_id or not public_url:
         raise HTTPException(status_code=400, detail="ds_id and public_url are required.")
 
-    # Register DuckDB view (non-fatal if it fails; self-heals on next query)
+    # ── Parquet Conversion (VM only — falls back to CSV on serverless) ────────
+    csv_storage_path     = f"{ds_id}.csv"
+    parquet_storage_path = f"{ds_id}.parquet"
+    final_url            = public_url   # default: keep CSV
+    use_parquet          = False
+
     try:
+        import tempfile as _tf
+
+        # 1. Download CSV from Supabase Storage
+        print(f"[Parquet] Downloading CSV '{csv_storage_path}' for conversion...")
+        csv_bytes = supabase_client.storage.from_(STORAGE_BUCKET).download(csv_storage_path)
+
+        # 2. Write CSV to temp file
+        tmp_csv     = f"/tmp/{ds_id}_upload.csv"
+        tmp_parquet = f"/tmp/{ds_id}_upload.parquet"
+        with open(tmp_csv, "wb") as f:
+            f.write(csv_bytes)
+
+        # 3. DuckDB: CSV → Parquet (columnar, compressed)
         with _db_lock:
             conn = _get_conn()
             conn.execute(
-                f'CREATE OR REPLACE VIEW "{ds_id}" AS '
-                f"SELECT * FROM read_csv('{public_url}', header=true, auto_detect=true)"
+                f"COPY (SELECT * FROM read_csv_auto('{tmp_csv}')) "
+                f"TO '{tmp_parquet}' (FORMAT PARQUET, COMPRESSION SNAPPY)"
             )
+        print(f"[Parquet] Converted — {len(csv_bytes)} bytes CSV → Parquet")
+
+        # 4. Upload Parquet to Supabase Storage
+        with open(tmp_parquet, "rb") as f:
+            parquet_bytes = f.read()
+        supabase_client.storage.from_(STORAGE_BUCKET).upload(
+            parquet_storage_path,
+            parquet_bytes,
+            file_options={"upsert": "true", "content-type": "application/octet-stream"}
+        )
+
+        # 5. Build canonical Parquet public URL (URL-encode spaces)
+        parquet_public_url = (
+            f"{SUPABASE_URL}/storage/v1/object/public/{STORAGE_BUCKET}/{parquet_storage_path}"
+        ).replace(" ", "%20")
+        final_url  = parquet_public_url
+        use_parquet = True
+        print(f"[Parquet] Ready: {parquet_public_url}")
+
+        # 6. Delete interim CSV from Supabase to keep bucket clean
+        try:
+            supabase_client.storage.from_(STORAGE_BUCKET).remove([csv_storage_path])
+            print(f"[Parquet] Removed interim CSV '{csv_storage_path}'")
+        except Exception:
+            pass  # Non-fatal — CSV can remain as fallback
+
+        # 7. Cleanup temp files
+        import os as _os
+        for f in [tmp_csv, tmp_parquet]:
+            try:
+                _os.remove(f)
+            except Exception:
+                pass
+
+    except Exception as e:
+        print(f"[Parquet] Conversion failed (staying on CSV): {e}")
+        use_parquet = False
+        final_url   = public_url  # Keep original CSV URL
+
+    # ── Register DuckDB view with the best available format ──────────────────
+    try:
+        with _db_lock:
+            conn = _get_conn()
+            if use_parquet:
+                conn.execute(
+                    f'CREATE OR REPLACE VIEW "{ds_id}" AS '
+                    f"SELECT * FROM read_parquet('{final_url}')"
+                )
+            else:
+                conn.execute(
+                    f'CREATE OR REPLACE VIEW "{ds_id}" AS '
+                    f"SELECT * FROM read_csv('{final_url}', header=true, auto_detect=true)"
+                )
             _registered_views.add(ds_id)
-        print(f"[Engine] Registered CSV view '{ds_id}'")
+        engine_label = "Parquet" if use_parquet else "CSV"
+        print(f"[Engine] Registered {engine_label} view '{ds_id}'")
     except Exception as e:
         print(f"[Engine] Warning: could not register view '{ds_id}': {e}")
 
-    # Persist to Postgres
+    # ── Persist final URL to Postgres ─────────────────────────────────────────
     try:
         db_dataset = db.query(models.Dataset).filter(models.Dataset.id == ds_id).first()
         if db_dataset:
-            db_dataset.name = ds_id
-            db_dataset.original_file_name = display_name
-            db_dataset.file_path = public_url
-            db_dataset.table_name = ds_id
-            db_dataset.headers = headers
-            db_dataset.timestamp = datetime.utcnow()
+            db_dataset.name              = ds_id
+            db_dataset.original_file_name= display_name
+            db_dataset.file_path         = final_url   # Parquet URL if converted
+            db_dataset.table_name        = ds_id
+            db_dataset.headers           = headers
+            db_dataset.timestamp         = datetime.utcnow()
         else:
             db_dataset = models.Dataset(
                 id=ds_id, name=ds_id, original_file_name=display_name,
-                file_path=public_url, table_name=ds_id, headers=headers
+                file_path=final_url, table_name=ds_id, headers=headers
             )
             db.add(db_dataset)
         db.commit()
@@ -669,8 +741,8 @@ async def register_dataset(payload: dict, db: Session = Depends(database.get_db)
         "table_name": ds_id,
         "headers": headers,
         "sample_data": sample_data,
-        "public_url": public_url,
-        "engine": "Platinum/Cloud"
+        "public_url": final_url,
+        "engine": "Platinum/Parquet" if use_parquet else "Platinum/CSV"
     }
 
 
