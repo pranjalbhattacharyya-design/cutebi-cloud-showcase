@@ -549,137 +549,132 @@ def read_library(db: Session = Depends(database.get_db)):
 
 # --- Data Engine ---
 
-
 @app.post("/api/upload")
 async def upload_file(
     file: UploadFile = File(...),
     original_filename: str = Form(None),
     db: Session = Depends(database.get_db)
 ):
-    # Use the original filename if provided (frontend sends xlsx name even when converting to CSV)
-    # e.g., original_filename='Fact Sale.xlsx', file.filename='Fact Sale.csv'
     display_name = original_filename or file.filename
-
-    # Sanitize ds_id: strip extension, replace spaces/special chars with underscores
-    # This is used as the DuckDB view name, Supabase Storage key, and DB record id.
-    # Spaces in these identifiers cause DuckDB SQL errors and Supabase path issues.
     import re
     raw_stem = os.path.splitext(file.filename)[0].strip()
-    ds_id = re.sub(r'[^\w]', '_', raw_stem)  # replace non-word chars with _
-    ds_id = re.sub(r'_+', '_', ds_id).strip('_')  # collapse repeated underscores
+    ds_id = re.sub(r'[^\w]', '_', raw_stem)
+    ds_id = re.sub(r'_+', '_', ds_id).strip('_')
 
     extension = file.filename.split(".")[-1].lower()
-    # On Vercel, we must use /tmp for transient storage
-    storage_root = "/tmp" if os.getenv("VERCEL") else "backend/data"
+    storage_root = "/tmp"
     os.makedirs(storage_root, exist_ok=True)
 
     temp_path = os.path.join(storage_root, f"{ds_id}_temp.{extension}")
     final_path = os.path.join(storage_root, f"{ds_id}.parquet")
-    
-    # 1. Save temp file
+
+    print(f"[Upload] Starting upload: display='{display_name}' ds_id='{ds_id}' ext='{extension}'")
+
+    # ── Step 1: Read file into memory and write to disk ─────────────────────
     try:
+        contents = await file.read()
+        if not contents:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty (0 bytes received).")
         with open(temp_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        
-        # 2. Platinum Transformation: XLSX/CSV -> Parquet
-        # Excel: openpyxl reads rows → write temp CSV → DuckDB converts CSV→Parquet
-        #        (avoids pandas/pyarrow which are too large for Vercel's 50MB limit)
-        # CSV:   DuckDB native read_csv_auto → Parquet directly
+            buffer.write(contents)
+        print(f"[Upload] Saved {len(contents)} bytes to {temp_path}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"[Step 1] Failed to save uploaded file: {e}")
+
+    headers = []
+    sample_data = []
+
+    # ── Step 2: CSV/XLSX → Parquet via DuckDB ───────────────────────────────
+    try:
         import duckdb as _duckdb_tmp
         conv_conn = _duckdb_tmp.connect(':memory:')
+        conv_conn.execute("SET temp_directory='/tmp'")
 
         if extension in ['xlsx', 'xls']:
-            try:
-                import openpyxl
-                import csv
-                print(f"[Upload] Reading Excel file via openpyxl: {temp_path}")
-                wb = openpyxl.load_workbook(temp_path, read_only=True, data_only=True)
-                ws = wb.active
-                rows = list(ws.iter_rows(values_only=True))
-                wb.close()
-
-                if not rows:
-                    raise HTTPException(status_code=400, detail="Excel file is empty.")
-
-                # First row = headers; sanitize them
-                raw_headers = [str(h).strip() if h is not None else f"col_{i}" for i, h in enumerate(rows[0])]
-                data_rows = rows[1:]
-
-                # Write a temp CSV (DuckDB will read it)
-                csv_path = os.path.join(storage_root, f"{ds_id}_temp.csv")
-                with open(csv_path, "w", newline="", encoding="utf-8") as f_csv:
-                    writer = csv.writer(f_csv, quoting=csv.QUOTE_MINIMAL)
-                    writer.writerow(raw_headers)
-                    for row in data_rows:
-                        writer.writerow([("" if v is None else v) for v in row])
-
-                print(f"[Upload] CSV written ({len(data_rows)} rows). Converting to Parquet...")
-                conv_conn.execute(
-                    f"COPY (SELECT * FROM read_csv_auto('{csv_path}', header=true)) "
-                    f"TO '{final_path}' (FORMAT PARQUET)"
-                )
-                # Clean up temp CSV
-                try:
-                    os.remove(csv_path)
-                except Exception:
-                    pass
-
-                headers = [c[0] for c in conv_conn.execute(f"SELECT * FROM '{final_path}' LIMIT 0").description]
-                sample_rows = conv_conn.execute(f"SELECT * FROM '{final_path}' LIMIT 5").fetchall()
-                sample_data = [dict(zip(headers, row)) for row in sample_rows]
-                print(f"[Upload] Excel→Parquet complete. Headers: {headers}")
-
-            except ImportError as ie:
-                raise HTTPException(status_code=500, detail=f"openpyxl not installed: {ie}")
-            except HTTPException:
-                raise
-            except Exception as xlsx_err:
-                import traceback
-                detail = f"Failed to parse Excel file: {str(xlsx_err)}"
-                print(f"[Upload] Excel error: {traceback.format_exc()}")
-                raise HTTPException(status_code=400, detail=detail)
+            import openpyxl, csv as _csv
+            print(f"[Upload] Reading Excel via openpyxl (fallback)...")
+            wb = openpyxl.load_workbook(temp_path, read_only=True, data_only=True)
+            ws = wb.active
+            rows = list(ws.iter_rows(values_only=True))
+            wb.close()
+            if not rows:
+                raise HTTPException(status_code=400, detail="Excel file is empty.")
+            raw_headers = [str(h).strip() if h is not None else f"col_{i}" for i, h in enumerate(rows[0])]
+            data_rows = rows[1:]
+            csv_path = os.path.join(storage_root, f"{ds_id}_temp2.csv")
+            with open(csv_path, "w", newline="", encoding="utf-8") as f_csv:
+                writer = _csv.writer(f_csv, quoting=_csv.QUOTE_MINIMAL)
+                writer.writerow(raw_headers)
+                for row in data_rows:
+                    writer.writerow([("" if v is None else v) for v in row])
+            conv_conn.execute(
+                f"COPY (SELECT * FROM read_csv('{csv_path}', header=true, auto_detect=true)) "
+                f"TO '{final_path}' (FORMAT PARQUET)"
+            )
+            try: os.remove(csv_path)
+            except Exception: pass
         else:
-            # CSV/TXT path — DuckDB native, no extensions needed
-            try:
-                conv_conn.execute(
-                    f"COPY (SELECT * FROM read_csv_auto('{temp_path}', header=true)) "
-                    f"TO '{final_path}' (FORMAT PARQUET)"
-                )
-                headers = [c[0] for c in conv_conn.execute(f"SELECT * FROM '{final_path}' LIMIT 0").description]
-                sample_rows = conv_conn.execute(f"SELECT * FROM '{final_path}' LIMIT 5").fetchall()
-                sample_data = [dict(zip(headers, row)) for row in sample_rows]
-            except Exception as csv_err:
-                raise HTTPException(status_code=400, detail=f"Failed to parse CSV file: {str(csv_err)}")
+            print(f"[Upload] Converting CSV→Parquet: {temp_path} → {final_path}")
+            conv_conn.execute(
+                f"COPY (SELECT * FROM read_csv('{temp_path}', header=true, auto_detect=true)) "
+                f"TO '{final_path}' (FORMAT PARQUET)"
+            )
 
+        result = conv_conn.execute(f"SELECT * FROM '{final_path}' LIMIT 5")
+        headers = [c[0] for c in result.description]
+        rows5 = result.fetchall()
+        sample_data = [dict(zip(headers, r)) for r in rows5]
         conv_conn.close()
+        print(f"[Upload] Parquet written. Headers: {headers}")
 
-        
-        # 3. Cloud Upload: Parquet -> Supabase Storage
-        if not supabase_client:
-            raise HTTPException(status_code=500, detail="Supabase Storage not configured. Set SUPABASE_URL and SUPABASE_KEY env vars.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        print(f"[Upload] Step 2 FAILED:\n{tb}")
+        raise HTTPException(status_code=500, detail=f"[Step 2] CSV→Parquet conversion failed: {e}")
+    finally:
+        try: os.remove(temp_path)
+        except Exception: pass
 
-        try:
-            print(f"[Storage] Uploading {ds_id}.parquet to bucket '{STORAGE_BUCKET}'...")
-            with open(final_path, "rb") as f:
-                supabase_client.storage.from_(STORAGE_BUCKET).upload(
-                    path=f"{ds_id}.parquet",
-                    file=f,
-                    file_options={"upsert": "true", "content-type": "application/octet-stream"}
-                )
-            public_url = f"{SUPABASE_URL}/storage/v1/object/public/{STORAGE_BUCKET}/{ds_id}.parquet"
-            print(f"[Storage] Uploaded! Public URL: {public_url}")
-        except Exception as e:
-            print(f"[Storage] Upload failed: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to persist dataset to Supabase Storage: {str(e)}")
-        
-        # 4. Refresh persistent DuckDB engine with the new cloud view
+    # ── Step 3: Upload Parquet → Supabase Storage ────────────────────────────
+    if not supabase_client:
+        raise HTTPException(status_code=500, detail="Supabase not configured (missing SUPABASE_URL/KEY env vars).")
+
+    try:
+        print(f"[Storage] Uploading {ds_id}.parquet → Supabase bucket '{STORAGE_BUCKET}'...")
+        with open(final_path, "rb") as f:
+            supabase_client.storage.from_(STORAGE_BUCKET).upload(
+                path=f"{ds_id}.parquet",
+                file=f,
+                file_options={"upsert": "true", "content-type": "application/octet-stream"}
+            )
+        public_url = f"{SUPABASE_URL}/storage/v1/object/public/{STORAGE_BUCKET}/{ds_id}.parquet"
+        print(f"[Storage] Uploaded! URL: {public_url}")
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        print(f"[Storage] Upload FAILED:\n{tb}")
+        raise HTTPException(status_code=500, detail=f"[Step 3] Supabase Storage upload failed: {e}")
+    finally:
+        try: os.remove(final_path)
+        except Exception: pass
+
+    # ── Step 4: Register DuckDB cloud view ───────────────────────────────────
+    try:
         with _db_lock:
             conn = _get_conn()
             conn.execute(f'CREATE OR REPLACE VIEW "{ds_id}" AS SELECT * FROM read_parquet(\'{public_url}\')')
             _registered_views.add(ds_id)
-            print(f"[Engine] Registered cloud view '{ds_id}'")
-        
-        # 5. Register in Dataset Catalog (Upsert)
+        print(f"[Engine] Registered cloud view '{ds_id}'")
+    except Exception as e:
+        print(f"[Engine] Warning: could not register view '{ds_id}': {e}")
+
+    # ── Step 5: Persist to Postgres dataset catalog ──────────────────────────
+    try:
         db_dataset = db.query(models.Dataset).filter(models.Dataset.id == ds_id).first()
         if db_dataset:
             db_dataset.name = ds_id
@@ -698,33 +693,22 @@ async def upload_file(
                 headers=headers
             )
             db.add(db_dataset)
-            
         db.commit()
         db.refresh(db_dataset)
-        
-        return {
-            "id": ds_id,
-            "name": db_dataset.name,
-            "original_file_name": display_name,
-            "table_name": ds_id,
-            "headers": headers,
-            "sample_data": sample_data,
-            "public_url": public_url,
-            "engine": "Platinum/Cloud"
-        }
     except Exception as e:
-        print(f"Platinum Conversion Failed: {str(e)}")
-        if os.path.exists(final_path): os.remove(final_path)
-        if isinstance(e, HTTPException): raise e
-        raise HTTPException(status_code=400, detail=f"Platinum Conversion Failed: {str(e)}")
-    finally:
-        # ABSOLUTE GUARANTEE: Remove the source file immediately
-        if os.path.exists(temp_path):
-            try:
-                os.remove(temp_path)
-                print(f"Platinum Guard: Deleted temporary source file {temp_path}")
-            except Exception as e:
-                print(f"Warning: Failed to delete temp file {temp_path}: {e}")
+        print(f"[DB] Dataset catalog write failed: {e}")
+        raise HTTPException(status_code=500, detail=f"[Step 5] Failed to register dataset in database: {e}")
+
+    return {
+        "id": ds_id,
+        "name": db_dataset.name,
+        "original_file_name": display_name,
+        "table_name": ds_id,
+        "headers": headers,
+        "sample_data": sample_data,
+        "public_url": public_url,
+        "engine": "Platinum/Cloud"
+    }
 
 @app.post("/api/query")
 async def run_query(query_request: dict):
