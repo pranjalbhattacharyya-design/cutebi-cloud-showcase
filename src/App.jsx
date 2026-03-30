@@ -246,9 +246,16 @@ function AppContent() {
       }
 
       setPendingRestore(null);
-      setShowPortal(false); // Only close portal once state is fully hydrated!
-      
-      // 6. Optional: Parallel Local Handle Restoration (If possible)
+
+      // ── Close the blocking overlay and portal NOW ─────────────────────────
+      // In BQ mode charts are server-side; each has its own loading spinner.
+      // Showing the dashboard immediately gives much better perceived performance.
+      setIsUploading(false);
+      setIsMutating(false);
+      setShowPortal(false);
+      showToast(`✨ "${reportName}" restored!`);
+
+      // 6. Optional: Parallel Local Handle Restoration (non-blocking, BQ fallback)
       if (window.showOpenFilePicker && dsMeta.length > 0) {
           const datasetIds = dsMeta.map(m => m.id);
           try {
@@ -268,11 +275,11 @@ function AppContent() {
           } catch (err) { console.warn("Handle retrieval failed:", err); }
       }
 
-      showToast(`✨ "${reportName}" restored!`);
     } catch (e) {
       console.error("Report restoration failed:", e);
       showToast("Restoration failed. Please try again.");
     } finally {
+      // Ensure overlay is always dismissed even if an error occurred above
       setIsUploading(false);
       setIsMutating(false);
     }
