@@ -6,3 +6,6 @@ python-multipart
 psycopg2-binary
 supabase
 python-dotenv
+pandas
+openpyxl
+pyarrow

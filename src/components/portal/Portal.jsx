@@ -227,45 +227,47 @@ export default function Portal() {
   const handleWorkspaceFileUpload = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
-    showToast(`Uploading ${files.length} dataset(s) to workspace...`);
     
+    showToast(`🚀 Uploading ${files.length} file(s) to cloud...`);
+    setIsMutating(true);
+
     for (const file of files) {
       try {
-        const parsed = await parseFileAsync(file);
-        if (!parsed) continue;
-
-        const dsId = `ds_ws_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-        const tableName = `ds_${dsId.replace(/[^a-zA-Z0-9_]/g, '')}`;
+        // 1. Upload file to backend → converts to Parquet → stores in Supabase Storage
+        // NOTE: apiClient.upload() already prepends BASE_URL (/api), so we just pass '/upload'
+        const cloudRes = await apiClient.upload('/upload', file);
         
-        // Register in DuckDB (local session - though for workspace data we might want to store the data too)
-        // For now, we store headers/meta in Firestore and data is expected to be re-uploaded or handled via FSA
-        if (parsed.isExcel) await registerJSON(tableName, parsed.buffer);
-        else await registerCSV(tableName, parsed.buffer);
+        if (!cloudRes || !cloudRes.id) {
+            throw new Error(cloudRes?.message || "Cloud ingestion returned no dataset ID");
+        }
 
-        const initModel = generateInitModel(dsId, parsed.headers, parsed.data);
+        const { id: dsId, headers, public_url } = cloudRes;
         
-        const payload = {
+        // 2. Register in Workspace Dataset Library (so it appears in sidebar + Data Library tab)
+        const dsName = file.name.replace(/\.[^/.]+$/, "");
+        await apiClient.post('/workspace-datasets', {
           id: dsId,
-          name: file.name.replace(/\.[^/.]+$/, ""),
+          name: dsName,
           workspace_id: currentWorkspaceId,
-          table_name: tableName,
-          original_file_name: file.name,
-          headers: parsed.headers,
-          description: '',
-          timestamp: Date.now()
-        };
-
-        // Use the backend upload endpoint
-        await apiClient.upload('/upload', file);
+          folder_id: currentFolderId || null,
+          table_name: dsId,
+          headers: headers || [],
+          description: `Uploaded from ${file.name}`
+        });
         
-        showToast(`✨ ${file.name} added to workspace library!`);
+        showToast(`✨ "${dsName}" uploaded & stored in cloud!`);
+        
       } catch (err) {
-        console.error("Workspace upload failed:", err);
-        showToast(`Failed to upload ${file.name}`);
+        console.error("Cloud upload failed:", err);
+        showToast(`❌ Failed to upload ${file.name}: ${err.message}`);
       }
-
     }
+
+    // Refresh workspace state so Data Library grid and sidebar update immediately
+    await refreshData(true);
+    setIsMutating(false);
   };
+
 
   const handleDeleteWorkspaceDataset = async (e, dsId) => {
     e.stopPropagation();

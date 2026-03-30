@@ -394,11 +394,15 @@ def read_datasets(workspace_id: str = None, db: Session = Depends(database.get_d
             "headers": ws_ds.headers or [],
             "description": ws_ds.description or "",
         }
-        # Pull live sample_data + original_file_name from the Dataset catalog
+        # Pull live sample_data + original_file_name + public_url from the Dataset catalog
         catalog_entry = db.query(models.Dataset).filter(models.Dataset.id == ws_ds.id).first()
         if catalog_entry:
             row["original_file_name"] = catalog_entry.original_file_name
             row["headers"] = catalog_entry.headers or ws_ds.headers or []
+            # Calculate Public URL based on known storage pattern
+            from .main import SUPABASE_URL, STORAGE_BUCKET
+            row["public_url"] = f"{SUPABASE_URL}/storage/v1/object/public/{STORAGE_BUCKET}/{ws_ds.id}.parquet"
+            
             # Fetch up to 5 live sample rows from the persistent engine
             try:
                 with _db_lock:
@@ -414,6 +418,7 @@ def read_datasets(workspace_id: str = None, db: Session = Depends(database.get_d
                 row["sample_data"] = []
         else:
             row["original_file_name"] = ws_ds.name
+            row["public_url"] = None
             row["sample_data"] = []
         result.append(row)
 
@@ -551,51 +556,72 @@ async def upload_file(file: UploadFile = File(...), db: Session = Depends(databa
         with open(temp_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
-        # 2. Platinum Transformation: XLSX/CSV -> Parquet using a temp connection
+        # 2. Platinum Transformation: XLSX/CSV -> Parquet
+        # Excel: use pandas+openpyxl (pure Python, Vercel-safe — no extension install needed)
+        # CSV:   use DuckDB's built-in CSV reader (no extension needed)
         import duckdb as _duckdb_tmp
         conv_conn = _duckdb_tmp.connect(':memory:')
+
         if extension in ['xlsx', 'xls']:
-            try: conv_conn.execute("INSTALL spatial; LOAD spatial;")
-            except: pass
-            loader = f"st_read('{temp_path}', open_options=['HEADERS=FORCE'])"
+            try:
+                import pandas as pd
+                import pyarrow as pa
+                import pyarrow.parquet as pq
+                print(f"[Upload] Reading Excel file: {temp_path}")
+                df = pd.read_excel(temp_path, engine='openpyxl')
+                # Sanitize column names (strip leading/trailing whitespace)
+                df.columns = [str(c).strip() for c in df.columns]
+                table = pa.Table.from_pandas(df, preserve_index=False)
+                pq.write_table(table, final_path)
+                headers = df.columns.tolist()
+                sample_rows_raw = conv_conn.execute(f"SELECT * FROM '{final_path}' LIMIT 5").fetchall()
+                header_map = headers  # already correct order
+                sample_data = [dict(zip(header_map, row)) for row in sample_rows_raw]
+                print(f"[Upload] Excel converted to Parquet via pandas. Columns: {headers}")
+            except ImportError as ie:
+                raise HTTPException(status_code=500, detail=f"Excel parsing library missing: {ie}. Ensure pandas, openpyxl, pyarrow are installed.")
+            except Exception as xlsx_err:
+                raise HTTPException(status_code=400, detail=f"Failed to parse Excel file: {str(xlsx_err)}")
         else:
-            loader = f"'{temp_path}'"
+            # CSV path — DuckDB native, no extensions needed
+            try:
+                conv_conn.execute(f"COPY (SELECT * FROM read_csv_auto('{temp_path}', header=true)) TO '{final_path}' (FORMAT PARQUET)")
+                headers = [c[0] for c in conv_conn.execute(f"SELECT * FROM '{final_path}' LIMIT 0").description]
+                sample_rows = conv_conn.execute(f"SELECT * FROM '{final_path}' LIMIT 5").fetchall()
+                sample_data = [dict(zip(headers, row)) for row in sample_rows]
+            except Exception as csv_err:
+                raise HTTPException(status_code=400, detail=f"Failed to parse CSV file: {str(csv_err)}")
         
-        conv_conn.execute(f"COPY (SELECT * EXCLUDE (OGC_FID) FROM {loader}) TO '{final_path}' (FORMAT PARQUET)")
-        headers = [c[0] for c in conv_conn.execute(f"SELECT * FROM '{final_path}' LIMIT 0").description]
-        sample_rows = conv_conn.execute(f"SELECT * FROM '{final_path}' LIMIT 5").fetchall()
-        sample_data = [dict(zip(headers, row)) for row in sample_rows]
         conv_conn.close()
         
-        # 3. Cloud Extraction: Upload Parquet to Supabase Storage
+        # 3. Cloud Upload: Parquet -> Supabase Storage
         if not supabase_client:
-            raise HTTPException(status_code=500, detail="Supabase Storage not configured. Cloud upload is required.")
+            raise HTTPException(status_code=500, detail="Supabase Storage not configured. Set SUPABASE_URL and SUPABASE_KEY env vars.")
 
         try:
-            print(f"[Storage] Uploading {ds_id}.parquet to {STORAGE_BUCKET}...")
+            print(f"[Storage] Uploading {ds_id}.parquet to bucket '{STORAGE_BUCKET}'...")
             with open(final_path, "rb") as f:
                 supabase_client.storage.from_(STORAGE_BUCKET).upload(
                     path=f"{ds_id}.parquet",
                     file=f,
                     file_options={"upsert": "true", "content-type": "application/octet-stream"}
                 )
-            # Get Public URL (Assumed public bucket)
             public_url = f"{SUPABASE_URL}/storage/v1/object/public/{STORAGE_BUCKET}/{ds_id}.parquet"
             print(f"[Storage] Uploaded! Public URL: {public_url}")
         except Exception as e:
             print(f"[Storage] Upload failed: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to persist dataset to cloud storage: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to persist dataset to Supabase Storage: {str(e)}")
         
-        # 4. Refresh persistent engine
+        # 4. Refresh persistent DuckDB engine with the new cloud view
         with _db_lock:
-             conn = _get_conn()
-             conn.execute(f'CREATE OR REPLACE VIEW "{ds_id}" AS SELECT * FROM read_parquet(\'{public_url}\')')
-             _registered_views.add(ds_id)
+            conn = _get_conn()
+            conn.execute(f'CREATE OR REPLACE VIEW "{ds_id}" AS SELECT * FROM read_parquet(\'{public_url}\')')
+            _registered_views.add(ds_id)
+            print(f"[Engine] Registered cloud view '{ds_id}'")
         
-        # 5. Register in Catalog (Upsert)
+        # 5. Register in Dataset Catalog (Upsert)
         db_dataset = db.query(models.Dataset).filter(models.Dataset.id == ds_id).first()
         if db_dataset:
-            import time
             db_dataset.name = ds_id
             db_dataset.original_file_name = file.filename
             db_dataset.file_path = public_url
@@ -623,6 +649,7 @@ async def upload_file(file: UploadFile = File(...), db: Session = Depends(databa
             "table_name": ds_id,
             "headers": headers,
             "sample_data": sample_data,
+            "public_url": public_url,
             "engine": "Platinum/Cloud"
         }
     except Exception as e:

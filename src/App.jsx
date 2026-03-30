@@ -376,6 +376,18 @@ function AppContent() {
           // Generate initial model from backend headers
           pendingSemanticModels[dsId] = generateInitModel(dsId, backendDs.headers, backendDs.sample_data || []);
 
+          // Register into workspace dataset library immediately (non-blocking)
+          apiClient.post('/workspace-datasets', {
+            id: dsId,
+            name: backendDs.name,
+            workspace_id: currentWorkspaceId,
+            folder_id: currentFolderId || null,
+            table_name: tableName,
+            headers: backendDs.headers || [],
+            description: ''
+          }).catch(err => console.warn('[Upload] Workspace-dataset registration failed (non-fatal):', err));
+
+
         } catch (err) {
           window.dispatchEvent(new CustomEvent('cutebi-debug', { detail: { type: 'error', category: 'Upload', message: `Error processing ${file.name}: ${err.message}` } }));
           showToast(`Error uploading ${file.name}`);
