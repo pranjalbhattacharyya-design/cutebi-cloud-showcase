@@ -8,6 +8,20 @@ import threading
 import duckdb
 
 from . import models, database, engine
+from supabase import create_client, Client
+
+# --- Cloud Storage Initialization ---
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+STORAGE_BUCKET = "cutebi-datasets"
+
+supabase_client: Client | None = None
+if SUPABASE_URL and SUPABASE_KEY:
+    try:
+        supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        print(f"[Storage] Supabase client initialized for bucket '{STORAGE_BUCKET}'")
+    except Exception as e:
+        print(f"[Storage] Failed to initialize Supabase client: {e}")
 
 # Create the database tables - handles both Postgres and SQLite memory
 try:
@@ -78,6 +92,20 @@ def _refresh_views(conn: duckdb.DuckDBPyConnection | None = None):
             registered.add(canonical_name)
         except Exception as e:
             print(f"[Engine] Could not register view '{canonical_name}': {e}")
+
+    # 2. Register Cloud-Hosted Datasets from Database
+    db = database.SessionLocal()
+    try:
+        cloud_datasets = db.query(models.Dataset).all()
+        for ds in cloud_datasets:
+            if ds.file_path.startswith("http"):
+                try:
+                    conn.execute(f'CREATE OR REPLACE VIEW "{ds.id}" AS SELECT * FROM read_parquet(\'{ds.file_path}\')')
+                    registered.add(ds.id)
+                except Exception as e:
+                    print(f"[Engine] Could not register cloud view '{ds.id}': {e}")
+    finally:
+        db.close()
 
     _registered_views = registered
     print(f"[Engine] Views refreshed — {len(registered)} active: {sorted(registered)}")
@@ -540,17 +568,38 @@ async def upload_file(file: UploadFile = File(...), db: Session = Depends(databa
         sample_data = [dict(zip(headers, row)) for row in sample_rows]
         conv_conn.close()
         
-        # 3. Refresh the persistent engine so the new view is immediately queryable
-        with _db_lock:
-            _refresh_views()
+        # 3. Cloud Extraction: Upload Parquet to Supabase Storage
+        public_url = final_path
+        if supabase_client:
+            try:
+                print(f"[Storage] Uploading {ds_id}.parquet to {STORAGE_BUCKET}...")
+                with open(final_path, "rb") as f:
+                    supabase_client.storage.from_(STORAGE_BUCKET).upload(
+                        path=f"{ds_id}.parquet",
+                        file=f,
+                        file_options={"upsert": "true", "content-type": "application/octet-stream"}
+                    )
+                # Get Public URL (Assumes bucket is Public)
+                public_url = f"{SUPABASE_URL}/storage/v1/object/public/{STORAGE_BUCKET}/{ds_id}.parquet"
+                print(f"[Storage] Uploaded! Public URL: {public_url}")
+            except Exception as e:
+                print(f"[Storage] Upload failed: {e}")
+                # Fallback to local path (which will be temporary)
         
-        # 3. Register in Catalog (Upsert)
+        # 4. Refresh persistent engine so the new view is queryable
+        with _db_lock:
+             # Manually register the new parquet view immediately
+             conn = _get_conn()
+             conn.execute(f'CREATE OR REPLACE VIEW "{ds_id}" AS SELECT * FROM read_parquet(\'{public_url}\')')
+             _registered_views.add(ds_id)
+        
+        # 5. Register in Catalog (Upsert)
         db_dataset = db.query(models.Dataset).filter(models.Dataset.id == ds_id).first()
         if db_dataset:
             import time
             db_dataset.name = ds_id
             db_dataset.original_file_name = file.filename
-            db_dataset.file_path = final_path
+            db_dataset.file_path = public_url
             db_dataset.table_name = ds_id
             db_dataset.headers = headers
             db_dataset.timestamp = time.time()
@@ -559,7 +608,7 @@ async def upload_file(file: UploadFile = File(...), db: Session = Depends(databa
                 id=ds_id,
                 name=ds_id,
                 original_file_name=file.filename,
-                file_path=final_path,
+                file_path=public_url,
                 table_name=ds_id,
                 headers=headers
             )
@@ -575,7 +624,7 @@ async def upload_file(file: UploadFile = File(...), db: Session = Depends(databa
             "table_name": ds_id,
             "headers": headers,
             "sample_data": sample_data,
-            "engine": "Platinum/Parquet"
+            "engine": "Platinum/Cloud"
         }
     except Exception as e:
         print(f"Platinum Conversion Failed: {str(e)}")
