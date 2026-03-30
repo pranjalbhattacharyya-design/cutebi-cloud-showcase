@@ -9,6 +9,21 @@ import duckdb
 
 from . import models, database, engine
 from supabase import create_client, Client
+from pydantic import BaseModel
+from typing import List, Optional
+from datetime import datetime
+
+# --- Pydantic Schemas for Strict Parsing ---
+class WorkspaceCreate(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = ""
+
+class FolderCreate(BaseModel):
+    id: str
+    name: str
+    workspace_id: str
+    parent_id: Optional[str] = None
 
 # --- Cloud Storage Initialization ---
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -250,23 +265,22 @@ def read_workspaces(db: Session = Depends(database.get_db)):
 
 
 @app.post("/api/workspaces")
-def create_workspace(workspace: dict, db: Session = Depends(database.get_db)):
+def create_workspace(workspace: WorkspaceCreate, db: Session = Depends(database.get_db)):
     # Duplicate check
-    existing = db.query(models.Workspace).filter(models.Workspace.name == workspace.get("name"), models.Workspace.is_deleted == False).first()
+    existing = db.query(models.Workspace).filter(models.Workspace.name == workspace.name, models.Workspace.is_deleted == False).first()
     if existing:
         raise HTTPException(status_code=400, detail="Workspace name already exists")
     
-    print(f"Adding new workspace: {workspace.get('name')} with ID {workspace.get('id')}")
+    print(f"[API] Creating Workspace: {workspace.name} ({workspace.id})")
     db_workspace = models.Workspace(
-        id=workspace.get("id"),
-        name=workspace.get("name"),
-        description=workspace.get("description"),
+        id=workspace.id,
+        name=workspace.name,
+        description=workspace.description,
         is_deleted=False
     )
     db.add(db_workspace)
     db.commit()
     db.refresh(db_workspace)
-    print(f"Committed workspace: {db_workspace.name}")
     return db_workspace
 
 @app.delete("/api/workspaces/{ws_id}")
@@ -297,29 +311,28 @@ def read_folders(db: Session = Depends(database.get_db)):
 
 
 @app.post("/api/folders")
-def create_folder(folder: dict, db: Session = Depends(database.get_db)):
+def create_folder(folder: FolderCreate, db: Session = Depends(database.get_db)):
     # Duplicate check
     existing = db.query(models.Folder).filter(
-        models.Folder.name == folder.get("name"), 
-        models.Folder.workspace_id == folder.get("workspace_id"),
-        models.Folder.parent_id == folder.get("parent_id"),
+        models.Folder.name == folder.name, 
+        models.Folder.workspace_id == folder.workspace_id,
+        models.Folder.parent_id == folder.parent_id,
         models.Folder.is_deleted == False
     ).first()
     if existing:
         raise HTTPException(status_code=400, detail="Folder name already exists in this location")
 
-    print(f"Adding new folder: {folder.get('name')} with ID {folder.get('id')}")
+    print(f"[API] Creating Folder: {folder.name} ({folder.id})")
     db_folder = models.Folder(
-        id=folder.get("id"),
-        name=folder.get("name"),
-        workspace_id=folder.get("workspace_id"),
-        parent_id=folder.get("parent_id"),
+        id=folder.id,
+        name=folder.name,
+        workspace_id=folder.workspace_id,
+        parent_id=folder.parent_id,
         is_deleted=False
     )
     db.add(db_folder)
     db.commit()
     db.refresh(db_folder)
-    print(f"Committed folder: {db_folder.name}")
     return db_folder
 
 def _soft_delete_folder_recursive(f_id: str, db: Session):

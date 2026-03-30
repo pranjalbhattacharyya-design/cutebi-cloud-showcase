@@ -337,6 +337,12 @@ export default function Portal() {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
+
+          <div className="flex items-center gap-2 bg-black/5 px-3 py-1.5 rounded-xl border t-border">
+            <div className={`w-2 h-2 rounded-full animate-pulse ${datasets.length > 0 || workspaces.length > 1 ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+            <span className="text-[10px] font-black uppercase tracking-widest t-text-muted">Cloud: {datasets.length > 0 || workspaces.length > 1 ? 'Synced' : 'Connecting'}</span>
+          </div>
+
           {!isViewer && (
             <button 
               onClick={handleNewReport}
