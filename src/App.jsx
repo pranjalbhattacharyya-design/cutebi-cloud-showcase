@@ -192,7 +192,7 @@ function AppContent() {
          detail: { type: 'info', category: 'Restore', message: `[${Date.now()}] Restoring "${reportName}"...` } 
       }));
 
-      // 1. Fetch Full Detail immediately (Don't trust the summary from the Portal)
+      // 1. Fetch full report detail (single round-trip ~200ms)
       const results = await apiClient.get(`/reports?id=${reportId}`);
       const fullReport = Array.isArray(results) 
                           ? results.find(r => r.id === reportId) 
@@ -210,28 +210,19 @@ function AppContent() {
       if (targetFId !== undefined) setCurrentFolderId(targetFId);
       setCurrentTemplateId(reportId);
 
-      // 3. Refresh Library to prepare DuckDB views in background
-      const refreshResult = await refreshData(true, targetWsId);
-      const libraryPool = (refreshResult?.ds || []).map(d => ({
-          ...d,
-          tableName: d.table_name || d.tableName || d.id,
-          originalFileName: d.original_file_name || d.originalFileName || d.name,
+      // 3. IMMEDIATE STATE FLUSH — In BQ mode we have everything in rData already.
+      //    Dataset IDs saved in the report are stable BQ-registered IDs; no library
+      //    mapping dance needed. Restore directly from saved metadata.
+      const dsMeta = rData.datasetsMeta || [];
+      const restoredDatasets = dsMeta.map(m => ({
+        ...m,
+        tableName: m.tableName || m.table_name || m.id,
+        originalFileName: m.originalFileName || m.original_file_name || m.name,
+        data: [],
+        isFromLibrary: true,
+        engine: 'BigQuery',
       }));
 
-      // 4. Hydrate Datasets mapping saved IDs to Cloud Table Names
-      const dsMeta = rData.datasetsMeta || [];
-      const restoredDatasets = dsMeta.map(m => {
-        const cloudMatch = libraryPool.find(d => d.id === m.id || d.tableName === m.id || d.name === m.name);
-        return {
-          ...m,
-          id: cloudMatch?.id || m.id,
-          tableName: cloudMatch?.tableName || m.tableName || m.id,
-          data: cloudMatch?.data || [],
-          isFromLibrary: true
-        };
-      });
-
-      // 5. ATOMIC STATE UPDATE: Flush everything once visuals are ready
       setSemanticModels(patchModels(rData.semanticModels || {}));
       setRelationships(rData.relationships || []);
       setDashboards(rData.dashboards || {});
@@ -247,43 +238,27 @@ function AppContent() {
 
       setPendingRestore(null);
 
-      // ── Close the blocking overlay and portal NOW ─────────────────────────
-      // In BQ mode charts are server-side; each has its own loading spinner.
-      // Showing the dashboard immediately gives much better perceived performance.
+      // 4. DISMISS OVERLAY IMMEDIATELY — charts load progressively via BQ
       setIsUploading(false);
       setIsMutating(false);
       setShowPortal(false);
       showToast(`✨ "${reportName}" restored!`);
 
-      // 6. Optional: Parallel Local Handle Restoration (non-blocking, BQ fallback)
-      if (window.showOpenFilePicker && dsMeta.length > 0) {
-          const datasetIds = dsMeta.map(m => m.id);
-          try {
-              const handles = await getHandlesForDatasets(datasetIds);
-              for (const [dsId, handle] of Object.entries(handles)) {
-                try {
-                  const granted = await requestReadPermission(handle);
-                  if (granted) {
-                    const file = await handle.getFile();
-                    const parsed = await parseFileAsync(file);
-                    if (parsed) {
-                      setDatasets(prev => prev.map(d => d.id === dsId ? { ...d, data: parsed.data } : d));
-                    }
-                  }
-                } catch (err) { console.warn(`Local handle failed for ${dsId}:`, err); }
-              }
-          } catch (err) { console.warn("Handle retrieval failed:", err); }
-      }
+      // 5. Background sync: refresh workspace library (non-blocking, sidebar only)
+      //    This does NOT block visuals from loading.
+      refreshData(false, targetWsId).catch(err =>
+        console.warn('[Restore] Background library sync failed (non-fatal):', err)
+      );
 
     } catch (e) {
       console.error("Report restoration failed:", e);
       showToast("Restoration failed. Please try again.");
     } finally {
-      // Ensure overlay is always dismissed even if an error occurred above
       setIsUploading(false);
       setIsMutating(false);
     }
   };
+
 
   const handleExportTemplate = async (e, report) => {
     e.stopPropagation();
