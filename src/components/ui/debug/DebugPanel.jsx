@@ -170,7 +170,8 @@ export default function DebugPanel() {
                <button 
                    onClick={() => {
                        const text = logs.map(l => `[${l.category || 'GENERAL'}] ${l.message}\n${l.details ? JSON.stringify(l.details, null, 2) : ''}`).join('\n---\n');
-                       navigator.clipboard.writeText(text);
+                       const fallback = (t) => { const ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); };
+                       try { if (navigator.clipboard) { navigator.clipboard.writeText(text).catch(() => fallback(text)); } else { fallback(text); } } catch(e) { fallback(text); }
                        showToast("📋 Logs copied to clipboard!");
                    }} 
                    className="text-[10px] font-bold text-gray-400 hover:text-blue-500"

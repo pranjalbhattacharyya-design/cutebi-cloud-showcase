@@ -316,7 +316,13 @@ export const AppStateProvider = ({ children }) => {
       if (ds && ds.length > 0) {
         ds.forEach(wsDs => {
           if (wsDs.public_url && wsDs.table_name) {
-             queryDuckDB(`CREATE OR REPLACE VIEW "${wsDs.table_name}" AS SELECT * FROM read_parquet('${wsDs.public_url}')`)
+             // URL-encode spaces and detect file type for correct DuckDB reader
+             const safeUrl = wsDs.public_url.replace(/ /g, '%20');
+             const isCsv = safeUrl.toLowerCase().includes('.csv');
+             const reader = isCsv
+               ? `read_csv('${safeUrl}', header=true, auto_detect=true)`
+               : `read_parquet('${safeUrl}')`;
+             queryDuckDB(`CREATE OR REPLACE VIEW "${wsDs.table_name}" AS SELECT * FROM ${reader}`)
                .catch(err => console.error(`[DuckDB] Failed to pre-register ${wsDs.table_name}:`, err));
           }
         });
@@ -465,7 +471,15 @@ export const AppStateProvider = ({ children }) => {
   };
 
   const copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text);
+    const fallback = (t) => {
+      const ta = document.createElement('textarea');
+      ta.value = t; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta);
+    };
+    try {
+      if (navigator.clipboard) { navigator.clipboard.writeText(text).catch(() => fallback(text)); }
+      else { fallback(text); }
+    } catch(e) { fallback(text); }
     showToast("Copied to clipboard!");
   };
 
