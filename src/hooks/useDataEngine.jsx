@@ -317,8 +317,8 @@ export const useDataEngine = () => {
         if (!f.isCalculated) {
             const col = `"${sourceTable}"."${f.id}"`;
             const agg = f.aggType === 'countDistinct' ? 'COUNT(DISTINCT ' : (f.aggType === 'count' ? 'COUNT(' : `${(f.aggType || 'SUM').toUpperCase()}(`);
-            if (localConds.length > 0) return `${agg}CASE WHEN ${localConds.join(' AND ')} THEN ${col} ELSE NULL END)`;
-            return `${agg}${col})`;
+            if (localConds.length > 0) return `COALESCE(${agg}CASE WHEN ${localConds.join(' AND ')} THEN ${col} ELSE NULL END), 0)`;
+            return `COALESCE(${agg}${col}), 0)`;
         } else {
             let exprSQL = "NULL";
             if (f.expression) {
