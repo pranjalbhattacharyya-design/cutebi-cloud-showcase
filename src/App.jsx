@@ -185,6 +185,7 @@ function AppContent() {
 
   /** Auto-reload all datasets for a template using metadata-first (backend) approach */
   const handleAutoLoadTemplate = async (report) => {
+    setDatesReady(false); // Synchronous lock applied immediately before portal closes
     setIsUploading(true);
     setIsMutating(true);
     
@@ -217,7 +218,6 @@ function AppContent() {
       // 3. IMMEDIATE STATE FLUSH — In BQ mode we have everything in rData already.
       //    Dataset IDs saved in the report are stable BQ-registered IDs; no library
       //    mapping dance needed. Restore directly from saved metadata.
-      setDatesReady(false); // Synchronous lock for engine warmup
 
       const dsMeta = rData.datasetsMeta || [];
       const restoredDatasets = dsMeta.map(m => ({
