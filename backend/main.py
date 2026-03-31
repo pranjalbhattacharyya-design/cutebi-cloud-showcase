@@ -105,8 +105,9 @@ def transform_sql_for_bq(sql: str, ds_map: dict) -> str:
             sql, flags=_re.IGNORECASE
         )
 
-    # 7. CAST(x AS DOUBLE)  →  CAST(x AS FLOAT64)
-    sql = sql.replace(' AS DOUBLE)', ' AS FLOAT64)')
+    # 7. CAST(x AS DOUBLE)  →  COALESCE(CAST(x AS FLOAT64), 0)
+    #    This prevents arithmetic operations (like A - B) from returning NULL if one operand is missing data.
+    sql = sql.replace('CAST((', 'COALESCE(CAST((').replace(' AS DOUBLE)', ' AS FLOAT64), 0)')
 
     # 8. Coerce numeric string literals in equality comparisons to avoid BQ's strict
     #    INT64 vs STRING enforcement.  DuckDB auto-casts '2026' → 2026 but BQ does not.
