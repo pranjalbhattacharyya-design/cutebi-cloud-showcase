@@ -152,7 +152,7 @@ export const AppStateProvider = ({ children }) => {
   // BQ mode: calls backend /api/bq/maxdates instead of browser WASM DuckDB.
   // This runs once whenever datasets or semantic models change.
   const [maxDatesCache, setMaxDatesCache] = useState({});
-  const [datesReady, setDatesReady] = useState(false);
+  const [datesReady, setDatesReady] = useState(true);
   const warmupAbortRef = useRef(false);
 
   useEffect(() => {
@@ -235,7 +235,7 @@ export const AppStateProvider = ({ children }) => {
     };
 
     if (datasets.length > 0) {
-      setDatesReady(false);
+      // Intentionally decoupled datesReady to prevent UI freezing
       fetchMaxDates();
     }
 
@@ -330,7 +330,7 @@ export const AppStateProvider = ({ children }) => {
 
   const handleImportModel = (model) => {
     // 1. Reset Session
-    setDatesReady(false);
+    setDatesReady(true);
     setDatasets([]);
     setSemanticModels({});
     setRelationships([]);
@@ -412,7 +412,7 @@ export const AppStateProvider = ({ children }) => {
     // If this is the first dataset being loaded, it's a fresh report — clear stale slicers
     if (datasets.length === 0) setSlicers([]);
 
-    setDatesReady(false);
+    // Decoupled datesReady
     
     // Add to current report state
     const newDs = {

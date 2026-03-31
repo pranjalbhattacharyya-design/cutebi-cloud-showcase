@@ -1080,11 +1080,17 @@ async def upload_file(
         "engine": "Platinum/Cloud"
     }
 
+_query_cache = {}
+
 @app.post("/api/query")
 def run_query(query_request: dict, db: Session = Depends(database.get_db)):
     sql = query_request.get("sql")
     if not sql:
         raise HTTPException(status_code=400, detail="Missing SQL query")
+
+    if sql in _query_cache:
+        print("[Batch] Cache Hit! Serving instantly.")
+        return _query_cache[sql]
 
     # ── BigQuery path ────────────────────────────────────────────────────────
     if bq_client:
@@ -1118,7 +1124,15 @@ def run_query(query_request: dict, db: Session = Depends(database.get_db)):
                             record[k] = v.isoformat()
                         elif isinstance(v, _dec.Decimal):
                             record[k] = float(v)
-                return {"data": data, "engine": "BigQuery", "sql": bq_sql}
+                
+                res = {"data": data, "engine": "BigQuery", "sql": bq_sql}
+                
+                # Cache management (keep max 1000 items)
+                if len(_query_cache) > 1000:
+                    _query_cache.pop(next(iter(_query_cache)))
+                _query_cache[sql] = res
+                
+                return res
             except Exception as e:
                 print(f"[BQ Query] FAILED: {e}\nSQL:\n{bq_sql}")
                 return {"error": str(e), "sql": bq_sql, "engine": "BigQuery"}
