@@ -1098,6 +1098,10 @@ def run_query(query_request: dict, db: Session = Depends(database.get_db)):
 
         if ds_map:  # At least one BQ dataset is registered → use BQ
             bq_sql = sql
+            for friendly_name, bq_ref in ds_map.items():
+                bq_sql = bq_sql.replace(f"FROM `{friendly_name}`", f"FROM `{bq_ref}` AS `{friendly_name}`")
+                bq_sql = bq_sql.replace(f"JOIN `{friendly_name}`", f"JOIN `{bq_ref}` AS `{friendly_name}`")
+
             print(f"[BQ Query] Transformed SQL (first 400 chars):\n{bq_sql[:400]}")
             try:
                 from google.cloud import bigquery as _bq
