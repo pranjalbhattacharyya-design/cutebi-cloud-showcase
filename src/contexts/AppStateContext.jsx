@@ -408,6 +408,9 @@ export const AppStateProvider = ({ children }) => {
       return;
     }
 
+    // If this is the first dataset being loaded, it's a fresh report — clear stale slicers
+    if (datasets.length === 0) setSlicers([]);
+
     // Add to current report state
     const newDs = {
       id: ds.id,
