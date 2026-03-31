@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Database, Plus, X, FileText, CheckCircle, Check } from 'lucide-react';
+import { apiClient } from '../../services/api';
 
 const LibraryModal = ({ isOpen, onClose, onSelect, existingDatasetIds = [] }) => {
   const [library, setLibrary] = useState([]);
@@ -12,8 +13,8 @@ const LibraryModal = ({ isOpen, onClose, onSelect, existingDatasetIds = [] }) =>
     if (isOpen) {
       setPendingIds(new Set()); // Reset selection on open
       setSearch('');
-      fetch('http://localhost:8000/api/library')
-        .then(res => res.json())
+      setLoading(true);
+      apiClient.get('/library')
         .then(data => {
           setLibrary(data);
           setLoading(false);
