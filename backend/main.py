@@ -1089,7 +1089,8 @@ def run_query(query_request: dict, db: Session = Depends(database.get_db)):
         raise HTTPException(status_code=400, detail="Missing SQL query")
 
     if sql in _query_cache:
-        print("[Batch] Cache Hit! Serving instantly.")
+        import time as _t
+        print(f"[{int(_t.time()*1000)}] [Batch] Cache Hit! Serving instantly.")
         return _query_cache[sql]
 
     # ── BigQuery path ────────────────────────────────────────────────────────
