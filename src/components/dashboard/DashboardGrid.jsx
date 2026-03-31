@@ -272,8 +272,7 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
                   )}
                 </div>
             </div>
-            {showSlicerPane && (
-                <div className="flex flex-col gap-2 bg-black/5 p-2 pr-3 rounded-xl border t-border -mt-1">
+            <div className={`flex flex-col gap-2 bg-black/5 p-2 pr-3 rounded-xl border t-border -mt-1 ${showSlicerPane ? '' : 'hidden'}`}>
                     <div className="flex justify-between items-center px-1 mb-1">
                         <span className="text-[10px] font-bold t-text-muted uppercase tracking-widest">Active Filters</span>
                         <button onClick={clearFilters} className="text-[10px] t-text-muted hover:t-text-main font-bold underline whitespace-nowrap">Clear All</button>
@@ -300,7 +299,6 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
                       })}
                     </div>
                 </div>
-            )}
             </div>
           </div>
         </div>

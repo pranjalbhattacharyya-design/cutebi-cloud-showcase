@@ -1,6 +1,6 @@
 import { useMemo, useCallback, useEffect, useRef } from 'react';
 import { useAppState } from '../contexts/AppStateContext';
-import { initDuckDB, queryDuckDB } from '../utils/duckdb.js';
+import { initDuckDB, queryDuckDB } from '../utils/backendEngine.js';
 import { apiClient } from '../services/api';
 
 export const useDataEngine = () => {

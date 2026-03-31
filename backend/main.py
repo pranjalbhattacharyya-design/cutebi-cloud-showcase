@@ -1239,6 +1239,40 @@ def run_query(query_request: dict, db: Session = Depends(database.get_db)):
     return execute_with_retry()
 
 
+from pydantic import BaseModel
+from typing import List
+import asyncio
+import concurrent.futures
+
+class BatchQueryRequest(BaseModel):
+    queries: List[str]
+
+@app.post("/api/query/batch")
+async def run_query_batch(request: BatchQueryRequest, db: Session = Depends(database.get_db)):
+    if not request.queries:
+        return {"data": []}
+
+    def execute_single(sql: str):
+        try:
+            res = run_query({"sql": sql}, db)
+            if "error" in res:
+                print(f"[Batch] Error in query: {res['error']}")
+                return []
+            return res.get("data", [])
+        except Exception as e:
+            print(f"[Batch] Exception in query: {e}")
+            return []
+            
+    loop = asyncio.get_event_loop()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+        futures = [
+            loop.run_in_executor(executor, execute_single, sql)
+            for sql in request.queries
+        ]
+        results = await asyncio.gather(*futures)
+        
+    return {"data": list(results)}
+
 @app.get("/api/engine/status")
 def engine_status():
     """Dev endpoint — returns what views the persistent engine has registered."""
