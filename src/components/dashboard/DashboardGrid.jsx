@@ -10,23 +10,27 @@ import ChartWidget from './ChartWidget';
 import ThemeSelector from '../ui/ThemeSelector';
 
 // Memoized Slicer Component for Performance
-const DashboardSlicer = React.memo(({ slicer, globalFilters, setGlobalFilterArray, setEditingSlicerId, setEditingSlicerTitle, editingSlicerId, editingSlicerTitle, saveSlicerTitle, setSlicers, semanticModels, activeDatasetId, getUniqueValuesForDim, datesReady }) => {
+const DashboardSlicer = React.memo(({ slicer, globalFilters, setGlobalFilterArray, setEditingSlicerId, setEditingSlicerTitle, editingSlicerId, editingSlicerTitle, saveSlicerTitle, setSlicers, globalSemanticFields, activeDatasetId, getUniqueValuesForDim, datesReady }) => {
     const [options, setOptions] = React.useState([]);
     const [isLoading, setIsLoading] = React.useState(false);
     
     const [dsId, oFId] = React.useMemo(() => {
         if (slicer.id.includes('::')) return slicer.id.split('::');
         
-        // Handle legacy/plain slicer IDs by looking up their origin dataset
-        let f = null;
-        for (const model of Object.values(semanticModels || {})) {
-            f = model.find(x => x.id === slicer.id);
-            if (f) break;
+        // Handle legacy/plain slicer IDs by looking up their origin dataset through the global index
+        let targetDs = activeDatasetId;
+        let targetField = slicer.id;
+
+        if (globalSemanticFields) {
+            const match = globalSemanticFields.find(f => f.id === slicer.id || f.rawLabel === slicer.title || f.label === slicer.title);
+            if (match) {
+                targetDs = match.originDatasetId || match.dsId || activeDatasetId;
+                targetField = match.originFieldId || match.localId || match.id;
+            }
         }
-        if (f) return [f.originDatasetId, f.originFieldId || slicer.id];
         
-        return [activeDatasetId, slicer.id];
-    }, [slicer.id, semanticModels, activeDatasetId]);
+        return [targetDs, targetField];
+    }, [slicer.id, slicer.title, globalSemanticFields, activeDatasetId]);
 
     React.useEffect(() => {
         if (!datesReady) return;
@@ -292,7 +296,7 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
                                   editingSlicerTitle={editingSlicerTitle}
                                   saveSlicerTitle={saveSlicerTitle}
                                   setSlicers={setSlicers}
-                                  semanticModels={semanticModels}
+                                  globalSemanticFields={globalSemanticFields}
                                   activeDatasetId={activeDatasetId}
                                   getUniqueValuesForDim={getUniqueValuesForDim}
                                   datesReady={datesReady}
