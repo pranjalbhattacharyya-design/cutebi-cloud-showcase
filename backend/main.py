@@ -711,7 +711,7 @@ def list_bq_tables():
 
 
 @app.post("/api/bq/register")
-async def register_bq_table(payload: dict, db: Session = Depends(database.get_db)):
+def register_bq_table(payload: dict, db: Session = Depends(database.get_db)):
     """
     Register a BigQuery table as a CuteBI dataset.
     Expects: { bq_table: "Fact_Sale", display_name: "Fact Sale" }
@@ -783,7 +783,7 @@ async def register_bq_table(payload: dict, db: Session = Depends(database.get_db
 
 
 @app.post("/api/bq/maxdates")
-async def bq_max_dates(payload: dict):
+def bq_max_dates(payload: dict):
     """
     Fetch MAX(date_col) for a list of BQ dataset/column pairs.
     Used by the frontend engine warmup (replaces browser WASM DuckDB date scan).
@@ -1171,7 +1171,7 @@ async def upload_file(
     }
 
 @app.post("/api/query")
-async def run_query(query_request: dict, db: Session = Depends(database.get_db)):
+def run_query(query_request: dict, db: Session = Depends(database.get_db)):
     sql = query_request.get("sql")
     if not sql:
         raise HTTPException(status_code=400, detail="Missing SQL query")
