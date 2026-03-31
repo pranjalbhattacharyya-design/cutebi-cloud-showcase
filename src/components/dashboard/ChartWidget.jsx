@@ -42,7 +42,10 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
     });
   }, [chart, semanticModels]);
 
-  const chartDependencyReady = needsTimeIntelligence ? datesReady : true;
+  // Fix: The previous 'needsTimeIntelligence' calculation failed to catch calculated measures that 
+  // reference time measures inside their formula (e.g. YTD_LYTD). This caused a massive double-fetch bug.
+  // Instead, simply force ALL charts to wait for the lightweight Engine Warmup to complete.
+  const chartDependencyReady = datesReady;
 
   React.useEffect(() => {
     let isMounted = true;
