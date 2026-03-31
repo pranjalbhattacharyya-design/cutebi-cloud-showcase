@@ -10,7 +10,7 @@ import ChartWidget from './ChartWidget';
 import ThemeSelector from '../ui/ThemeSelector';
 
 // Memoized Slicer Component for Performance
-const DashboardSlicer = React.memo(({ slicer, globalFilters, setGlobalFilterArray, setEditingSlicerId, setEditingSlicerTitle, editingSlicerId, editingSlicerTitle, saveSlicerTitle, setSlicers, semanticModels, activeDatasetId, getUniqueValuesForDim }) => {
+const DashboardSlicer = React.memo(({ slicer, globalFilters, setGlobalFilterArray, setEditingSlicerId, setEditingSlicerTitle, editingSlicerId, editingSlicerTitle, saveSlicerTitle, setSlicers, semanticModels, activeDatasetId, getUniqueValuesForDim, datesReady }) => {
     const [options, setOptions] = React.useState([]);
     const [isLoading, setIsLoading] = React.useState(false);
     
@@ -29,6 +29,7 @@ const DashboardSlicer = React.memo(({ slicer, globalFilters, setGlobalFilterArra
     }, [slicer.id, semanticModels, activeDatasetId]);
 
     React.useEffect(() => {
+        if (!datesReady) return;
         let isMounted = true;
         const fetchOptions = async () => {
             const t_slicer = Date.now();
@@ -52,7 +53,7 @@ const DashboardSlicer = React.memo(({ slicer, globalFilters, setGlobalFilterArra
         };
         fetchOptions();
         return () => { isMounted = false; };
-    }, [dsId, oFId, getUniqueValuesForDim]);
+    }, [dsId, oFId, getUniqueValuesForDim, datesReady]);
 
     const selectedVals = globalFilters[slicer.id] || [];
 
@@ -105,7 +106,7 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
       userRole
   } = useAppState();
 
-  const { getUniqueValuesForDim, globalSemanticFields } = useDataEngine();
+  const { getUniqueValuesForDim, globalSemanticFields, datesReady } = useDataEngine();
 
   const setGlobalFilterArray = React.useCallback((originKey, values) => {
      setGlobalFilters(prev => {
@@ -294,6 +295,7 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
                                   semanticModels={semanticModels}
                                   activeDatasetId={activeDatasetId}
                                   getUniqueValuesForDim={getUniqueValuesForDim}
+                                  datesReady={datesReady}
                               />
                           );
                       })}

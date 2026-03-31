@@ -146,7 +146,7 @@ export const useDataEngine = () => {
     const joinedTables = new Set([startId]);
     const queue = [startId];
     
-    let selectItems = [`"${baseTable}".*`];
+    let selectItems = [`\`${baseTable}\`.*`];
     let joinStrings = [];
     const usedJoinKeys = new Set(); // Prevent duplicate join keys in select if possible
 
@@ -171,15 +171,15 @@ export const useDataEngine = () => {
                 const targetCol = isFrom ? rel.toColumn : rel.fromColumn;
                 
                 // Add the table's data, excluding the join key to avoid naming collisions
-                selectItems.push(`"${targetTable}".* EXCLUDE ("${targetCol}")`);
+                selectItems.push(`\`${targetTable}\`.* EXCEPT (\`${targetCol}\`)`);
                 
                 // Construct the join back to the current table in the traversal path
-                joinStrings.push(` LEFT JOIN "${targetTable}" ON "${currentTableName}"."${sourceCol}" = "${targetTable}"."${targetCol}"`);
+                joinStrings.push(` LEFT JOIN \`${targetTable}\` ON \`${currentTableName}\`.\`${sourceCol}\` = \`${targetTable}\`.\`${targetCol}\``);
             }
         });
     }
 
-    const sql = `WITH ds_unified AS (SELECT ${selectItems.join(', ')} FROM "${baseTable}"${joinStrings.join('')}) `;
+    const sql = `WITH ds_unified AS (SELECT ${selectItems.join(', ')} FROM \`${baseTable}\`${joinStrings.join('')}) `;
     
     // --- Unified Model Debug Trace: Log the exact join path to the debug panel ---
     if (joinStrings.length > 0) {
@@ -234,14 +234,14 @@ export const useDataEngine = () => {
        if (dimId.includes('::')) {
            const [oDsId, oFId] = dimId.split('::');
            if (isMasterView) {
-               selectClause.push(`"${sourceTable}"."${oFId}" AS "${dimId}"`);
+               selectClause.push(`\`${sourceTable}\`.\`${oFId}\` AS \`${dimId}\``);
            } else {
                const targetDs = datasets.find(d => d.id === oDsId);
                const targetTable = targetDs?.tableName || oDsId;
-               selectClause.push(`"${targetTable}"."${oFId}" AS "${dimId}"`);
+               selectClause.push(`\`${targetTable}\`.\`${oFId}\` AS \`${dimId}\``);
            }
        } else {
-           selectClause.push(`"${sourceTable}"."${dimId}" AS "${dimId}"`);
+           selectClause.push(`\`${sourceTable}\`.\`${dimId}\` AS \`${dimId}\``);
        }
     });
 
@@ -263,11 +263,11 @@ export const useDataEngine = () => {
         if (!f && measId.includes('::')) {
             const [oDsId, oFId] = measId.split('::');
             if (isMasterView) {
-                return `SUM("${sourceTable}"."${oFId}")`;
+                return `SUM(\`${sourceTable}\`.\`${oFId}\`)`;
             } else {
                 const targetDs = datasets.find(d => d.id === oDsId);
                 const targetTable = targetDs?.tableName || oDsId;
-                return `SUM("${targetTable}"."${oFId}")`; 
+                return `SUM(\`${targetTable}\`.\`${oFId}\`)`; 
             }
         }
         if (!f) return "NULL";
@@ -276,14 +276,14 @@ export const useDataEngine = () => {
         if (f.filters && f.filters.length > 0) {
             const filterParts = f.filters.map(filt => {
                 if (!filt.dimensionId) return 'TRUE';
-                const col = `"${sourceTable}"."${filt.dimensionId}"`;
+                const col = `\`${sourceTable}\`.\`${filt.dimensionId}\``;
                 let val = filt.value;
-                if (filt.operator === '=') return `${col} = '${String(val).replace(/'/g, "''")}'`;
-                if (filt.operator === '!=') return `${col} <> '${String(val).replace(/'/g, "''")}'`;
-                if (filt.operator === 'contains') return `CAST(${col} AS VARCHAR) ILIKE '%${String(val).replace(/'/g, "''")}%'`;
+                if (filt.operator === '=') return `CAST(${col} AS STRING) = '${String(val).replace(/'/g, "''")}'`;
+                if (filt.operator === '!=') return `CAST(${col} AS STRING) <> '${String(val).replace(/'/g, "''")}'`;
+                if (filt.operator === 'contains') return `LOWER(CAST(${col} AS STRING)) LIKE LOWER('%${String(val).replace(/'/g, "''")}%')`;
                 if (filt.operator === 'IN') {
                     if (!Array.isArray(val) || val.length === 0) return 'FALSE';
-                    return `${col} IN (${val.map(v => `'${String(v).replace(/'/g, "''")}'`).join(', ')})`;
+                    return `CAST(${col} AS STRING) IN (${val.map(v => `'${String(v).replace(/'/g, "''")}'`).join(', ')})`;
                 }
                 return 'TRUE';
             });
@@ -291,7 +291,7 @@ export const useDataEngine = () => {
         }
 
         if (f.timeConfig && f.timeConfig.enabled && f.timeConfig.dateDimensionId) {
-            const dateCol = `TRY_CAST("${sourceTable}"."${f.timeConfig.dateDimensionId}" AS DATE)`;
+            const dateCol = `SAFE_CAST(\`${sourceTable}\`.\`${f.timeConfig.dateDimensionId}\` AS DATE)`;
             const baseKey = `${f.originDatasetId || datasetId}::${f.timeConfig.dateDimensionId}`;
             const mdc = maxDatesCacheRef.current[baseKey];
             let refDateStr = new Date().toISOString().split('T')[0];
@@ -300,22 +300,22 @@ export const useDataEngine = () => {
             const _now = new Date(); 
             const todayStr = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}-${String(_now.getDate()).padStart(2,'0')}`;
             const staticRef = `CAST('${todayStr}' AS DATE)`;
-            const fyRow = `(CASE WHEN date_part('month', ${dateCol}) >= 4 THEN date_part('year', ${dateCol}) + 1 ELSE date_part('year', ${dateCol}) END)`;
-            const fyRefStatic = `(CASE WHEN date_part('month', ${staticRef}) >= 4 THEN date_part('year', ${staticRef}) + 1 ELSE date_part('year', ${staticRef}) END)`;
-            const mo = `date_part('month', ${dateCol})`;
-            const moRefStatic = `date_part('month', ${staticRef})`;
+            const fyRow = `(CASE WHEN EXTRACT(MONTH FROM ${dateCol}) >= 4 THEN EXTRACT(YEAR FROM ${dateCol}) + 1 ELSE EXTRACT(YEAR FROM ${dateCol}) END)`;
+            const fyRefStatic = `(CASE WHEN EXTRACT(MONTH FROM ${staticRef}) >= 4 THEN EXTRACT(YEAR FROM ${staticRef}) + 1 ELSE EXTRACT(YEAR FROM ${staticRef}) END)`;
+            const mo = `EXTRACT(MONTH FROM ${dateCol})`;
+            const moRefStatic = `EXTRACT(MONTH FROM ${staticRef})`;
 
             switch (f.timeConfig.period) {
                 case 'YTD':   localConds.push(`(${fyRow} = ${fyRefStatic} AND ${dateCol} <= ${staticRef})`); break;
                 case 'LYYTD': localConds.push(`(${fyRow} = ${fyRefStatic} - 1 AND ${dateCol} <= ${staticRef} - INTERVAL 1 YEAR)`); break;
                 case 'MTD':   localConds.push(`(${fyRow} = ${fyRefStatic} AND ${mo} = ${moRefStatic} AND ${dateCol} <= ${staticRef})`); break;
                 case 'LY':    localConds.push(`(${fyRow} = ${fyRefStatic} - 1)`); break;
-                case 'DYTD':  localConds.push(`(${fyRow} = (CASE WHEN date_part('month', ${refDate}) >= 4 THEN date_part('year', ${refDate}) + 1 ELSE date_part('year', ${refDate}) END) AND ${dateCol} <= ${refDate})`); break;
+                case 'DYTD':  localConds.push(`(${fyRow} = (CASE WHEN EXTRACT(MONTH FROM ${refDate}) >= 4 THEN EXTRACT(YEAR FROM ${refDate}) + 1 ELSE EXTRACT(YEAR FROM ${refDate}) END) AND ${dateCol} <= ${refDate})`); break;
             }
         }
         
         if (!f.isCalculated) {
-            const col = `"${sourceTable}"."${f.id}"`;
+            const col = `\`${sourceTable}\`.\`${f.id}\``;
             const agg = f.aggType === 'countDistinct' ? 'COUNT(DISTINCT ' : (f.aggType === 'count' ? 'COUNT(' : `${(f.aggType || 'SUM').toUpperCase()}(`);
             if (localConds.length > 0) return `${agg}CASE WHEN ${localConds.join(' AND ')} THEN ${col} ELSE NULL END)`;
             return `${agg}${col})`;
@@ -327,7 +327,7 @@ export const useDataEngine = () => {
                 for (const match of matches) {
                     const innerId = match.slice(1, -1);
                     const innerSQL = resolveMeasureSQL(innerId, localConds, new Set(visited));
-                    evalStr = evalStr.replace(match, `CAST((${innerSQL}) AS DOUBLE)`);
+                    evalStr = evalStr.replace(match, `COALESCE(CAST((${innerSQL}) AS FLOAT64), 0)`);
                 }
                 exprSQL = evalStr || "NULL";
             }
@@ -335,7 +335,7 @@ export const useDataEngine = () => {
         }
     };
 
-    measures.forEach(measId => { selectClause.push(`${resolveMeasureSQL(measId)} AS "${measId}"`); });
+    measures.forEach(measId => { selectClause.push(`${resolveMeasureSQL(measId)} AS \`${measId}\``); });
 
     let whereClause = "";
     const filterParts = [];
@@ -344,14 +344,14 @@ export const useDataEngine = () => {
       const [oDsId, oFId] = originKey.split('::');
       const colName = oFId ?? oDsId; // if no '::' separator, the whole key IS the column name
       const table = datasets.find(d => d.id === oDsId)?.tableName || oDsId;
-      const colIdent = isMasterView ? `"${colName}"` : `"${table}"."${colName}"`;
+      const colIdent = isMasterView ? `\`${colName}\`` : `\`${table}\`.\`${colName}\``;
       const valList = vals.map(v => typeof v === 'string' ? `'${String(v).replace(/'/g, "''")}'` : v).join(', ');
-      filterParts.push(`${colIdent} IN (${valList})`);
+      filterParts.push(`CAST(${colIdent} AS STRING) IN (${valList})`);
     });
     if (filterParts.length > 0) whereClause = ` WHERE ${filterParts.join(' AND ')}`;
 
     const groupByClause = dimensions.length > 0 ? ` GROUP BY ${dimensions.map((_, i) => i + 1).join(', ')}` : "";
-    return `${ctePrefix}SELECT ${selectClause.join(', ')} FROM "${sourceTable}"${whereClause}${groupByClause}`;
+    return `${ctePrefix}SELECT ${selectClause.join(', ')} FROM \`${sourceTable}\`${whereClause}${groupByClause}`;
   }, [datasets, semanticModels, activeDatasetId, relationships, globalFilters, generateUnifiedCTE]);
 
   const applyFilters = useCallback((data, datasetId) => {
@@ -462,7 +462,7 @@ export const useDataEngine = () => {
     // Query the raw source table directly (no expensive join needed for dropdown population)
     const ds = datasetsRef.current.find(d => d.id === datasetId);
     const tableName = ds?.tableName || datasetId;
-    const sql = `SELECT DISTINCT "${dimensionId}" FROM "${tableName}" WHERE "${dimensionId}" IS NOT NULL ORDER BY 1 LIMIT 1000`;
+    const sql = `SELECT DISTINCT \`${dimensionId}\` FROM \`${tableName}\` WHERE \`${dimensionId}\` IS NOT NULL ORDER BY 1 LIMIT 1000`;
     
     try {
       const results = await queryDuckDB(sql);
