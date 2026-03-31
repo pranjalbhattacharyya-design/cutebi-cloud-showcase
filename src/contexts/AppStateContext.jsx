@@ -330,6 +330,7 @@ export const AppStateProvider = ({ children }) => {
 
   const handleImportModel = (model) => {
     // 1. Reset Session
+    setDatesReady(false);
     setDatasets([]);
     setSemanticModels({});
     setRelationships([]);
@@ -411,6 +412,8 @@ export const AppStateProvider = ({ children }) => {
     // If this is the first dataset being loaded, it's a fresh report — clear stale slicers
     if (datasets.length === 0) setSlicers([]);
 
+    setDatesReady(false);
+    
     // Add to current report state
     const newDs = {
       id: ds.id,
@@ -649,7 +652,7 @@ export const AppStateProvider = ({ children }) => {
     // Mutation Lock
     isMutating, setIsMutating,
     // Engine Warmup (shared singleton — see warmup useEffect above)
-    maxDatesCache, datesReady,
+    maxDatesCache, datesReady, setDatesReady,
     // Computed & Helpers
     activeDataset, activeSemanticModel, showToast, copyToClipboard, refreshData
   };

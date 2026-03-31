@@ -52,6 +52,7 @@ function AppContent() {
     currentWorkspaceId, setCurrentWorkspaceId, currentFolderId, setCurrentFolderId,
     workspaces,
     refreshData, setIsMutating,
+    datesReady, setDatesReady,
     isLibraryOpen, setIsLibraryOpen, importLibraryDataset
   } = useAppState();
 
@@ -216,6 +217,8 @@ function AppContent() {
       // 3. IMMEDIATE STATE FLUSH — In BQ mode we have everything in rData already.
       //    Dataset IDs saved in the report are stable BQ-registered IDs; no library
       //    mapping dance needed. Restore directly from saved metadata.
+      setDatesReady(false); // Synchronous lock for engine warmup
+
       const dsMeta = rData.datasetsMeta || [];
       const restoredDatasets = dsMeta.map(m => ({
         ...m,
