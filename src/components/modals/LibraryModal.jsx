@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Database, Plus, X, FileText, CheckCircle } from 'lucide-react';
+import { Search, Database, Plus, X, FileText, CheckCircle, Check } from 'lucide-react';
 
 const LibraryModal = ({ isOpen, onClose, onSelect, existingDatasetIds = [] }) => {
   const [library, setLibrary] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [pendingIds, setPendingIds] = useState(new Set());
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
-      fetch('/api/library')
+      setPendingIds(new Set()); // Reset selection on open
+      setSearch('');
+      fetch('http://localhost:8000/api/library')
         .then(res => res.json())
         .then(data => {
           setLibrary(data);
@@ -27,6 +31,26 @@ const LibraryModal = ({ isOpen, onClose, onSelect, existingDatasetIds = [] }) =>
     ds.name.toLowerCase().includes(search.toLowerCase()) || 
     ds.id.toLowerCase().includes(search.toLowerCase())
   );
+
+  const togglePending = (id) => {
+    setPendingIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleLoadSelected = async () => {
+    if (pendingIds.size === 0) return;
+    setIsLoading(true);
+    const toLoad = library.filter(ds => pendingIds.has(ds.id));
+    for (const ds of toLoad) {
+      await onSelect(ds);
+    }
+    setIsLoading(false);
+    onClose();
+  };
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-in fade-in duration-200">
@@ -85,15 +109,18 @@ const LibraryModal = ({ isOpen, onClose, onSelect, existingDatasetIds = [] }) =>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {filtered.map(ds => {
                 const isExisting = existingDatasetIds.includes(ds.id);
+                const isPending = pendingIds.has(ds.id);
                 return (
                   <div 
                     key={ds.id}
                     className={`group p-4 bg-white border rounded-2xl transition-all duration-200 ${
                       isExisting 
                         ? 'border-indigo-100 bg-indigo-50/20 opacity-80 cursor-default' 
-                        : 'border-slate-200 hover:border-indigo-400 hover:shadow-xl hover:shadow-indigo-500/10 cursor-pointer'
+                        : isPending
+                          ? 'border-indigo-500 bg-indigo-50 shadow-lg shadow-indigo-500/15 cursor-pointer'
+                          : 'border-slate-200 hover:border-indigo-400 hover:shadow-xl hover:shadow-indigo-500/10 cursor-pointer'
                     }`}
-                    onClick={() => !isExisting && onSelect(ds)}
+                    onClick={() => !isExisting && togglePending(ds.id)}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="p-2.5 bg-slate-50 rounded-xl text-slate-500 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors shrink-0">
@@ -115,8 +142,8 @@ const LibraryModal = ({ isOpen, onClose, onSelect, existingDatasetIds = [] }) =>
                             <CheckCircle size={18} />
                           </div>
                         ) : (
-                          <div className="p-1.5 bg-slate-50 text-slate-400 group-hover:bg-indigo-600 group-hover:text-white rounded-lg transition-all transform group-hover:scale-110">
-                            <Plus size={18} />
+                          <div className={`p-1.5 rounded-lg transition-all transform ${isPending ? 'bg-indigo-600 text-white scale-110' : 'bg-slate-50 text-slate-400 group-hover:bg-indigo-600 group-hover:text-white group-hover:scale-110'}`}>
+                            {isPending ? <Check size={18} /> : <Plus size={18} />}
                           </div>
                         )}
                       </div>
@@ -129,11 +156,28 @@ const LibraryModal = ({ isOpen, onClose, onSelect, existingDatasetIds = [] }) =>
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-100 bg-white flex justify-between items-center text-[12px] font-medium text-slate-400 px-6">
-          <p>Displaying {filtered.length} of {library.length} platinum datasets</p>
-          <div className="flex gap-4">
-            <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-green-500"></div> System Online</span>
-            <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-indigo-500"></div> Parquet Optimized</span>
+        <div className="p-4 border-t border-slate-100 bg-white flex justify-between items-center px-6">
+          <p className="text-[12px] font-medium text-slate-400">
+            Displaying {filtered.length} of {library.length} platinum datasets
+            {pendingIds.size > 0 && <span className="ml-2 text-indigo-600 font-bold">· {pendingIds.size} selected</span>}
+          </p>
+          <div className="flex items-center gap-3">
+            <div className="flex gap-4 text-[12px] font-medium text-slate-400">
+              <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-green-500"></div> System Online</span>
+              <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-indigo-500"></div> Parquet Optimized</span>
+            </div>
+            {pendingIds.size > 0 && (
+              <button
+                onClick={handleLoadSelected}
+                disabled={isLoading}
+                className="ml-4 px-5 py-2 bg-indigo-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {isLoading
+                  ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin"></span> Loading...</>
+                  : `Load ${pendingIds.size} Selected`
+                }
+              </button>
+            )}
           </div>
         </div>
 

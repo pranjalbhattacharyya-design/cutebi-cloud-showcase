@@ -486,10 +486,12 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                         if (!f) {
                             for (const [key, model] of Object.entries(semanticModels)) {
                                 f = model.find(x => x.id === fieldId);
-                                if (f) break;
+                                if (f) { dsId = key; break; }
                             }
                         }
-                        return f ? `${f.originDatasetId || dsId}::${f.originFieldId || fieldId}` : fieldId;
+                        return f
+                            ? `${f.originDatasetId || dsId}::${f.originFieldId || fieldId}`
+                            : `${dsId}::${fieldId}`;
                     };
                     setBuilderForm({
                         ...initBuilderForm,

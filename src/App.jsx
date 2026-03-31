@@ -60,6 +60,9 @@ function AppContent() {
   const { handleGenerateInfographic, executeExploreDataLogic, handleAutoFillDescriptions } = useAI()
   const { getUniqueValuesForDim } = useDataEngine()
 
+  // Local state for save operation loading feedback
+  const [isSaving, setIsSaving] = React.useState(false);
+
   const handleAskAI = async (e) => {
     e?.preventDefault()
     if (!chatInput) return;
@@ -413,6 +416,8 @@ function AppContent() {
          if (latestTemplateToApply.categories) setCategories(latestTemplateToApply.categories);
       } else {
          if (!dashboards[activePageId]) setDashboards(prev => ({ ...prev, [activePageId]: [] }));
+         // Clean slate: clear slicers from any previously loaded report
+         setSlicers([]);
       }
 
       // Atomic State Flush
@@ -500,6 +505,7 @@ function AppContent() {
        return;
     }
     const docId = (!isSaveAs && currentTemplateId) ? currentTemplateId : `report_${Date.now()}`;
+    setIsSaving(true);
     setIsMutating(true);
     
     window.dispatchEvent(new CustomEvent('cutebi-debug', { 
@@ -568,6 +574,7 @@ function AppContent() {
           detail: { type: 'error', category: 'Save', message: `Save API Exception: ${e.message}`, details: e.stack } 
       }));
     } finally {
+      setIsSaving(false);
       setIsMutating(false);
     }
   };
@@ -793,9 +800,27 @@ function AppContent() {
            
             {currentTemplateId ? (
               <div className="flex flex-col gap-3">
-                <button onClick={() => confirmSaveReport(false)} className="w-full t-accent-bg py-3.5 font-bold shadow-lg">Save Changes</button>
-                <button onClick={() => confirmSaveReport(true)} className="w-full t-button py-3.5 font-bold">Save As New</button>
-                <button onClick={() => setShowSaveModal(false)} className="w-full py-2 t-text-muted font-bold hover:t-text-main">Cancel</button>
+                <button
+                  onClick={() => confirmSaveReport(false)}
+                  disabled={isSaving}
+                  className="w-full t-accent-bg py-3.5 font-bold shadow-lg flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {isSaving ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin inline-block"></span> Saving...</> : 'Save Changes'}
+                </button>
+                <button
+                  onClick={() => confirmSaveReport(true)}
+                  disabled={isSaving}
+                  className="w-full t-button py-3.5 font-bold disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  Save As New
+                </button>
+                <button
+                  onClick={() => setShowSaveModal(false)}
+                  disabled={isSaving}
+                  className="w-full py-2 t-text-muted font-bold hover:t-text-main disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
               </div>
             ) : (
               <div className="flex gap-3">
