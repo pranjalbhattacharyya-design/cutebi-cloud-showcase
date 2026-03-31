@@ -13,7 +13,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
   const {
       semanticModels, theme, activePageId, setDashboards, 
       setBuilderForm, initBuilderForm, setShowBuilder,
-      globalFilters
+      globalFilters, joinGroupIds
   } = useAppState();
   
   const { getAggregatedData, getPivotData, getTableData, getScatterData, datesReady } = useChartData();
@@ -482,15 +482,19 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                 {!isViewer && <button onClick={() => {
                     const reverseMap = (dsId, fieldId) => {
                         if (!fieldId) return '';
-                        let f = (semanticModels[dsId] || []).find(x => x.id === fieldId);
-                        if (!f) {
-                            for (const [key, model] of Object.entries(semanticModels)) {
-                                f = model.find(x => x.id === fieldId);
-                                if (f) { dsId = key; break; }
-                            }
+                        // Charts always store bare field IDs (mapIdToLocal strips '::' on save).
+                        // For joined datasets, globalSemanticFields uses value = f.id (bare),
+                        // so return fieldId as-is — it already matches the option value.
+                        if (joinGroupIds.includes(dsId)) return fieldId;
+                        // For orphan (non-joined) datasets, options use 'originDatasetId::fieldId'.
+                        let f = null;
+                        let foundDsId = dsId;
+                        for (const [key, model] of Object.entries(semanticModels)) {
+                            f = model.find(x => x.id === fieldId);
+                            if (f) { foundDsId = key; break; }
                         }
                         return f
-                            ? `${f.originDatasetId || dsId}::${f.originFieldId || fieldId}`
+                            ? `${f.originDatasetId || foundDsId}::${f.originFieldId || fieldId}`
                             : `${dsId}::${fieldId}`;
                     };
                     setBuilderForm({
