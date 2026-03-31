@@ -3,7 +3,7 @@ import DebugPanel from './components/ui/debug/DebugPanel'
 import { AppStateProvider, useAppState } from './contexts/AppStateContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { THEMES } from './utils/themeEngine'
-import { parseFileAsync } from './utils/fileParser'
+
 import { syncSemanticModels } from './utils/semanticSync'
 import { generateInitModel, patchModels } from './utils/dataParser'
 import { storeHandle, deleteHandle, getHandlesForDatasets, requestReadPermission } from './utils/fileHandleStore'

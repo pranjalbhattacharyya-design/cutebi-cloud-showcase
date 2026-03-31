@@ -7,8 +7,7 @@ import {
 } from 'lucide-react';
 
 import { useAppState } from '../../contexts/AppStateContext';
-import { parseFileAsync } from '../../utils/fileParser';
-import { registerCSV, registerJSON } from '../../utils/backendEngine.js';
+
 import { generateInitModel } from '../../utils/dataParser';
 import { apiClient } from '../../services/api';
 import { preprocessFilesForUpload } from '../../utils/excelConverter';
