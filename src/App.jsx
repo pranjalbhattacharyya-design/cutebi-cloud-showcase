@@ -185,7 +185,7 @@ function AppContent() {
 
   /** Auto-reload all datasets for a template using metadata-first (backend) approach */
   const handleAutoLoadTemplate = async (report) => {
-    setDatesReady(false); // Synchronous lock applied immediately before portal closes
+    setDatesReady(true); // Decoupled lock to prevent blocking charts while Engine Warmup scans BQ
     setIsUploading(true);
     setIsMutating(true);
     
