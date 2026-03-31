@@ -110,11 +110,12 @@ def transform_sql_for_bq(sql: str, ds_map: dict) -> str:
 
     # 8. Coerce numeric string literals in equality comparisons to avoid BQ's strict
     #    INT64 vs STRING enforcement.  DuckDB auto-casts '2026' → 2026 but BQ does not.
-    #    Pattern: `ColumnName` = '123'  →  CAST(`ColumnName` AS STRING) = '123'
-    #    Also handles:  `col` = '123'  inside CASE WHEN / WHERE clauses.
+    #    Handles both table-qualified: `ds_unified`.`FY` = '2026'
+    #    and bare column:              `FY` = '2026'
+    #    Both become: CAST(`...`.`col` AS STRING) = '2026'
     sql = _re.sub(
-        r'`([^`]+)`\s*=\s*\'(\d+(?:\.\d+)?)\'',
-        r"CAST(`\1` AS STRING) = '\2'",
+        r'(`(?:[^`]+`\.`)?[^`]+`)\s*=\s*\'(\d+(?:\.\d+)?)\'',
+        r"CAST(\1 AS STRING) = '\2'",
         sql
     )
 
