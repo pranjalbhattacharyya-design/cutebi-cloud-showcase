@@ -19,7 +19,10 @@ export const apiClient = {
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       let detail = '';
-      try { detail = JSON.parse(text)?.detail; } catch {}
+      try { 
+        detail = JSON.parse(text)?.detail; 
+        if (typeof detail === 'object') detail = JSON.stringify(detail);
+      } catch {}
       throw new Error(detail || `HTTP ${res.status}: ${text.slice(0, 300)}`);
     }
     return res.json();
@@ -37,7 +40,10 @@ export const apiClient = {
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       let detail = '';
-      try { detail = JSON.parse(text)?.detail; } catch {}
+      try { 
+        detail = JSON.parse(text)?.detail; 
+        if (typeof detail === 'object') detail = JSON.stringify(detail);
+      } catch {}
       throw new Error(detail || `HTTP ${res.status}: ${text.slice(0, 500)}`);
     }
     return res.json();

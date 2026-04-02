@@ -264,10 +264,26 @@ Return JSON format EXACTLY matching this schema:
   // handleHierarchyAnswer — parses "Zone, Area, Dealer" into hierarchy object
   // ---------------------------------------------------------------------------
   const handleHierarchyAnswer = (answer, pendingQuery) => {
-    const parts = answer.split(/[,|\n]+/).map(p => p.trim()).filter(Boolean);
-    const macro_dim = parts[0] || 'Macro Level';
-    const meso_dim  = parts[1] || 'Meso Level';
-    const micro_dim = parts[2] || 'Micro Level';
+    // Add the user's answer to the chat history immediately
+    setExploreHistory(prev => [...prev, { id: Date.now().toString(), role: 'user', text: answer }]);
+
+    const parts = answer.split(/[,|\n\-]+/).map(p => p.trim()).filter(Boolean);
+    
+    // Validate the hierarchy answer
+    if (parts.length < 2 || parts[0].length > 30) {
+      setExploreHistory(prev => [...prev, {
+        id: Date.now().toString() + '-err',
+        role: 'ai',
+        text: '⚠️ I need distinct reporting levels separated by commas (e.g., "Zone, Area, Dealer" or "Category, Subcategory") to structure a Deep Dive. Please try typing just the hierarchy levels, or use the ⚡ Trend mode if you only want to analyze a single dimension!'
+      }]);
+      // Leave hierarchyPending as is so they can try again
+      return;
+    }
+
+    const macro_dim = parts[0];
+    const meso_dim  = parts[1];
+    const micro_dim = parts[2] || parts[1]; // fallback if only 2 provided
+    
     const hierarchy = { macro_dim, meso_dim, micro_dim };
     setDeepDiveHierarchy(hierarchy);
     setHierarchyPending(null);
@@ -278,23 +294,29 @@ Return JSON format EXACTLY matching this schema:
     }));
 
     // Kick off the actual deep dive now that hierarchy is known
-    executeExploreDataLogic(pendingQuery, 'explore', 'deep_dive', hierarchy);
+    // (We also re-add the user bubble manually in explore logic, but since we just added it, explore text is handled)
+    executeExploreDataLogic(pendingQuery, 'explore', 'deep_dive', hierarchy, true); // true = skip user bubble
   };
 
   // ---------------------------------------------------------------------------
   // executeExploreDataLogic — Main Explore Chat handler
   // path: "fast" | "deep_dive"
   // ---------------------------------------------------------------------------
-  const executeExploreDataLogic = async (query, mode, path = 'fast', hierarchyOverride = null) => {
+  const executeExploreDataLogic = async (query, mode, path = 'fast', hierarchyOverride = null, skipUserBubble = false) => {
     if (!query.trim() || !activeDataset || isThinking) return;
 
     setIsThinking(true);
     setAiError(null);
 
     const { dimensions, measures, model_description } = buildSemanticContext();
-    const newHistory = [...exploreHistory, { role: 'user', text: query, analysisPath: path }];
+    let newHistory = [...exploreHistory];
+    
+    if (!skipUserBubble) {
+      newHistory = [...newHistory, { role: 'user', text: query, analysisPath: path }];
+      setChatInput('');
+    }
+    
     setExploreHistory(newHistory);
-    setChatInput('');
 
     const commonPayload = { model_description, dimensions, measures };
 
