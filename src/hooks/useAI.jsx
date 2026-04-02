@@ -74,9 +74,13 @@ export const useAI = () => {
     setAiThinkingLabel('Generating descriptions...');
     showToast('✨ AI is analyzing your data to write descriptions...');
 
-    const prompt = `Analyze this dataset.
+    const columnsList = globalSemanticFields?.length > 0 
+      ? globalSemanticFields.map(f => f.rawLabel || f.value) 
+      : activeDataset.headers;
+
+    const prompt = `Analyze this data model.
 Table Name: ${activeDataset.name}
-Columns: ${activeDataset.headers.join(', ')}
+Columns: ${columnsList.join(', ')}
 
 Write a short, professional business description for the table itself, and a short business description for each column.
 Return JSON format EXACTLY matching this schema:
@@ -92,13 +96,22 @@ Return JSON format EXACTLY matching this schema:
       const clean = text.replace(/```json/gi, '').replace(/```/g, '').trim();
       const aiData = JSON.parse(clean);
       setDatasets(prev => prev.map(d => d.id === activeDatasetId ? { ...d, description: aiData.tableDescription } : d));
+      
       setSemanticModels(prev => {
         const next = { ...prev };
-        const model = next[activeDatasetId] || [];
-        next[activeDatasetId] = model.map(field => {
-          const aiMatch = aiData.columns?.find(c => c.id === field.id || c.id === field.originalId);
-          if (aiMatch) return { ...field, description: aiMatch.description };
-          return field;
+        Object.keys(next).forEach(dsId => {
+          next[dsId] = next[dsId].map(field => {
+            const aiMatch = aiData.columns?.find(c => {
+               const cid = c.id?.trim().toLowerCase();
+               return cid === field.id?.trim().toLowerCase() ||
+                      cid === field.originalId?.trim().toLowerCase() ||
+                      cid === field.label?.trim().toLowerCase();
+            });
+            if (aiMatch && aiMatch.description) {
+               return { ...field, description: aiMatch.description };
+            }
+            return field;
+          });
         });
         return syncSemanticModels(next, relationships);
       });
