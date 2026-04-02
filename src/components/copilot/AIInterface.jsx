@@ -314,12 +314,18 @@ export default function AIInterface({ handleAskAI: handleAskAIFromApp, handleCon
 
   const isViewer = userRole === 'viewer';
   const chatEndRef = useRef(null);
+  const chatAreaRef = useRef(null);
 
   // Local state: which analysis path is selected
   const [analysisPath, setAnalysisPath] = useState('fast');
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (chatAreaRef.current) {
+      chatAreaRef.current.scrollTo({
+        top: chatAreaRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
   }, [exploreHistory, isThinking, aiError, pendingAIAction]);
 
   const handleSubmit = async (e) => {
@@ -403,7 +409,7 @@ export default function AIInterface({ handleAskAI: handleAskAIFromApp, handleCon
       )}
 
       {/* Chat Area */}
-      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+      <div ref={chatAreaRef} className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
 
         {/* Empty state */}
         {exploreHistory.length === 0 && !isThinking && !aiError && !pendingAIAction && (
