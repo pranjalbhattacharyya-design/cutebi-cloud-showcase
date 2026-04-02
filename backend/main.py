@@ -7,11 +7,12 @@ import shutil
 import uuid
 import threading
 import duckdb
+import httpx
 
 from . import models, database, engine
 from supabase import create_client, Client
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Any, Dict
 from datetime import datetime
 
 # ---------------------------------------------------------------------------
@@ -1213,3 +1214,225 @@ def engine_status():
     }
 
 
+# ---------------------------------------------------------------------------
+# AI Proxy Endpoints — Gemini & Imagen
+# The API key lives ONLY on the server. Never exposed to the browser.
+# ---------------------------------------------------------------------------
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_BASE    = "https://generativelanguage.googleapis.com/v1beta/models"
+GEMINI_MODEL   = "gemini-2.0-flash"
+IMAGEN_MODEL   = "imagen-4.0-generate-001"
+
+
+class AIFieldDim(BaseModel):
+    id: str
+    label: str
+    description: Optional[str] = ""
+
+
+class AIFieldMeasure(BaseModel):
+    id: str
+    label: str
+    description: Optional[str] = ""
+    aggType: Optional[str] = "sum"
+    isTimeIntelligence: Optional[bool] = False
+    timePeriod: Optional[str] = None
+
+
+class AIExploreRequest(BaseModel):
+    query: str
+    phase: str                            # "sql_gen" | "fast_answer" | "micro" | "meso" | "macro"
+    model_description: Optional[str] = ""
+    dimensions: Optional[List[AIFieldDim]] = []
+    measures: Optional[List[AIFieldMeasure]] = []
+    data_table: Optional[List[Dict[str, Any]]] = []
+    prior_output: Optional[str] = ""     # Phase 1 text for Meso; Phase 2 text for Macro
+
+
+class AIImageRequest(BaseModel):
+    verdict_text: str
+
+
+def _build_explore_prompt(req: AIExploreRequest) -> str:
+    """Build the correct Gemini prompt based on which phase is being executed."""
+    dim_list  = [{"id": d.id, "label": d.label, "description": d.description} for d in req.dimensions]
+    meas_list = [{
+        "id": m.id, "label": m.label, "description": m.description,
+        "aggType": m.aggType,
+        "isTimeIntelligence": m.isTimeIntelligence,
+        "timePeriod": m.timePeriod
+    } for m in req.measures]
+
+    model_ctx    = f"Model: {req.model_description}\n" if req.model_description else ""
+    data_snippet = str(req.data_table)[:4000] if req.data_table else ""
+
+    if req.phase == "sql_gen":
+        return f"""{model_ctx}You are a Data Analyst. The user is querying a unified semantic model.
+
+Dimensions (category fields):
+{dim_list}
+
+Measures (numeric fields — aggType indicates aggregation method; isTimeIntelligence=true means it is a time-period calculation):
+{meas_list}
+
+User question: "{req.query}"
+
+RULES:
+1. If data fetch is needed, set action="query" and populate sql_query with EXACT field IDs from the lists above.
+2. If answerable without data, set action="answer" and provide the text.
+3. NEVER invent field IDs. Only use exact IDs provided.
+4. For time-based questions, prefer fields where isTimeIntelligence=true.
+5. Match aggType when describing results (sum=total, avg=average, count=number of).
+
+Return JSON: {{ "action": "query"|"answer", "text": "...", "sql_query": {{ "dimensions": [], "measures": [], "filters": [] }} }}"""
+
+    if req.phase == "fast_answer":
+        meas_ctx = [{"id": m.id, "label": m.label, "aggType": m.aggType} for m in req.measures]
+        return f"""{model_ctx}The user asked: "{req.query}".
+Data returned: {data_snippet}
+Measure context (use aggType to frame values): {meas_ctx}
+
+Provide a concise 1-2 sentence natural language answer based STRICTLY on this data.
+Use aggType to describe values correctly (sum → "total X was...", avg → "average X was...").
+Do NOT mention JSON, databases, or technical field IDs."""
+
+    if req.phase == "micro":
+        meas_ctx = [{"id": m.id, "label": m.label, "aggType": m.aggType, "isTimeIntelligence": m.isTimeIntelligence} for m in req.measures]
+        return f"""{model_ctx}You are a data analyst. Analyze the following dataset at the LOWEST dimensional grain.
+
+Data: {data_snippet}
+Measure context: {meas_ctx}
+
+Identify: local anomalies, outliers, top/bottom performers, unusual patterns at individual row level.
+Be specific with numbers. Use aggType to frame descriptions correctly.
+Write a structured insight paragraph."""
+
+    if req.phase == "meso":
+        return f"""Based on these micro-level insights from a business dataset analysis:
+{req.prior_output}
+
+Collate these findings to identify SYSTEMIC PATTERNS and sub-group trends.
+Look for recurring themes, correlated signals, and intermediate-level performance drivers.
+Write a structured meso-level analysis paragraph."""
+
+    if req.phase == "macro":
+        return f"""Based on these meso-level patterns from a business dataset analysis:
+{req.prior_output}
+
+Formulate 2-3 concise, actionable strategic recommendations.
+Frame them as executive-level verdicts. Be direct and specific.
+Do NOT repeat the meso analysis. Only provide forward-looking strategic guidance."""
+
+    raise ValueError(f"Unknown phase: {req.phase}")
+
+
+@app.post("/api/ai/explore")
+async def ai_explore(req: AIExploreRequest):
+    """Secure proxy: forwards explore chat requests to Gemini. API key never leaves the server."""
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured on server.")
+
+    prompt = _build_explore_prompt(req)
+    url    = f"{GEMINI_BASE}/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+    body   = {"contents": [{"parts": [{"text": prompt}]}]}
+
+    # SQL gen phase needs structured JSON output
+    if req.phase == "sql_gen":
+        body["generationConfig"] = {
+            "responseMimeType": "application/json",
+            "responseSchema": {
+                "type": "OBJECT",
+                "properties": {
+                    "action": {"type": "STRING"},
+                    "text":   {"type": "STRING"},
+                    "sql_query": {
+                        "type": "OBJECT", "nullable": True,
+                        "properties": {
+                            "dimensions": {"type": "ARRAY", "items": {"type": "STRING"}},
+                            "measures":   {"type": "ARRAY", "items": {"type": "STRING"}},
+                            "filters":    {"type": "ARRAY", "items": {
+                                "type": "OBJECT",
+                                "properties": {
+                                    "field":    {"type": "STRING"},
+                                    "operator": {"type": "STRING"},
+                                    "value":    {"type": "STRING"}
+                                }
+                            }}
+                        }
+                    }
+                },
+                "required": ["action"]
+            }
+        }
+
+    try:
+        async with httpx.AsyncClient(timeout=25.0) as client:
+            response = await client.post(url, json=body)
+
+        if response.status_code != 200:
+            print(f"[AI/explore] Gemini error {response.status_code}: {response.text[:200]}")
+            raise HTTPException(status_code=502, detail=f"Gemini returned {response.status_code}")
+
+        data = response.json()
+        text = (data.get("candidates") or [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+
+        if not text:
+            raise HTTPException(status_code=502, detail="Empty response from Gemini")
+
+        return {"text": text, "error": None}
+
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Gemini request timed out.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[AI/explore] Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/ai/image")
+async def ai_image(req: AIImageRequest):
+    """Secure proxy: generates infographic via Imagen. API key never leaves the server."""
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured on server.")
+
+    import re as _re2
+    clean       = _re2.sub(r'[^\w\s.,!?\'"-]', '', req.verdict_text)[:400]
+    prompt_text = (
+        f"Professional business infographic slide. Key insights: {clean}. "
+        "Clean, modern, data-driven design with clear hierarchy, minimal text, strong visual contrast."
+    )
+
+    url    = f"{GEMINI_BASE}/{IMAGEN_MODEL}:predict?key={GEMINI_API_KEY}"
+    body   = {"instances": [{"prompt": prompt_text}], "parameters": {"sampleCount": 1}}
+    delays = [1, 2, 4, 8, 16]
+    last_err = "Unknown error"
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        for i, delay in enumerate(delays):
+            try:
+                response = await client.post(url, json=body)
+                if response.status_code == 200:
+                    data = response.json()
+                    b64  = (data.get("predictions") or [{}])[0].get("bytesBase64Encoded") or \
+                           (data.get("predictions") or [{}])[0].get("b64", "")
+                    if b64:
+                        return {"imageBase64": b64, "error": None}
+                    last_err = "No image data in response"
+                elif response.status_code in (401, 403):
+                    raise HTTPException(status_code=403, detail="Imagen: authentication failed")
+                else:
+                    last_err = f"Status {response.status_code}: {response.text[:150]}"
+            except httpx.TimeoutException:
+                last_err = "Imagen request timed out"
+            except HTTPException:
+                raise
+            except Exception as e:
+                last_err = str(e)
+
+            if i < len(delays) - 1:
+                import asyncio as _asyncio
+                await _asyncio.sleep(delay)
+
+    raise HTTPException(status_code=502, detail=f"Imagen failed after retries: {last_err}")

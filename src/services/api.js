@@ -93,5 +93,13 @@ export const apiClient = {
       throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
     }
     return res.json();
-  }
+  },
+
+  // ── AI Proxy methods — key lives on the FastAPI server ───────────────────
+  async aiExplore(payload) {
+    return this.post('/ai/explore', payload);
+  },
+  async aiImage(payload) {
+    return this.post('/ai/image', payload);
+  },
 };
