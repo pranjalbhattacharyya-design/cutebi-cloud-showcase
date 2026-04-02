@@ -61,6 +61,50 @@ function PhaseAccordion({ label, icon, content, defaultOpen = false, onGenerateI
 }
 
 // ---------------------------------------------------------------------------
+// Data Snippet Accordion — shows raw query result before analysis phases
+// ---------------------------------------------------------------------------
+function DataSnippetAccordion({ rows, headers, total }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border t-border rounded-lg overflow-hidden mb-2 bg-black/5">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold t-text-muted hover:t-text-main transition-colors"
+      >
+        <span className="flex items-center gap-1.5">
+          📋 Data Snapshot ({total} rows)
+        </span>
+        {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+      </button>
+      {open && (
+        <div className="overflow-x-auto max-h-48 overflow-y-auto">
+          <table className="w-full text-[10px] border-collapse">
+            <thead className="sticky top-0">
+              <tr>
+                {headers.map(h => (
+                  <th key={h} className="px-2 py-1 text-left font-black t-text-muted bg-black/10 border-b t-border whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, i) => (
+                <tr key={i} className={i % 2 === 0 ? 'bg-transparent' : 'bg-black/5'}>
+                  {headers.map(h => (
+                    <td key={h} className="px-2 py-1 t-text-main border-b t-border whitespace-nowrap font-medium">
+                      {row[h] == null ? <span className="t-text-muted italic">—</span> : String(row[h])}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // AI Message Bubble
 // ---------------------------------------------------------------------------
 function AIMessage({ msg, handleGenerateInfographic }) {
@@ -121,6 +165,10 @@ function AIMessage({ msg, handleGenerateInfographic }) {
 
   // Deep Dive bubble
   if (msg.path === 'deep_dive' && msg.phases) {
+    const rows = msg.data || [];
+    const headers = rows.length > 0 ? Object.keys(rows[0]) : [];
+    const preview = rows.slice(0, 10);
+
     return (
       <div className="flex flex-col items-start animate-in slide-in-from-bottom-2 w-full">
         {msg.isPartial && (
@@ -132,6 +180,12 @@ function AIMessage({ msg, handleGenerateInfographic }) {
           <p className="text-[10px] font-black t-text-muted uppercase tracking-widest mb-2 flex items-center gap-1">
             <Search size={10} /> Deep Dive Analysis - Choose phase to visualize
           </p>
+
+          {/* Data Snippet */}
+          {headers.length > 0 && (
+            <DataSnippetAccordion rows={preview} headers={headers} total={rows.length} />
+          )}
+
           <PhaseAccordion 
             label="🔬 Micro — Grain-Level Insights" 
             icon={null} 
