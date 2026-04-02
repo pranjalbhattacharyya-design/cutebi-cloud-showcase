@@ -1221,7 +1221,7 @@ def engine_status():
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_BASE    = "https://generativelanguage.googleapis.com/v1beta/models"
-GEMINI_MODEL   = "gemini-2.0-flash"
+GEMINI_MODEL   = "gemini-1.5-flash"
 IMAGEN_MODEL   = "imagen-4.0-generate-001"
 
 
