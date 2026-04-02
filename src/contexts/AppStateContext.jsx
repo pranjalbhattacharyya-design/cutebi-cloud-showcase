@@ -111,6 +111,7 @@ export const AppStateProvider = ({ children }) => {
   const [isExploreOpen, setIsExploreOpen] = useState(false);
   const [pendingAIAction, setPendingAIAction] = useState(null);
   const [aiError, setAiError] = useState(null);
+  const [aiThinkingLabel, setAiThinkingLabel] = useState('Analyzing...');
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
 
   // --- Inline Edit States ---
@@ -630,7 +631,7 @@ export const AppStateProvider = ({ children }) => {
     semanticViewMode, setSemanticViewMode,
     // AI
     aiMode, setAiMode, exploreHistory, setExploreHistory, isExploreOpen, setIsExploreOpen,
-    pendingAIAction, setPendingAIAction, aiError, setAiError,
+    pendingAIAction, setPendingAIAction, aiError, setAiError, aiThinkingLabel, setAiThinkingLabel,
     isLibraryOpen, setIsLibraryOpen, importLibraryDataset, handleImportModel,
     // Inline Edits
     editingDatasetId, setEditingDatasetId, editingDatasetName, setEditingDatasetName,

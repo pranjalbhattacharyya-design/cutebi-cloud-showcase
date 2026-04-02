@@ -58,17 +58,15 @@ function AppContent() {
 
   const [showGetDataModal, setShowGetDataModal] = useState(false);
 
-  const { handleGenerateInfographic, executeExploreDataLogic, handleAutoFillDescriptions } = useAI()
+  const { handleGenerateInfographic, handleAutoFillDescriptions, handleConfirmPendingAI: confirmAI } = useAI()
   const { getUniqueValuesForDim } = useDataEngine()
 
   // Local state for save operation loading feedback
   const [isSaving, setIsSaving] = React.useState(false);
 
+  // handleAskAI is a stub — actual logic lives in useAI + AIInterface
   const handleAskAI = async (e) => {
-    e?.preventDefault()
-    if (!chatInput) return;
-    const apiKey = ""; // Should be injected via environment variables
-    await executeExploreDataLogic(chatInput, aiMode, apiKey);
+    e?.preventDefault();
   }
 
   const handleConfirmPendingAI = () => {

@@ -25,3 +25,4 @@ dist-ssr
 mock_data.csv
 
 .vercel
+.env
