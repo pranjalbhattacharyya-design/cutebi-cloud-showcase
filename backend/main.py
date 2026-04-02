@@ -1584,26 +1584,19 @@ async def deep_dive_preflight(req: AIExploreRequest, db: Session = Depends(datab
     ds_map = { ds.id: ds.file_path for ds in all_ds if ds.file_path and not ds.file_path.startswith("http") }
     bq_ref = ds_map.get(req.dataset_id, req.dataset_id)
 
-    # ── Step 0: Fetch actual column names from INFORMATION_SCHEMA ──────────────
-    # This lets us snap any guessed dim name to the closest real BQ column name,
-    # preventing "Unrecognized name" errors from Gemini's field ID guesses.
+    # ── Step 0: Fetch actual column names (works for tables AND views) ──────────
+    # INFORMATION_SCHEMA only covers base tables. For BQ views (like our unified
+    # semantic CTE view) we use SELECT * LIMIT 0 — the schema comes from the
+    # query result object, no rows are scanned.
     real_columns: list[str] = []
     try:
-        # bq_ref is like "project.dataset.table" — split for INFORMATION_SCHEMA
-        parts = bq_ref.split(".")
-        if len(parts) == 3:
-            proj, ds_name, tbl = parts
-            schema_sql = (
-                f"SELECT column_name FROM `{proj}.{ds_name}.INFORMATION_SCHEMA.COLUMNS` "
-                f"WHERE table_name = '{tbl}'"
-            )
-        else:
-            schema_sql = f"SELECT column_name FROM `{bq_ref}` LIMIT 0"
-        schema_rows = list(bq_client.query(schema_sql).result())
-        real_columns = [r[0] for r in schema_rows]
-        print(f"[Preflight] Real BQ columns: {real_columns}")
+        schema_job = bq_client.query(f"SELECT * FROM `{bq_ref}` LIMIT 0")
+        schema_result = schema_job.result()
+        real_columns = [field.name for field in schema_result.schema]
+        print(f"[Preflight] Real BQ columns ({len(real_columns)}): {real_columns[:20]}...")
     except Exception as e:
-        print(f"[Preflight] INFORMATION_SCHEMA fetch failed (non-fatal): {e}")
+        print(f"[Preflight] Schema fetch failed (non-fatal): {e}")
+
 
     def snap_to_real(candidate: str) -> str:
         """Return the real BQ column whose name best matches the candidate string."""
