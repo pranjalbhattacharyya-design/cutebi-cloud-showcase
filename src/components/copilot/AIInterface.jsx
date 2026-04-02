@@ -7,6 +7,7 @@ import {
 import { useAppState } from '../../contexts/AppStateContext';
 import { useAI } from '../../hooks/useAI';
 import ChartWidget from '../dashboard/ChartWidget';
+import InfographicCanvas from './InfographicCanvas';
 
 // ---------------------------------------------------------------------------
 // Accordion Section for Deep Dive phases
@@ -37,28 +38,28 @@ function PhaseAccordion({ label, icon, content, defaultOpen = false }) {
 function AIMessage({ msg, handleGenerateInfographic }) {
   const copyToClipboard = (text) => { navigator.clipboard.writeText(text); };
 
-  // Infographic result bubble
+  // Infographic result bubble (Canvas-rendered, zero Imagen cost)
   if (msg.isInfographic) {
+    const canvasRef = React.useRef(null);
     return (
-      <div className="flex flex-col items-start animate-in slide-in-from-bottom-2">
-        <div className="t-panel border t-border rounded-t-2xl rounded-br-2xl px-4 py-3 max-w-[95%] shadow-sm">
+      <div className="flex flex-col items-start animate-in slide-in-from-bottom-2 w-full">
+        <div className="t-panel border t-border rounded-t-2xl rounded-br-2xl px-3 py-3 w-full shadow-sm">
           {msg.isError ? (
             <p className="text-xs text-red-500 font-semibold">{msg.text}</p>
           ) : (
             <>
               <p className="text-xs font-bold t-text-muted mb-2">{msg.text}</p>
-              <img
-                src={msg.imageUrl}
-                alt="AI Generated Infographic"
-                className="rounded-lg w-full border t-border shadow-sm"
-              />
-              <a
-                href={msg.imageUrl}
-                download={`cutebi-infographic-${Date.now()}.png`}
-                className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold t-accent-bg transition-all hover:opacity-90"
-              >
-                <Download size={12} /> Download Infographic
-              </a>
+              {msg.infographicData && (
+                <>
+                  <InfographicCanvas ref={canvasRef} data={msg.infographicData} />
+                  <button
+                    onClick={() => canvasRef.current?.download()}
+                    className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold t-accent-bg transition-all hover:opacity-90"
+                  >
+                    <Download size={12} /> Download PNG
+                  </button>
+                </>
+              )}
             </>
           )}
         </div>

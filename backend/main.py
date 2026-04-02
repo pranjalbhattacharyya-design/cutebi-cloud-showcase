@@ -1324,6 +1324,23 @@ Formulate 2-3 concise, actionable strategic recommendations.
 Frame them as executive-level verdicts. Be direct and specific.
 Do NOT repeat the meso analysis. Only provide forward-looking strategic guidance."""
 
+    if req.phase == "infographic_data":
+        return f"""You are an executive data storyteller. Based on the following business analysis:
+{req.prior_output}
+
+Extract the 3 most important business metrics and insights for an executive infographic.
+
+RULES:
+- headline: max 10 words, punchy executive summary
+- findings: exactly 3 KPI tiles with real numbers from the analysis
+- value: formatted number with unit (e.g. '₹4.2Cr', '1,234 units', '87%')
+- trend: 'up', 'down', or 'neutral' based on context
+- delta: short change label like '+12%' or '-8%' or leave empty if not applicable
+- bullets: exactly 3 key findings, max 15 words each, specific and data-driven
+- recommendation: 1 actionable sentence, max 20 words
+
+Return ONLY valid JSON with no markdown."""
+
     raise ValueError(f"Unknown phase: {req.phase}")
 
 
@@ -1363,6 +1380,33 @@ async def ai_explore(req: AIExploreRequest):
                     }
                 },
                 "required": ["action"]
+            }
+        }
+
+    # Infographic data phase — returns structured chart data as JSON
+    elif req.phase == "infographic_data":
+        body["generationConfig"] = {
+            "responseMimeType": "application/json",
+            "responseSchema": {
+                "type": "OBJECT",
+                "properties": {
+                    "headline":       {"type": "STRING"},
+                    "findings": {
+                        "type": "ARRAY",
+                        "items": {
+                            "type": "OBJECT",
+                            "properties": {
+                                "label": {"type": "STRING"},
+                                "value": {"type": "STRING"},
+                                "trend": {"type": "STRING"},
+                                "delta": {"type": "STRING"}
+                            }
+                        }
+                    },
+                    "bullets":        {"type": "ARRAY", "items": {"type": "STRING"}},
+                    "recommendation": {"type": "STRING"}
+                },
+                "required": ["headline", "findings", "bullets", "recommendation"]
             }
         }
 

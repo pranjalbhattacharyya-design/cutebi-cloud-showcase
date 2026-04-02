@@ -200,27 +200,35 @@ Return JSON format EXACTLY matching this schema:
   };
 
   // ---------------------------------------------------------------------------
-  // handleGenerateInfographic — Unified for ALL roles
-  // Image is generated via backend proxy. Shown inline in chat with Download button.
+  // handleGenerateInfographic — Canvas-based, zero Imagen cost
+  // Gemini returns structured JSON → rendered in browser via InfographicCanvas
   // ---------------------------------------------------------------------------
   const handleGenerateInfographic = async (text, userQuery) => {
     setIsThinking(true);
-    setAiThinkingLabel('Designing your infographic...');
-    showToast('Designing your infographic...');
+    setAiThinkingLabel('Building your infographic...');
+    showToast('✨ Structuring your key insights...');
 
     try {
-      const result = await apiClient.aiImage({ verdict_text: String(text).substring(0, 500) });
+      const jsonText = await callAI({
+        query:          'Generate infographic data',
+        phase:          'infographic_data',
+        model_description: '',
+        dimensions:     [],
+        measures:       [],
+        data_table:     [],
+        prior_output:   String(text).substring(0, 1200),
+      });
 
-      if (!result?.imageBase64) throw new Error(result?.error || 'No image data returned.');
-
-      const imageUrl = `data:image/png;base64,${result.imageBase64}`;
+      const infographicData = JSON.parse(
+        jsonText.replace(/```json/gi, '').replace(/```/g, '').trim()
+      );
 
       setExploreHistory(prev => [
         ...prev,
         {
           role: 'ai',
-          text: '📊 Infographic generated! Download it below.',
-          imageUrl,
+          text: '📊 Infographic ready — click Download to save as PNG.',
+          infographicData,
           userQuery,
           isInfographic: true,
         },
@@ -231,7 +239,7 @@ Return JSON format EXACTLY matching this schema:
       console.error('Infographic error:', e);
       setExploreHistory(prev => [
         ...prev,
-        { role: 'ai', text: `Visual generation failed: ${e.message}`, isError: true, isInfographic: true },
+        { role: 'ai', text: `Infographic generation failed: ${e.message}`, isError: true, isInfographic: true },
       ]);
     } finally {
       setIsThinking(false);
