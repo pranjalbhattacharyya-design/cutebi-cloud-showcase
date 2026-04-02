@@ -1381,6 +1381,27 @@ RULES:
 
 Return ONLY valid JSON with no markdown."""
 
+    if req.phase == "hierarchy_resolve":
+        return f"""You are a data dictionary expert. A user has typed their reporting hierarchy in plain English.
+Your job is to map each typed label to the EXACT field ID from the available dimensions list.
+
+Available dimensions (use ONLY these IDs):
+{dim_list}
+
+User typed (from broadest to finest grain):
+- Macro (broadest): "{req.macro_dim}"
+- Meso (mid-tier): "{req.meso_dim}"
+- Micro (finest): "{req.micro_dim}"
+
+RULES:
+1. Match each label to the single best-fitting dimension ID from the list above.
+2. Use fuzzy/semantic matching — "Zone" may map to "Zone_Name", "Dealer" to "Dealer_Code" etc.
+3. NEVER invent IDs. Only return IDs that exist in the list above.
+4. If you cannot confidently match a label, pick the closest dimension by description.
+
+Return ONLY valid JSON with no markdown:
+{{ "macro_dim": "<exact_id>", "meso_dim": "<exact_id>", "micro_dim": "<exact_id>" }}"""
+
     if req.phase == "auto_fill":
         # Pass the exact frontend prompt directly
         return req.query

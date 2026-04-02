@@ -261,50 +261,68 @@ Return JSON format EXACTLY matching this schema:
   };
 
   // ---------------------------------------------------------------------------
-  // handleHierarchyAnswer — parses "Zone, Area, Dealer" into hierarchy object
+  // handleHierarchyAnswer — AI-resolves user labels to exact semantic field IDs
   // ---------------------------------------------------------------------------
-  const handleHierarchyAnswer = (answer, pendingQuery) => {
+  const handleHierarchyAnswer = async (answer, pendingQuery) => {
     // Add the user's answer to the chat history immediately
     setExploreHistory(prev => [...prev, { id: Date.now().toString(), role: 'user', text: answer }]);
 
     const parts = answer.split(/[,|\n\-]+/).map(p => p.trim()).filter(Boolean);
     
     // Validate the hierarchy answer
-    if (parts.length < 2 || parts[0].length > 30) {
+    if (parts.length < 2 || parts[0].length > 50) {
       setExploreHistory(prev => [...prev, {
         id: Date.now().toString() + '-err',
         role: 'ai',
         text: '⚠️ I need distinct reporting levels separated by commas (e.g., "Zone, Area, Dealer" or "Category, Subcategory") to structure a Deep Dive. Please try typing just the hierarchy levels, or use the ⚡ Trend mode if you only want to analyze a single dimension!'
       }]);
-      // Leave hierarchyPending as is so they can try again
       return;
     }
 
-    const matchField = (val) => {
-      if (!val) return val;
-      const exact = globalSemanticFields.find(f => 
-        (f.rawLabel && f.rawLabel.toLowerCase() === val.toLowerCase()) || 
-        (f.value && f.value.toLowerCase() === val.toLowerCase())
-      );
-      return exact ? exact.value : val;
-    };
+    setIsThinking(true);
+    setAiThinkingLabel('Mapping your hierarchy to data fields...');
 
-    const macro_dim = matchField(parts[0]);
-    const meso_dim  = matchField(parts[1]);
-    const micro_dim = matchField(parts[2] || parts[1]); // fallback if only 2 provided
-    
+    const { dimensions, measures, model_description } = buildSemanticContext();
+
+    let macro_dim = parts[0];
+    let meso_dim  = parts[1];
+    let micro_dim = parts[2] || parts[1];
+
+    try {
+      // Ask Gemini to resolve the user's plain-English labels to exact field IDs
+      const resolveRes = await callAI({
+        query: '',
+        phase: 'hierarchy_resolve',
+        model_description,
+        dimensions,
+        measures,
+        data_table: [],
+        macro_dim: parts[0],
+        meso_dim:  parts[1],
+        micro_dim: parts[2] || parts[1],
+      });
+      const resolved = JSON.parse(resolveRes.replace(/```json/gi, '').replace(/```/g, '').trim());
+      if (resolved.macro_dim) macro_dim = resolved.macro_dim;
+      if (resolved.meso_dim)  meso_dim  = resolved.meso_dim;
+      if (resolved.micro_dim) micro_dim = resolved.micro_dim;
+    } catch (e) {
+      console.warn('Hierarchy resolve failed, using raw parts:', e);
+    } finally {
+      setIsThinking(false);
+      setAiThinkingLabel('Analyzing...');
+    }
+
     const hierarchy = { macro_dim, meso_dim, micro_dim };
     setDeepDiveHierarchy(hierarchy);
     setHierarchyPending(null);
 
     // Log to debug panel
     window.dispatchEvent(new CustomEvent('cutebi-debug', {
-      detail: { type: 'info', category: 'Deep Dive', message: `Hierarchy set: ${macro_dim} → ${meso_dim} → ${micro_dim}`, details: hierarchy }
+      detail: { type: 'info', category: 'Deep Dive', message: `Hierarchy resolved: ${macro_dim} → ${meso_dim} → ${micro_dim}`, details: hierarchy }
     }));
 
-    // Kick off the actual deep dive now that hierarchy is known
-    // (We also re-add the user bubble manually in explore logic, but since we just added it, explore text is handled)
-    executeExploreDataLogic(pendingQuery, 'explore', 'deep_dive', hierarchy, true); // true = skip user bubble
+    // Kick off the actual deep dive now that hierarchy is resolved to field IDs
+    executeExploreDataLogic(pendingQuery, 'explore', 'deep_dive', hierarchy, true);
   };
 
   // ---------------------------------------------------------------------------
