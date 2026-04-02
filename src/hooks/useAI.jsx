@@ -24,6 +24,8 @@ export const useAI = () => {
     setPendingAIAction, activePageId,
     setAiError, setIsExploreOpen, setAiMode, pendingAIAction,
     aiThinkingLabel, setAiThinkingLabel,
+    deepDiveHierarchy, setDeepDiveHierarchy,
+    hierarchyPending, setHierarchyPending,
   } = useAppState();
 
   const { globalSemanticFields, executeExploreQuery } = useDataEngine();
@@ -259,10 +261,31 @@ Return JSON format EXACTLY matching this schema:
   };
 
   // ---------------------------------------------------------------------------
+  // handleHierarchyAnswer — parses "Zone, Area, Dealer" into hierarchy object
+  // ---------------------------------------------------------------------------
+  const handleHierarchyAnswer = (answer, pendingQuery) => {
+    const parts = answer.split(/[,|\n]+/).map(p => p.trim()).filter(Boolean);
+    const macro_dim = parts[0] || 'Macro Level';
+    const meso_dim  = parts[1] || 'Meso Level';
+    const micro_dim = parts[2] || 'Micro Level';
+    const hierarchy = { macro_dim, meso_dim, micro_dim };
+    setDeepDiveHierarchy(hierarchy);
+    setHierarchyPending(null);
+
+    // Log to debug panel
+    window.dispatchEvent(new CustomEvent('cutebi-debug', {
+      detail: { type: 'info', category: 'Deep Dive', message: `Hierarchy set: ${macro_dim} → ${meso_dim} → ${micro_dim}`, details: hierarchy }
+    }));
+
+    // Kick off the actual deep dive now that hierarchy is known
+    executeExploreDataLogic(pendingQuery, 'explore', 'deep_dive', hierarchy);
+  };
+
+  // ---------------------------------------------------------------------------
   // executeExploreDataLogic — Main Explore Chat handler
   // path: "fast" | "deep_dive"
   // ---------------------------------------------------------------------------
-  const executeExploreDataLogic = async (query, mode, path = 'fast') => {
+  const executeExploreDataLogic = async (query, mode, path = 'fast', hierarchyOverride = null) => {
     if (!query.trim() || !activeDataset || isThinking) return;
 
     setIsThinking(true);
@@ -274,6 +297,22 @@ Return JSON format EXACTLY matching this schema:
     setChatInput('');
 
     const commonPayload = { model_description, dimensions, measures };
+
+    // ── COUNTER-QUESTION: ask hierarchy before deep dive ─────────────────────
+    if (path === 'deep_dive' && !hierarchyOverride && !deepDiveHierarchy) {
+      setExploreHistory([...newHistory, {
+        role: 'ai',
+        path: 'hierarchy_question',
+        text: 'To structure this analysis meaningfully, please tell me your three reporting levels from broadest to most granular — in plain business language. For example: "Zone, Area, Dealer" or "Region, District, Store" or "Division, Department, Team".',
+        pendingQuery: query,
+      }]);
+      setHierarchyPending(query);
+      setIsThinking(false);
+      return;
+    }
+
+    const hierarchy = hierarchyOverride || deepDiveHierarchy || {};
+    const { macro_dim = '', meso_dim = '', micro_dim = '' } = hierarchy;
 
     try {
       // ── Step 1: Generate SQL or get a direct answer ─────────────────────────
@@ -324,7 +363,7 @@ Return JSON format EXACTLY matching this schema:
         let micro = sessionCache.current.microInsight;
         if (!micro) {
           try {
-            micro = await callAI({ ...commonPayload, query, phase: 'micro', data_table: dataResult });
+            micro = await callAI({ ...commonPayload, query, phase: 'micro', data_table: dataResult, macro_dim, meso_dim, micro_dim });
             sessionCache.current.microInsight = micro;
           } catch (e) { micro = `[Micro analysis could not be completed: ${e.message}]`; }
         }
@@ -334,7 +373,7 @@ Return JSON format EXACTLY matching this schema:
         let meso = sessionCache.current.mesoInsight;
         if (!meso) {
           try {
-            meso = await callAI({ ...commonPayload, query, phase: 'meso', data_table: [], prior_output: micro });
+            meso = await callAI({ ...commonPayload, query, phase: 'meso', data_table: [], prior_output: micro, macro_dim, meso_dim, micro_dim });
             sessionCache.current.mesoInsight = meso;
           } catch (e) { meso = `[Meso analysis could not be completed: ${e.message}]`; }
         }
@@ -344,7 +383,7 @@ Return JSON format EXACTLY matching this schema:
         let macro = sessionCache.current.macroInsight;
         if (!macro) {
           try {
-            macro = await callAI({ ...commonPayload, query, phase: 'macro', data_table: [], prior_output: meso });
+            macro = await callAI({ ...commonPayload, query, phase: 'macro', data_table: [], prior_output: meso, macro_dim, meso_dim, micro_dim });
             sessionCache.current.macroInsight = macro;
           } catch (e) { macro = `[Macro strategy could not be completed: ${e.message}]`; }
         }
@@ -511,5 +550,6 @@ Return JSON: { "charts": [...], "new_measures": [] }`;
     handleGenerateInfographic,
     handleAskAI,
     executeExploreDataLogic,
+    handleHierarchyAnswer,
   };
 };

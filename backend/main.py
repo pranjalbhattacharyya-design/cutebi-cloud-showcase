@@ -1248,6 +1248,9 @@ class AIExploreRequest(BaseModel):
     measures: Optional[List[AIFieldMeasure]] = []
     data_table: Optional[List[Dict[str, Any]]] = []
     prior_output: Optional[str] = ""     # Phase 1 text for Meso; Phase 2 text for Macro
+    macro_dim: Optional[str] = ""        # Broadest hierarchy level (e.g. Zone, Region)
+    meso_dim: Optional[str] = ""         # Mid-tier hierarchy level (e.g. Area Office)
+    micro_dim: Optional[str] = ""        # Finest grain level (e.g. Dealer, Location)
 
 
 class AIImageRequest(BaseModel):
@@ -1299,30 +1302,70 @@ Do NOT mention JSON, databases, or technical field IDs."""
 
     if req.phase == "micro":
         meas_ctx = [{"id": m.id, "label": m.label, "aggType": m.aggType, "isTimeIntelligence": m.isTimeIntelligence} for m in req.measures]
-        return f"""{model_ctx}You are a data analyst. Analyze the following dataset at the LOWEST dimensional grain.
+        macro_dim = req.macro_dim or "Macro Level"
+        meso_dim  = req.meso_dim  or "Meso Level"
+        micro_dim = req.micro_dim or "lowest grain"
+        return f"""{model_ctx}You are a senior business analyst performing a structured deep-dive.
 
-Data: {data_snippet}
-Measure context: {meas_ctx}
+Reporting hierarchy (as defined by the user):
+- Macro Level (broadest): {macro_dim}
+- Meso Level (mid-tier): {meso_dim}
+- Micro Level (finest grain): {micro_dim}
 
-Identify: local anomalies, outliers, top/bottom performers, unusual patterns at individual row level.
-Be specific with numbers. Use aggType to frame descriptions correctly.
-Write a structured insight paragraph."""
+Data summarised by {micro_dim}:
+{data_snippet}
+
+Measures available: {meas_ctx}
+
+Write one dedicated analytical paragraph for EACH unique {micro_dim} value in the data.
+Each paragraph must:
+1. Open by naming the {micro_dim} unit, its parent {meso_dim}, and its {macro_dim}.
+2. Analyse ALL measures for that unit — volumes, ratios, and divergences between measures.
+3. Treat every value, including zero or absent measures, as a valid business signal.
+   A measure that is absent for a unit means that business event has not occurred — analyse what that implies commercially.
+4. Be specific with actual numbers from the data.
+5. Do NOT flag any value as a data quality or integrity issue.
+
+Write sequential numbered paragraphs — one per {micro_dim}. Do NOT write a single overall summary."""
 
     if req.phase == "meso":
-        return f"""Based on these micro-level insights from a business dataset analysis:
+        macro_dim = req.macro_dim or "Macro Level"
+        meso_dim  = req.meso_dim  or "Meso Level"
+        micro_dim = req.micro_dim or "lowest grain"
+        return f"""You are a senior business analyst. Below are granular findings from a micro-level analysis across individual {micro_dim} units:
 {req.prior_output}
 
-Collate these findings to identify SYSTEMIC PATTERNS and sub-group trends.
-Look for recurring themes, correlated signals, and intermediate-level performance drivers.
-Write a structured meso-level analysis paragraph."""
+Reporting hierarchy:
+- Macro Level (broadest): {macro_dim}
+- Meso Level (mid-tier): {meso_dim}
+- Micro Level (finest grain): {micro_dim}
+
+Write one dedicated analytical paragraph for EACH unique {meso_dim} value.
+Each paragraph must:
+1. Open by naming the {meso_dim} and which {macro_dim} it belongs to.
+2. Consolidate findings from all {micro_dim} units within it.
+3. Identify dominant patterns, best and worst performing {micro_dim} units, and consistent signals across the group.
+4. Do NOT flag absent or zero values as data issues — interpret them as business performance signals.
+
+Write sequential numbered paragraphs — one per {meso_dim}. Do NOT write a single overall summary."""
 
     if req.phase == "macro":
-        return f"""Based on these meso-level patterns from a business dataset analysis:
+        macro_dim = req.macro_dim or "Macro Level"
+        meso_dim  = req.meso_dim  or "Meso Level"
+        micro_dim = req.micro_dim or "lowest grain"
+        return f"""You are a senior business analyst. Below are mid-tier findings consolidated from {meso_dim} level analysis:
 {req.prior_output}
 
-Formulate 2-3 concise, actionable strategic recommendations.
-Frame them as executive-level verdicts. Be direct and specific.
-Do NOT repeat the meso analysis. Only provide forward-looking strategic guidance."""
+Reporting hierarchy:
+- Macro Level (broadest): {macro_dim}
+- Meso Level (mid-tier): {meso_dim}
+- Micro Level (finest grain): {micro_dim}
+
+Write 2-3 concise, forward-looking strategic recommendations at the {macro_dim} level.
+- Synthesise the key patterns observed across all {meso_dim} units.
+- Focus on: growth opportunities, conversion gaps, efficiency levers, and risk areas.
+- Do NOT mention data quality, data integrity, or system issues under any circumstance.
+- Do NOT repeat the meso analysis — only provide executive-level strategic guidance."""
 
     if req.phase == "infographic_data":
         return f"""You are an executive data storyteller. Based on the following business analysis:

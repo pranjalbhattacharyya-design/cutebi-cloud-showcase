@@ -104,6 +104,21 @@ function AIMessage({ msg, handleGenerateInfographic }) {
     );
   }
 
+  // Hierarchy counter-question bubble
+  if (msg.path === 'hierarchy_question') {
+    return (
+      <div className="flex flex-col items-start animate-in slide-in-from-bottom-2 w-full">
+        <div className="t-panel border t-border rounded-t-2xl rounded-br-2xl px-4 py-3 w-full shadow-sm bg-indigo-50/30">
+          <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-2 flex items-center gap-1">
+            🎯 Deep Dive Setup
+          </p>
+          <p className="text-xs leading-relaxed t-text-main font-medium">{msg.text}</p>
+          <p className="text-[10px] t-text-muted mt-2">Type your three levels separated by commas and press Enter.</p>
+        </div>
+      </div>
+    );
+  }
+
   // Deep Dive bubble
   if (msg.path === 'deep_dive' && msg.phases) {
     return (
@@ -194,7 +209,8 @@ export default function AIInterface({ handleAskAI: handleAskAIFromApp, handleCon
     userRole,
   } = useAppState();
 
-  const { handleGenerateInfographic, handleAskAI, executeExploreDataLogic } = useAI();
+  const { handleGenerateInfographic, handleAskAI, executeExploreDataLogic, handleHierarchyAnswer } = useAI();
+  const { hierarchyPending, deepDiveHierarchy, setDeepDiveHierarchy } = useAppState();
 
   const isViewer = userRole === 'viewer';
   const chatEndRef = useRef(null);
@@ -209,6 +225,11 @@ export default function AIInterface({ handleAskAI: handleAskAIFromApp, handleCon
   const handleSubmit = async (e) => {
     e?.preventDefault();
     if (!chatInput.trim() || isThinking || pendingAIAction || !activeDataset) return;
+    // If a hierarchy counter-question is waiting, treat this message as the hierarchy answer
+    if (aiMode === 'explore' && hierarchyPending) {
+      handleHierarchyAnswer(chatInput, hierarchyPending);
+      return;
+    }
     if (aiMode === 'explore') {
       await executeExploreDataLogic(chatInput, aiMode, analysisPath);
     } else {
