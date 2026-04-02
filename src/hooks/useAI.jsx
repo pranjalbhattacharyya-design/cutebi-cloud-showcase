@@ -412,6 +412,7 @@ Return JSON format EXACTLY matching this schema:
         // We ensure we send all dimensions, preflight endpoint will extract hierarchy/time vs analytical
         try {
           const preflightReq = {
+             phase: "preflight",
              dataset_id: activeDatasetId,
              micro_dim: micro_dim,
              meso_dim: meso_dim,

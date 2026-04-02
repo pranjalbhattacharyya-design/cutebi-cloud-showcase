@@ -1241,8 +1241,8 @@ class AIFieldMeasure(BaseModel):
 
 
 class AIExploreRequest(BaseModel):
-    query: str
-    phase: str                            # "sql_gen" | "fast_answer" | "micro" | "meso" | "macro" | "preflight" | "micro_slice" | "dimension_trend"
+    query: Optional[str] = ""
+    phase: Optional[str] = ""                            # "sql_gen" | "fast_answer" | "micro" | "meso" | "macro" | "preflight" | "micro_slice" | "dimension_trend"
     model_description: Optional[str] = ""
     dimensions: Optional[List[AIFieldDim]] = []
     measures: Optional[List[AIFieldMeasure]] = []
