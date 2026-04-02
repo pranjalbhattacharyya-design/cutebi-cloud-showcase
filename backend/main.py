@@ -1695,12 +1695,12 @@ async def _stream_deep_dive(req: AIExploreRequest, ds_map: dict):
             dim_filter = f" AND `{dim_id}` = '{dim_val}'"
         
         # We need CSV format
-        sql = f\"\"\"
-        SELECT `{micro_dim}`, `{meso_dim}`, `{macro_dim}`, `{time_dim}`, SUM(`{fact}`) as _val
-        FROM `{bq_ref}`
-        WHERE {filter_clause} {dim_filter}
-        GROUP BY 1, 2, 3, 4
-        \"\"\"
+        sql = (
+            f"SELECT `{micro_dim}`, `{meso_dim}`, `{macro_dim}`, `{time_dim}`, SUM(`{fact}`) as _val "
+            f"FROM `{bq_ref}` "
+            f"WHERE {filter_clause} {dim_filter} "
+            f"GROUP BY 1, 2, 3, 4"
+        )
         
         try:
             loop = asyncio.get_event_loop()
