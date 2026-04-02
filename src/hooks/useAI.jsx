@@ -322,7 +322,7 @@ Return JSON format EXACTLY matching this schema:
       if (!hasFreshCache) {
         setAiThinkingLabel('Fetching your answer...');
 
-        const sqlRes = await callAI({ ...commonPayload, query, phase: 'sql_gen', data_table: [] });
+        const sqlRes = await callAI({ ...commonPayload, query, phase: 'sql_gen', data_table: [], macro_dim, meso_dim, micro_dim });
         const parsed = JSON.parse(sqlRes.replace(/```json/gi, '').replace(/```/g, '').trim());
 
         if (parsed.action === 'answer') {

@@ -1271,12 +1271,15 @@ def _build_explore_prompt(req: AIExploreRequest) -> str:
     data_snippet = str(req.data_table)[:4000] if req.data_table else ""
 
     if req.phase == "sql_gen":
+        hierarchy_hint = ""
+        if req.macro_dim or req.meso_dim or req.micro_dim:
+            hierarchy_hint = f"\nUser's reporting hierarchy: {req.macro_dim} (broadest) → {req.meso_dim} → {req.micro_dim} (finest grain).\n"
         return f"""{model_ctx}You are a Data Analyst. The user is querying a unified semantic model.
-
-Dimensions (category fields):
+{hierarchy_hint}
+Dimensions (category fields — each has a business description):
 {dim_list}
 
-Measures (numeric fields — aggType indicates aggregation method; isTimeIntelligence=true means it is a time-period calculation):
+Measures (numeric fields — each has a business description; aggType indicates aggregation; isTimeIntelligence=true means it is a time-period calculation):
 {meas_list}
 
 User question: "{req.query}"
@@ -1287,6 +1290,14 @@ RULES:
 3. NEVER invent field IDs. Only use exact IDs provided.
 4. For time-based questions, prefer fields where isTimeIntelligence=true.
 5. Match aggType when describing results (sum=total, avg=average, count=number of).
+6. CRITICAL — READ the description of every dimension and measure before selecting.
+   Choose fields whose descriptions are semantically relevant to the user's question.
+   Do NOT exclude a field just because its name does not match a keyword in the question.
+   A question about "sales performance" must include any dimension whose description mentions
+   geography, time period, product, or organisational hierarchy — even if not explicitly named.
+7. CRITICAL — If a reporting hierarchy is provided above, ALWAYS include those dimension IDs
+   in sql_query so the data is grouped at the correct grain for downstream analysis.
+   Also always include any time dimension (e.g. FY, Month, Quarter) relevant to the question.
 
 Return JSON: {{ "action": "query"|"answer", "text": "...", "sql_query": {{ "dimensions": [], "measures": [], "filters": [] }} }}"""
 
