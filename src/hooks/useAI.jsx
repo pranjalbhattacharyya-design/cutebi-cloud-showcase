@@ -280,9 +280,18 @@ Return JSON format EXACTLY matching this schema:
       return;
     }
 
-    const macro_dim = parts[0];
-    const meso_dim  = parts[1];
-    const micro_dim = parts[2] || parts[1]; // fallback if only 2 provided
+    const matchField = (val) => {
+      if (!val) return val;
+      const exact = globalSemanticFields.find(f => 
+        (f.rawLabel && f.rawLabel.toLowerCase() === val.toLowerCase()) || 
+        (f.value && f.value.toLowerCase() === val.toLowerCase())
+      );
+      return exact ? exact.value : val;
+    };
+
+    const macro_dim = matchField(parts[0]);
+    const meso_dim  = matchField(parts[1]);
+    const micro_dim = matchField(parts[2] || parts[1]); // fallback if only 2 provided
     
     const hierarchy = { macro_dim, meso_dim, micro_dim };
     setDeepDiveHierarchy(hierarchy);
