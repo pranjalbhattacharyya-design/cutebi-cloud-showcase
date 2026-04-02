@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useAppState } from '../../contexts/AppStateContext';
 import { useAI } from '../../hooks/useAI';
+import { useDataEngine } from '../../hooks/useDataEngine';
 import ChartWidget from '../dashboard/ChartWidget';
 import InfographicCanvas from './InfographicCanvas';
 import PreflightCard from '../PreflightCard';
@@ -173,6 +174,7 @@ function AIMessage({ msg, handleGenerateInfographic, handleDeepDiveExecute, hand
            <PreflightCard 
              preflightData={msg.preflightData} 
              datasetId={msg.datasetId}
+             cteSql={msg.cteSql || ''}
              onConfirm={(scope) => handleDeepDiveExecute(scope, msg.userQuery)} 
            />
         </div>
@@ -308,6 +310,7 @@ export default function AIInterface({ handleAskAI: handleAskAIFromApp, handleCon
 
   const { handleGenerateInfographic, handleAskAI, executeExploreDataLogic, handleHierarchyAnswer, handleDeepDiveExecute, handleTrendExecute } = useAI();
   const { hierarchyPending, deepDiveHierarchy, setDeepDiveHierarchy } = useAppState();
+  const { generateUnifiedCTE } = useDataEngine();
 
   const isViewer = userRole === 'viewer';
   const chatEndRef = useRef(null);

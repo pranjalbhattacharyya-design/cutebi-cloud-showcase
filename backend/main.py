@@ -1653,8 +1653,12 @@ async def deep_dive_preflight(req: AIExploreRequest, db: Session = Depends(datab
     # Base counts for hierarchy
     selections = []
     if micro_dim: selections.append(f"COUNT(DISTINCT `{micro_dim}`) AS _micro_count")
-    if meso_dim:  selections.append(f"COUNT(DISTINCT `{meso_dim}`) AS _meso_count")
-    if macro_dim: selections.append(f"COUNT(DISTINCT `{macro_dim}`) AS _macro_count")
+    if meso_dim:
+        selections.append(f"COUNT(DISTINCT `{meso_dim}`) AS _meso_count")
+        selections.append(f"ARRAY_AGG(DISTINCT `{meso_dim}` IGNORE NULLS ORDER BY `{meso_dim}` LIMIT 200) AS _area_values")
+    if macro_dim:
+        selections.append(f"COUNT(DISTINCT `{macro_dim}`) AS _macro_count")
+        selections.append(f"ARRAY_AGG(DISTINCT `{macro_dim}` IGNORE NULLS ORDER BY `{macro_dim}`) AS _zone_values")
     
     # Time dimension values
     time_dim = ""
@@ -1700,6 +1704,11 @@ async def deep_dive_preflight(req: AIExploreRequest, db: Session = Depends(datab
             "location_count": row.get("_micro_count", 0),
             "area_count": row.get("_meso_count", 0),
             "zone_count": row.get("_macro_count", 0),
+            "zone_values": list(row.get("_zone_values", []) or []),
+            "area_values": list(row.get("_area_values", []) or []),
+            "macro_dim": macro_dim,
+            "meso_dim": meso_dim,
+            "micro_dim": micro_dim,
             "time_dim": time_dim,
             "time_count": row.get("_time_count", 0),
             "time_values": row.get("_time_values", []),
@@ -1729,20 +1738,41 @@ async def deep_dive_preflight_filter(req: AIExploreRequest, db: Session = Depend
     all_ds = db.query(models.Dataset).all()
     ds_map = { ds.id: ds.file_path for ds in all_ds if ds.file_path and not ds.file_path.startswith("http") }
     bq_ref = ds_map.get(req.dataset_id, req.dataset_id)
-    
-    sql = f"SELECT COUNT(DISTINCT `{req.micro_dim}`) as count FROM `{bq_ref}` WHERE 1=1 "
+
+    # Expand CTE table names to full BQ paths if provided
+    def expand_names(sql: str) -> str:
+        for tname, full_ref in ds_map.items():
+            sql = sql.replace(f"FROM `{tname}`", f"FROM `{full_ref}` AS `{tname}`")
+            sql = sql.replace(f"JOIN `{tname}`",  f"JOIN `{full_ref}` AS `{tname}`")
+        return sql
+
+    if req.cte_sql and req.cte_sql.strip():
+        expanded_cte = expand_names(req.cte_sql.strip()) + " "
+        source = "ds_unified"
+    else:
+        expanded_cte = ""
+        source = f"`{bq_ref}`"
+
+    where = "1=1"
     if req.geo_filter_zones and req.macro_dim:
         z_str = ", ".join([f"'{z}'" for z in req.geo_filter_zones])
-        sql += f" AND `{req.macro_dim}` IN ({z_str})"
+        where += f" AND `{req.macro_dim}` IN ({z_str})"
     if req.geo_filter_areas and req.meso_dim:
         a_str = ", ".join([f"'{a}'" for a in req.geo_filter_areas])
-        sql += f" AND `{req.meso_dim}` IN ({a_str})"
-        
+        where += f" AND `{req.meso_dim}` IN ({a_str})"
+
+    area_agg = f", ARRAY_AGG(DISTINCT `{req.meso_dim}` IGNORE NULLS ORDER BY `{req.meso_dim}` LIMIT 200) AS _area_values" if req.meso_dim else ""
+    sql = f"{expanded_cte}SELECT COUNT(DISTINCT `{req.micro_dim}`) as count{area_agg} FROM `{source}` WHERE {where}"
+
     try:
         row = list(bq_client.query(sql).result())[0]
-        return {"location_count": row.get("count", 0)}
+        result = {"location_count": row.get("count", 0)}
+        if req.meso_dim:
+            result["area_values"] = list(row.get("_area_values", []) or [])
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 async def _stream_deep_dive(req: AIExploreRequest, ds_map: dict):
     bq_ref = ds_map.get(req.dataset_id, req.dataset_id)

@@ -457,6 +457,7 @@ Return JSON format EXACTLY matching this schema:
              path: 'preflight_card',
              preflightData: preflightResult,
              datasetId: activeDatasetId,
+             cteSql: preflightReq.cte_sql,
              userQuery: query,
              hierarchy: hierarchy
           }]);
