@@ -1588,22 +1588,36 @@ async def deep_dive_preflight(req: AIExploreRequest, db: Session = Depends(datab
     # ── Step 0: Fetch actual column names (works for tables AND views) ──────────
     # If the frontend sent a CTE SQL, use it as the query source (gives us the
     # fully joined schema). Otherwise fall back to querying bq_ref directly.
+    # IMPORTANT: The CTE uses short table names (e.g. `Calender`) — expand them
+    # to fully qualified BQ paths (e.g. `project.dataset.Calender` AS `Calender`)
+    # using the same transformation the /api/query/batch endpoint applies.
     real_columns: list[str] = []
     query_source = bq_ref  # default: raw fact table
+
+    def expand_cte_table_names(sql: str) -> str:
+        """Replace `TableName` with `full.bq.path` AS `TableName` using ds_map."""
+        expanded = sql
+        for tname, full_ref in ds_map.items():
+            expanded = expanded.replace(f"FROM `{tname}`", f"FROM `{full_ref}` AS `{tname}`")
+            expanded = expanded.replace(f"JOIN `{tname}`",  f"JOIN `{full_ref}` AS `{tname}`")
+        return expanded
+
     try:
         if req.cte_sql and req.cte_sql.strip():
-            # CTE SQL looks like: "WITH ds_unified AS (...) "
-            # Wrap it with a schema-only query
-            schema_sql = req.cte_sql.strip() + "SELECT * FROM `ds_unified` LIMIT 0"
+            # Expand table names to full BQ paths, then probe schema via LIMIT 0
+            expanded_cte = expand_cte_table_names(req.cte_sql.strip())
+            schema_sql = expanded_cte + " SELECT * FROM `ds_unified` LIMIT 0"
             query_source = "ds_unified"  # queries will use the CTE name
         else:
             schema_sql = f"SELECT * FROM `{bq_ref}` LIMIT 0"
+            expanded_cte = ""
         schema_job = bq_client.query(schema_sql)
         schema_result = schema_job.result()
         real_columns = [field.name for field in schema_result.schema]
         print(f"[Preflight] Schema fetched ({len(real_columns)} cols) from {'CTE' if req.cte_sql else bq_ref}")
     except Exception as e:
         print(f"[Preflight] Schema fetch failed (non-fatal): {e}")
+        expanded_cte = ""
 
 
     def snap_to_real(candidate: str) -> str:
@@ -1675,7 +1689,7 @@ async def deep_dive_preflight(req: AIExploreRequest, db: Session = Depends(datab
     if not selections:
         return {"error": "No valid dimensions found to query."}
 
-    cte_prefix = (req.cte_sql.strip() + " ") if req.cte_sql and req.cte_sql.strip() else ""
+    cte_prefix = (expanded_cte + " ") if expanded_cte else ""
     sql = f"{cte_prefix}SELECT {', '.join(selections)} FROM `{query_source}`"
 
     try:
