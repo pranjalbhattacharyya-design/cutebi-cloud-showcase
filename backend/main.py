@@ -1333,8 +1333,8 @@ CRITICAL INSTRUCTION: Do NOT invent, hallucinate, or calculate new numbers. ONLY
 
 RULES:
 - headline: max 10 words, punchy executive summary
-- findings: exactly 3 KPI tiles with real numbers from the analysis
-- value: formatted number with unit (e.g. '₹4.2Cr', '1,234 units', '87%') or a short wording if no number exists
+- findings: exactly 3 KPI tiles highlighting key insights from the analysis
+- value: IF a number is present in the text, use it. IF NO NUMBERS EXIST, you MUST use a short qualitative descriptor (e.g. 'Critical', 'At Risk', 'High Priority', 'Stable'). NEVER invent numbers.
 - trend: 'up', 'down', or 'neutral' based on context
 - delta: short change label like '+12%' or '-8%' or leave empty if not applicable
 - bullets: exactly 3 key findings, max 15 words each, specific and data-driven

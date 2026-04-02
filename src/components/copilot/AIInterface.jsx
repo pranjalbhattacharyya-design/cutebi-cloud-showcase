@@ -103,7 +103,7 @@ function AIMessage({ msg, handleGenerateInfographic }) {
               {copied ? <Check size={10} /> : <Copy size={10} />} {copied ? 'Copied' : 'Copy'}
             </button>
             <button
-              onClick={() => handleGenerateInfographic(fullAnalysisText, msg.userQuery)}
+              onClick={() => handleGenerateInfographic(summaryText, msg.userQuery)}
               className="flex-1 flex items-center justify-center gap-1 text-[10px] font-bold text-indigo-500 hover:text-indigo-400 t-button py-1.5 rounded-md transition-colors"
             >
               <ImageIcon size={10} /> Generate Infographic
