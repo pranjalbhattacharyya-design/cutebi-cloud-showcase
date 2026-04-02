@@ -444,8 +444,8 @@ Return JSON format EXACTLY matching this schema:
              micro_dim: micro_dim,
              meso_dim: meso_dim,
              macro_dim: macro_dim,
-             dimensions: dimensions.filter(d => (sessionCache.current.preflightDims || []).includes(d.id)),
-             measures: measures.filter(m => (sessionCache.current.preflightFacts || []).includes(m.id)),
+             dimensions: dimensions,   // send ALL dims — backend separates hierarchy vs analytical
+             measures: measures,        // send ALL measures — backend returns them as selectable facts
              query: query,
              cte_sql: generateUnifiedCTE ? generateUnifiedCTE() : ''
           };
