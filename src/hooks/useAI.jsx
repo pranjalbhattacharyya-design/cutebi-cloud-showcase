@@ -92,7 +92,9 @@ Return JSON format EXACTLY matching this schema:
       const clean = text.replace(/```json/gi, '').replace(/```/g, '').trim();
       const aiData = JSON.parse(clean);
       
-      console.log("AI RETURNED THIS EXACT DATA:", aiData);
+      window.dispatchEvent(new CustomEvent('cutebi-debug', { 
+         detail: { type: 'info', category: 'Auto-Fill', message: `Parsed JSON from Gemini API:`, details: aiData } 
+      }));
       
       setDatasets(prev => prev.map(d => d.id === activeDatasetId ? { ...d, description: aiData.tableDescription } : d));
       setSemanticModels(prev => {
