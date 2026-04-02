@@ -96,8 +96,14 @@ Return JSON format EXACTLY matching this schema:
         const next = { ...prev };
         const model = next[activeDatasetId] || [];
         next[activeDatasetId] = model.map(field => {
-          const aiMatch = aiData.columns?.find(c => c.id === field.id || c.id === field.originalId);
-          if (aiMatch) return { ...field, description: aiMatch.description };
+          const aiMatch = aiData.columns?.find(c => {
+             if (!c || !c.id) return false;
+             const cid = String(c.id).trim().toLowerCase();
+             const fid = field.id ? String(field.id).trim().toLowerCase() : '';
+             const oId = field.originalId ? String(field.originalId).trim().toLowerCase() : '';
+             return cid === fid || cid === oId;
+          });
+          if (aiMatch && aiMatch.description) return { ...field, description: aiMatch.description };
           return field;
         });
         return syncSemanticModels(next, relationships);
