@@ -497,6 +497,7 @@ export const useDataEngine = () => {
     getTableData,
     getScatterData,
     executeExploreQuery: async (dsId, dims, meass, filts) => await queryDuckDB(generateSQL(dsId, dims, meass, filts)),
+    generateUnifiedCTE,
     datesReady
   };
 };

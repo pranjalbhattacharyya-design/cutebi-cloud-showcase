@@ -28,7 +28,7 @@ export const useAI = () => {
     hierarchyPending, setHierarchyPending,
   } = useAppState();
 
-  const { globalSemanticFields, executeExploreQuery } = useDataEngine();
+  const { globalSemanticFields, executeExploreQuery, generateUnifiedCTE } = useDataEngine();
 
   // Per-conversation session cache (resets on page refresh)
   const sessionCache = useRef({
@@ -446,7 +446,8 @@ Return JSON format EXACTLY matching this schema:
              macro_dim: macro_dim,
              dimensions: dimensions.filter(d => (sessionCache.current.preflightDims || []).includes(d.id)),
              measures: measures.filter(m => (sessionCache.current.preflightFacts || []).includes(m.id)),
-             query: query
+             query: query,
+             cte_sql: generateUnifiedCTE ? generateUnifiedCTE() : ''
           };
           
           const preflightResult = await apiClient.aiDeepDivePreflight(preflightReq);

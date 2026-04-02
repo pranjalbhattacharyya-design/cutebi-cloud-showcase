@@ -1260,6 +1260,7 @@ class AIExploreRequest(BaseModel):
     trend_dim: Optional[str] = ""
     trend_time_grain: Optional[str] = ""
     dataset_id: Optional[str] = ""
+    cte_sql: Optional[str] = ""  # Unified CTE SQL from the frontend join engine
 class AIImageRequest(BaseModel):
     verdict_text: str
 
@@ -1585,15 +1586,22 @@ async def deep_dive_preflight(req: AIExploreRequest, db: Session = Depends(datab
     bq_ref = ds_map.get(req.dataset_id, req.dataset_id)
 
     # ── Step 0: Fetch actual column names (works for tables AND views) ──────────
-    # INFORMATION_SCHEMA only covers base tables. For BQ views (like our unified
-    # semantic CTE view) we use SELECT * LIMIT 0 — the schema comes from the
-    # query result object, no rows are scanned.
+    # If the frontend sent a CTE SQL, use it as the query source (gives us the
+    # fully joined schema). Otherwise fall back to querying bq_ref directly.
     real_columns: list[str] = []
+    query_source = bq_ref  # default: raw fact table
     try:
-        schema_job = bq_client.query(f"SELECT * FROM `{bq_ref}` LIMIT 0")
+        if req.cte_sql and req.cte_sql.strip():
+            # CTE SQL looks like: "WITH ds_unified AS (...) "
+            # Wrap it with a schema-only query
+            schema_sql = req.cte_sql.strip() + "SELECT * FROM `ds_unified` LIMIT 0"
+            query_source = "ds_unified"  # queries will use the CTE name
+        else:
+            schema_sql = f"SELECT * FROM `{bq_ref}` LIMIT 0"
+        schema_job = bq_client.query(schema_sql)
         schema_result = schema_job.result()
         real_columns = [field.name for field in schema_result.schema]
-        print(f"[Preflight] Real BQ columns ({len(real_columns)}): {real_columns[:20]}...")
+        print(f"[Preflight] Schema fetched ({len(real_columns)} cols) from {'CTE' if req.cte_sql else bq_ref}")
     except Exception as e:
         print(f"[Preflight] Schema fetch failed (non-fatal): {e}")
 
@@ -1667,7 +1675,8 @@ async def deep_dive_preflight(req: AIExploreRequest, db: Session = Depends(datab
     if not selections:
         return {"error": "No valid dimensions found to query."}
 
-    sql = f"SELECT {', '.join(selections)} FROM `{bq_ref}`"
+    cte_prefix = (req.cte_sql.strip() + " ") if req.cte_sql and req.cte_sql.strip() else ""
+    sql = f"{cte_prefix}SELECT {', '.join(selections)} FROM `{query_source}`"
 
     try:
         job = bq_client.query(sql)
