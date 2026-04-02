@@ -1,10 +1,9 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 
 // ---------------------------------------------------------------------------
-// InfographicCanvas — renders a premium executive summary slide on HTML5 Canvas.
+// InfographicCanvas — renders a premium, professional corporate slide on HTML5 Canvas.
 // Input:  data = { headline, findings[{label,value,trend,delta}], bullets[], recommendation }
 // Output: a downloadable PNG via the exposed `download()` method.
-// Cost:   ₹0 — no Imagen API call needed.
 // ---------------------------------------------------------------------------
 
 const W = 900;
@@ -18,7 +17,7 @@ const InfographicCanvas = forwardRef(function InfographicCanvas({ data }, ref) {
       const canvas = canvasRef.current;
       if (!canvas) return;
       const link = document.createElement('a');
-      link.download = 'cutebi-insight.png';
+      link.download = `cutebi-insight-${Date.now()}.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
     },
@@ -33,7 +32,7 @@ const InfographicCanvas = forwardRef(function InfographicCanvas({ data }, ref) {
       ref={canvasRef}
       width={W}
       height={H}
-      style={{ width: '100%', borderRadius: '12px', display: 'block' }}
+      style={{ width: '100%', borderRadius: '12px', display: 'block', border: '1px solid #e2e8f0' }}
     />
   );
 });
@@ -54,14 +53,40 @@ function rr(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-function trunc(s = '', max = 80) {
-  return s.length > max ? s.slice(0, max - 1) + '…' : s;
+function wrapText(ctx, text, x, y, maxWidth, lineHeight, maxLines = 1) {
+  const words = (text || '').toString().split(/\s+/);
+  let line = '';
+  let currentY = y;
+  let linesDrawn = 0;
+
+  for (let n = 0; n < words.length; n++) {
+    const testLine = line + words[n] + ' ';
+    const metrics = ctx.measureText(testLine);
+    const testWidth = metrics.width;
+    
+    if (testWidth > maxWidth && n > 0) {
+      if (linesDrawn === maxLines - 1) {
+        ctx.fillText(line.trim() + '…', x, currentY);
+        return;
+      } else {
+        ctx.fillText(line, x, currentY);
+        line = words[n] + ' ';
+        currentY += lineHeight;
+        linesDrawn++;
+      }
+    } else {
+      line = testLine;
+    }
+  }
+  if (linesDrawn < maxLines) {
+    ctx.fillText(line, x, currentY);
+  }
 }
 
 function trendColor(t) {
-  if (t === 'up')   return '#10b981';
-  if (t === 'down') return '#f43f5e';
-  return '#94a3b8';
+  if (t === 'up')   return '#059669'; // Corporate Green
+  if (t === 'down') return '#dc2626'; // Corporate Red
+  return '#64748b'; // Neutral Slate
 }
 function trendIcon(t) {
   if (t === 'up')   return '▲';
@@ -70,155 +95,127 @@ function trendIcon(t) {
 }
 
 // ---------------------------------------------------------------------------
-// Main draw function
+// Main draw function (Corporate White Theme)
 // ---------------------------------------------------------------------------
 function drawInfographic(canvas, data) {
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, W, H);
 
-  // ── Background ────────────────────────────────────────────────────────────
-  const bg = ctx.createLinearGradient(0, 0, W, H);
-  bg.addColorStop(0, '#0b0f1e');
-  bg.addColorStop(1, '#131929');
-  ctx.fillStyle = bg;
+  // 1. Background
+  ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, W, H);
 
-  // Subtle dot grid
-  ctx.fillStyle = 'rgba(255,255,255,0.025)';
-  for (let x = 20; x < W; x += 36)
-    for (let y = 20; y < H; y += 36) {
-      ctx.beginPath(); ctx.arc(x, y, 1.2, 0, Math.PI * 2); ctx.fill();
-    }
+  // 2. Top accent bar
+  ctx.fillStyle = '#0f172a'; // Navy blue
+  ctx.fillRect(0, 0, W, 6);
 
-  // ── Left accent stripe ────────────────────────────────────────────────────
-  const stripe = ctx.createLinearGradient(0, 0, 0, H);
-  stripe.addColorStop(0,   '#7c3aed');
-  stripe.addColorStop(0.5, '#db2777');
-  stripe.addColorStop(1,   '#f59e0b');
-  ctx.fillStyle = stripe;
-  ctx.fillRect(0, 0, 5, H);
+  // 3. Header Area
+  ctx.fillStyle = '#f8fafc';
+  rr(ctx, 32, 32, W - 64, 88, 8); ctx.fill();
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.stroke();
 
-  // ── Header panel ─────────────────────────────────────────────────────────
-  ctx.fillStyle = 'rgba(255,255,255,0.04)';
-  rr(ctx, 18, 18, W - 36, 86, 10); ctx.fill();
-
-  // CuteBI badge
-  const badgeGrad = ctx.createLinearGradient(32, 34, 110, 34);
-  badgeGrad.addColorStop(0, '#7c3aed');
-  badgeGrad.addColorStop(1, '#db2777');
-  ctx.fillStyle = badgeGrad;
-  rr(ctx, 32, 33, 88, 22, 5); ctx.fill();
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 11px -apple-system, Inter, sans-serif';
+  ctx.fillStyle = '#64748b';
+  ctx.font = '600 11px -apple-system, Inter, sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillText('✦  CuteBI AI', 40, 48);
+  ctx.fillText('EXECUTIVE INSIGHT SUMMARY', 54, 56);
 
-  // Label
-  ctx.fillStyle = 'rgba(148,163,184,0.7)';
-  ctx.font = '11px -apple-system, Inter, sans-serif';
-  ctx.textAlign = 'right';
-  ctx.fillText('EXECUTIVE INSIGHT SUMMARY', W - 32, 48);
-
-  // Headline
-  ctx.fillStyle = '#f1f5f9';
+  ctx.fillStyle = '#0f172a';
   ctx.font = 'bold 24px -apple-system, Inter, sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText(trunc(data.headline || 'AI Insight Summary', 72), 32, 88);
+  wrapText(ctx, data.headline || 'Analysis Summary', 54, 88, W - 120, 32, 1);
 
-  // ── KPI Tiles ─────────────────────────────────────────────────────────────
+  // CuteBI Badge Top Right
+  ctx.fillStyle = '#f1f5f9';
+  rr(ctx, W - 100, 52, 54, 22, 11); ctx.fill();
+  ctx.fillStyle = '#0284c7';
+  ctx.font = 'bold 11px -apple-system, Inter, sans-serif';
+  ctx.fillText('CuteBI', W - 88, 67);
+
+  // 4. KPI Tiles (Dynamic Wrapping + Real Data)
   const findings = (data.findings || []).slice(0, 3);
-  const tileW    = Math.floor((W - 50) / 3) - 8;
-  const tileX0   = 18;
-  const tileY    = 122;
+  const tileW = Math.floor((W - 100) / 3);
+  const tileX0 = 36;
+  const tileY = 144;
 
   findings.forEach((f, i) => {
-    const tx = tileX0 + i * (tileW + 9);
+    const tx = tileX0 + i * (tileW + 14);
+    
+    // Tile Base
+    ctx.fillStyle = '#ffffff';
+    rr(ctx, tx, tileY, tileW, 140, 6); ctx.fill();
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.stroke();
+    
+    // Top Color Bar
     const tc = trendColor(f.trend);
-
-    // Tile bg
-    ctx.fillStyle = 'rgba(255,255,255,0.055)';
-    rr(ctx, tx, tileY, tileW, 118, 8); ctx.fill();
-
-    // Top accent filled line
     ctx.fillStyle = tc;
-    ctx.fillRect(tx + 12, tileY + 10, 28, 3);
+    ctx.fillRect(tx, tileY, tileW, 4);
 
-    // Trend badge
-    ctx.fillStyle = tc + '22';
-    rr(ctx, tx + 12, tileY + 20, 64, 20, 4); ctx.fill();
+    // Trend Badge
+    ctx.fillStyle = tc + '1A'; // 10% opacity
+    rr(ctx, tx + 16, tileY + 20, Math.max(60, ctx.measureText(f.delta || '').width + 28), 24, 4); ctx.fill();
     ctx.fillStyle = tc;
-    ctx.font = 'bold 11px -apple-system, Inter, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(trendIcon(f.trend) + ' ' + trunc(f.delta || '—', 8), tx + 18, tileY + 34);
+    ctx.font = 'bold 12px -apple-system, Inter, sans-serif';
+    ctx.fillText(trendIcon(f.trend) + ' ' + (f.delta || '—'), tx + 24, tileY + 36);
 
-    // Value
-    ctx.fillStyle = '#f8fafc';
-    ctx.font = 'bold 26px -apple-system, Inter, sans-serif';
-    ctx.fillText(trunc(f.value || '—', 12), tx + 12, tileY + 76);
+    // Value (allows very long strings to be truncated safely)
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 30px -apple-system, Inter, sans-serif';
+    wrapText(ctx, f.value || '—', tx + 16, tileY + 84, tileW - 32, 34, 1);
 
-    // Label
-    ctx.fillStyle = '#64748b';
-    ctx.font = '12px -apple-system, Inter, sans-serif';
-    ctx.fillText(trunc(f.label || '', 22), tx + 12, tileY + 100);
+    // Label (supports 2 lines for longer text)
+    ctx.fillStyle = '#475569';
+    ctx.font = '500 13px -apple-system, Inter, sans-serif';
+    wrapText(ctx, f.label || '', tx + 16, tileY + 112, tileW - 32, 18, 2);
   });
 
-  // ── Key Findings ─────────────────────────────────────────────────────────
-  const sectY = tileY + 130;
-  ctx.fillStyle = 'rgba(255,255,255,0.035)';
-  rr(ctx, 18, sectY, W - 36, 130, 8); ctx.fill();
+  // 5. Key Findings
+  const sectY = tileY + 164;
+  ctx.fillStyle = '#f8fafc';
+  rr(ctx, 36, sectY, W - 72, 116, 6); ctx.fill();
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.stroke();
 
-  ctx.fillStyle = 'rgba(148,163,184,0.6)';
-  ctx.font = 'bold 10px -apple-system, Inter, sans-serif';
-  ctx.letterSpacing = '2px';
-  ctx.textAlign = 'left';
-  ctx.fillText('KEY FINDINGS', 32, sectY + 22);
+  ctx.fillStyle = '#475569';
+  ctx.font = 'bold 11px -apple-system, Inter, sans-serif';
+  ctx.letterSpacing = '1.5px';
+  ctx.fillText('KEY FINDINGS', 56, sectY + 28);
   ctx.letterSpacing = '0px';
 
   const bullets = (data.bullets || []).slice(0, 3);
   bullets.forEach((b, i) => {
-    const by = sectY + 46 + i * 28;
-    // Bullet dot
-    const dotGrad = ctx.createRadialGradient(36, by - 3, 0, 36, by - 3, 5);
-    dotGrad.addColorStop(0, '#a855f7');
-    dotGrad.addColorStop(1, '#7c3aed');
-    ctx.fillStyle = dotGrad;
-    ctx.beginPath(); ctx.arc(36, by - 3, 4, 0, Math.PI * 2); ctx.fill();
+    const by = sectY + 54 + i * 26;
+    // Blue dot
+    ctx.fillStyle = '#0284c7'; // Corporate blue
+    ctx.beginPath(); ctx.arc(56, by - 4, 3.5, 0, Math.PI * 2); ctx.fill();
 
-    ctx.fillStyle = '#cbd5e1';
-    ctx.font = '13px -apple-system, Inter, sans-serif';
-    ctx.fillText(trunc(b, 102), 50, by);
+    ctx.fillStyle = '#334155';
+    ctx.font = '14px -apple-system, Inter, sans-serif';
+    wrapText(ctx, b, 70, by, W - 140, 20, 1);
   });
 
-  // ── Recommendation ────────────────────────────────────────────────────────
-  const recY = sectY + 140;
-  const recGrad = ctx.createLinearGradient(18, recY, W - 18, recY);
-  recGrad.addColorStop(0, 'rgba(124,58,237,0.35)');
-  recGrad.addColorStop(1, 'rgba(219,39,119,0.22)');
-  ctx.fillStyle = recGrad;
-  rr(ctx, 18, recY, W - 36, 52, 8); ctx.fill();
+  // 6. Strategic Recommendation Box
+  const recY = sectY + 136;
+  ctx.fillStyle = '#f0f9ff'; // Very light blue
+  rr(ctx, 36, recY, W - 72, 54, 6); ctx.fill();
+  ctx.strokeStyle = '#bae6fd'; // Light blue border
+  ctx.stroke();
 
-  // Thin top border
-  ctx.strokeStyle = 'rgba(168,85,247,0.5)';
-  ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(18 + 8, recY); ctx.lineTo(W - 18 - 8, recY); ctx.stroke();
+  ctx.fillStyle = '#0f172a';
+  ctx.font = 'bold 14px -apple-system, Inter, sans-serif';
+  ctx.fillText('Strategic Action:', 56, recY + 32);
+  
+  ctx.fillStyle = '#0369a1'; // Deeper blue text
+  ctx.font = '500 14px -apple-system, Inter, sans-serif';
+  wrapText(ctx, data.recommendation || 'No recommendation.', 184, recY + 32, W - 240, 20, 1);
 
-  ctx.fillStyle = '#e2e8f0';
-  ctx.font = 'bold 13px -apple-system, Inter, sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText('⚡ ' + trunc(data.recommendation || 'No recommendation.', 105), 32, recY + 22);
-
-  ctx.fillStyle = 'rgba(148,163,184,0.4)';
-  ctx.font = '11px -apple-system, Inter, sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText('Strategic Action', 32, recY + 40);
-
-  // ── Footer ────────────────────────────────────────────────────────────────
-  ctx.fillStyle = 'rgba(255,255,255,0.15)';
-  ctx.font = '10px monospace';
+  // 7. Footer
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '500 11px -apple-system, Inter, sans-serif';
   ctx.textAlign = 'right';
   const now = new Date();
   ctx.fillText(
     `Generated by CuteBI AI · ${now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`,
-    W - 22, H - 10
+    W - 36, H - 18
   );
 }

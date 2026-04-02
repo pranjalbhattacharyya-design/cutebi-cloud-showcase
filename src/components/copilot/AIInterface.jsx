@@ -36,7 +36,16 @@ function PhaseAccordion({ label, icon, content, defaultOpen = false }) {
 // AI Message Bubble
 // ---------------------------------------------------------------------------
 function AIMessage({ msg, handleGenerateInfographic }) {
-  const copyToClipboard = (text) => { navigator.clipboard.writeText(text); };
+  const [copied, setCopied] = useState(false);
+  const copyToClipboard = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Copy failed', err);
+    }
+  };
 
   // Infographic result bubble (Canvas-rendered, zero Imagen cost)
   if (msg.isInfographic) {
@@ -70,6 +79,8 @@ function AIMessage({ msg, handleGenerateInfographic }) {
   // Deep Dive bubble
   if (msg.path === 'deep_dive' && msg.phases) {
     const summaryText = msg.phases.macro || msg.phases.meso || msg.phases.micro || '';
+    const fullAnalysisText = [msg.phases.micro, msg.phases.meso, msg.phases.macro].filter(Boolean).join('\n\n');
+    
     return (
       <div className="flex flex-col items-start animate-in slide-in-from-bottom-2 w-full">
         {msg.isPartial && (
@@ -89,10 +100,10 @@ function AIMessage({ msg, handleGenerateInfographic }) {
               onClick={() => copyToClipboard(summaryText)}
               className="flex-1 flex items-center justify-center gap-1 text-[10px] font-bold t-text-muted hover:t-text-main t-button py-1.5 rounded-md transition-colors"
             >
-              <Copy size={10} /> Copy
+              {copied ? <Check size={10} /> : <Copy size={10} />} {copied ? 'Copied' : 'Copy'}
             </button>
             <button
-              onClick={() => handleGenerateInfographic(summaryText, msg.userQuery)}
+              onClick={() => handleGenerateInfographic(fullAnalysisText, msg.userQuery)}
               className="flex-1 flex items-center justify-center gap-1 text-[10px] font-bold text-indigo-500 hover:text-indigo-400 t-button py-1.5 rounded-md transition-colors"
             >
               <ImageIcon size={10} /> Generate Infographic
@@ -118,7 +129,7 @@ function AIMessage({ msg, handleGenerateInfographic }) {
               onClick={() => copyToClipboard(msg.text)}
               className="flex items-center gap-1 text-[10px] font-bold t-text-muted hover:t-text-main transition-colors"
             >
-              <Copy size={10} /> Copy
+              {copied ? <Check size={10} /> : <Copy size={10} />} {copied ? 'Copied' : 'Copy'}
             </button>
             <button
               onClick={() => handleGenerateInfographic(msg.text, msg.userQuery)}

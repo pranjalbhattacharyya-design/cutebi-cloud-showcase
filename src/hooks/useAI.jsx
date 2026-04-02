@@ -216,7 +216,7 @@ Return JSON format EXACTLY matching this schema:
         dimensions:     [],
         measures:       [],
         data_table:     [],
-        prior_output:   String(text).substring(0, 1200),
+        prior_output:   String(text).substring(0, 3000),
       });
 
       const infographicData = JSON.parse(

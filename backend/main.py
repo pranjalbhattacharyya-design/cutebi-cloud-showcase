@@ -1329,11 +1329,12 @@ Do NOT repeat the meso analysis. Only provide forward-looking strategic guidance
 {req.prior_output}
 
 Extract the 3 most important business metrics and insights for an executive infographic.
+CRITICAL INSTRUCTION: Do NOT invent, hallucinate, or calculate new numbers. ONLY use metrics that actually appear in the text above. If no exact numbers exist in the text, use qualitative descriptors like "High", "Low", or "Increased" instead of imaginary data.
 
 RULES:
 - headline: max 10 words, punchy executive summary
 - findings: exactly 3 KPI tiles with real numbers from the analysis
-- value: formatted number with unit (e.g. '₹4.2Cr', '1,234 units', '87%')
+- value: formatted number with unit (e.g. '₹4.2Cr', '1,234 units', '87%') or a short wording if no number exists
 - trend: 'up', 'down', or 'neutral' based on context
 - delta: short change label like '+12%' or '-8%' or leave empty if not applicable
 - bullets: exactly 3 key findings, max 15 words each, specific and data-driven
