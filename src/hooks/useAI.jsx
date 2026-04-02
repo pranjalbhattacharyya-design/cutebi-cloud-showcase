@@ -102,10 +102,13 @@ Return JSON format EXACTLY matching this schema:
         Object.keys(next).forEach(dsId => {
           next[dsId] = next[dsId].map(field => {
             const aiMatch = aiData.columns?.find(c => {
-               const cid = c.id?.trim().toLowerCase();
-               return cid === field.id?.trim().toLowerCase() ||
-                      cid === field.originalId?.trim().toLowerCase() ||
-                      cid === field.label?.trim().toLowerCase();
+               if (!c.id) return false;
+               const cid = String(c.id).trim().toLowerCase();
+               const fid = field.id ? String(field.id).trim().toLowerCase() : '';
+               const fOrigId = field.originalId ? String(field.originalId).trim().toLowerCase() : '';
+               const fLabel = field.label ? String(field.label).trim().toLowerCase() : '';
+               
+               return cid === fid || cid === fOrigId || cid === fLabel;
             });
             if (aiMatch && aiMatch.description) {
                return { ...field, description: aiMatch.description };
