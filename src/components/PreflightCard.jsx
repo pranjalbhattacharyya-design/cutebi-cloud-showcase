@@ -33,6 +33,18 @@ const PreflightCard = ({ preflightData, onConfirm, datasetId, cteSql }) => {
     setRecalcDirty(true);
   };
 
+  const toggleAllDimValues = (dimId, allVals) => {
+    setSelectedDims(prev => {
+      const cur = prev[dimId] || [];
+      if (cur.length > 0) {
+        return { ...prev, [dimId]: [] }; // Deselect all
+      } else {
+        return { ...prev, [dimId]: [...allVals] }; // Select all
+      }
+    });
+    setRecalcDirty(true);
+  };
+
   const toggleZone = (z) => {
     setSelectedZones(prev => prev.includes(z) ? prev.filter(x => x !== z) : [...prev, z]);
     setSelectedAreas([]); // reset areas when zones change
@@ -144,7 +156,7 @@ const PreflightCard = ({ preflightData, onConfirm, datasetId, cteSql }) => {
                   (selectedZones.includes(z)
                     ? "bg-violet-600/20 text-violet-200 border-violet-500/40"
                     : "bg-slate-900 text-slate-400 border-slate-700 hover:border-slate-500")}>
-                  <input type="checkbox" checked={selectedZones.includes(z)} onChange={() => toggleZone(z)} className="sr-only" />
+                  <input type="checkbox" checked={selectedZones.includes(z)} onChange={() => toggleZone(z)} className="hidden" />
                   {z}
                 </label>
               ))}
@@ -164,7 +176,7 @@ const PreflightCard = ({ preflightData, onConfirm, datasetId, cteSql }) => {
                   (selectedAreas.includes(a)
                     ? "bg-indigo-600/20 text-indigo-200 border-indigo-500/40"
                     : "bg-slate-900 text-slate-400 border-slate-700 hover:border-slate-500")}>
-                  <input type="checkbox" checked={selectedAreas.includes(a)} onChange={() => toggleArea(a)} className="sr-only" />
+                  <input type="checkbox" checked={selectedAreas.includes(a)} onChange={() => toggleArea(a)} className="hidden" />
                   {a}
                 </label>
               ))}
@@ -193,16 +205,29 @@ const PreflightCard = ({ preflightData, onConfirm, datasetId, cteSql }) => {
         {/* Analytical Dims */}
         {(preflightData.analytical_dims || []).map(dim => (
           <div key={dim.id}>
-            <h4 className="text-xs uppercase text-slate-400 font-semibold mb-2">
-              {dim.label || dim.id} <span className="text-[10px] text-slate-500 normal-case">({(selectedDims[dim.id] || []).length} / {dim.count} selected)</span>
-            </h4>
+            <div className="flex items-center gap-2 mb-2">
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={(selectedDims[dim.id] || []).length > 0} 
+                  onChange={() => toggleAllDimValues(dim.id, dim.values)}
+                  className="rounded bg-slate-800 border-slate-600 text-blue-500" 
+                />
+                <h4 className={"text-xs uppercase font-semibold transition-colors " + ((selectedDims[dim.id] || []).length > 0 ? "text-blue-400" : "text-slate-500")}>
+                  {dim.label || dim.id} 
+                </h4>
+              </label>
+              <span className="text-[10px] text-slate-500 normal-case">
+                ({(selectedDims[dim.id] || []).length} / {dim.count} values)
+              </span>
+            </div>
             <div className="flex flex-wrap gap-2 max-h-28 overflow-y-auto pr-1">
               {(dim.values || []).map(val => (
                 <label key={val} className={"flex items-center gap-1.5 px-2.5 py-1 rounded text-xs cursor-pointer transition border " +
-                  ((selectedDims[dim.id] || []).includes(val)
+                  ((selectedDims[dim.id] || []).length > 0 && (selectedDims[dim.id] || []).includes(val)
                     ? "bg-blue-600/20 text-blue-200 border-blue-500/30"
                     : "bg-slate-800 text-slate-500 border-slate-700 hover:border-slate-600")}>
-                  <input type="checkbox" checked={(selectedDims[dim.id] || []).includes(val)} onChange={() => toggleDimValue(dim.id, val)} className="sr-only" />
+                  <input type="checkbox" checked={(selectedDims[dim.id] || []).includes(val)} onChange={() => toggleDimValue(dim.id, val)} className="hidden" />
                   <span>{val}</span>
                 </label>
               ))}
