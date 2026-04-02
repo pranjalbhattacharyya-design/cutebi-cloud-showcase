@@ -12,8 +12,20 @@ import InfographicCanvas from './InfographicCanvas';
 // ---------------------------------------------------------------------------
 // Accordion Section for Deep Dive phases
 // ---------------------------------------------------------------------------
-function PhaseAccordion({ label, icon, content, defaultOpen = false }) {
+function PhaseAccordion({ label, icon, content, defaultOpen = false, onGenerateInfographic }) {
   const [open, setOpen] = useState(defaultOpen);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (e) {}
+  };
+
+  if (!content) return null;
+
   return (
     <div className="border t-border rounded-lg overflow-hidden mb-2">
       <button
@@ -24,8 +36,24 @@ function PhaseAccordion({ label, icon, content, defaultOpen = false }) {
         {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
       </button>
       {open && (
-        <div className="px-3 py-2 text-xs leading-relaxed t-text-main font-medium whitespace-pre-wrap">
-          {content}
+        <div className="px-3 py-2 text-xs leading-relaxed t-text-main font-medium whitespace-pre-wrap bg-white/5">
+          <div className="mb-3">{content}</div>
+          <div className="flex justify-end gap-2 pt-2 border-t t-border">
+            <button
+               onClick={handleCopy}
+               className="flex items-center gap-1 text-[10px] font-bold t-text-muted hover:t-text-main px-2 py-1 rounded transition-colors"
+            >
+               {copied ? <Check size={10}/> : <Copy size={10}/>} {copied ? 'Copied' : 'Copy'}
+            </button>
+            {onGenerateInfographic && (
+              <button
+                 onClick={() => onGenerateInfographic(content)}
+                 className="flex items-center gap-1 text-[10px] font-bold text-indigo-500 hover:text-indigo-400 t-button py-1 px-2 rounded-md transition-colors"
+              >
+                 <ImageIcon size={10} /> Generate Infographic
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -78,9 +106,6 @@ function AIMessage({ msg, handleGenerateInfographic }) {
 
   // Deep Dive bubble
   if (msg.path === 'deep_dive' && msg.phases) {
-    const summaryText = msg.phases.macro || msg.phases.meso || msg.phases.micro || '';
-    const fullAnalysisText = [msg.phases.micro, msg.phases.meso, msg.phases.macro].filter(Boolean).join('\n\n');
-    
     return (
       <div className="flex flex-col items-start animate-in slide-in-from-bottom-2 w-full">
         {msg.isPartial && (
@@ -90,25 +115,29 @@ function AIMessage({ msg, handleGenerateInfographic }) {
         )}
         <div className="t-panel border t-border rounded-t-2xl rounded-br-2xl px-3 py-3 w-full shadow-sm">
           <p className="text-[10px] font-black t-text-muted uppercase tracking-widest mb-2 flex items-center gap-1">
-            <Search size={10} /> Deep Dive Analysis
+            <Search size={10} /> Deep Dive Analysis - Choose phase to visualize
           </p>
-          <PhaseAccordion label="🔬 Micro — Grain-Level Insights" icon={null} content={msg.phases.micro} defaultOpen={false} />
-          <PhaseAccordion label="📊 Meso — Systemic Patterns" icon={null} content={msg.phases.meso} defaultOpen={false} />
-          <PhaseAccordion label="🎯 Macro — Strategic Verdict" icon={null} content={msg.phases.macro} defaultOpen={true} />
-          <div className="flex gap-2 mt-3 pt-2 border-t t-border">
-            <button
-              onClick={() => copyToClipboard(summaryText)}
-              className="flex-1 flex items-center justify-center gap-1 text-[10px] font-bold t-text-muted hover:t-text-main t-button py-1.5 rounded-md transition-colors"
-            >
-              {copied ? <Check size={10} /> : <Copy size={10} />} {copied ? 'Copied' : 'Copy'}
-            </button>
-            <button
-              onClick={() => handleGenerateInfographic(summaryText, msg.userQuery)}
-              className="flex-1 flex items-center justify-center gap-1 text-[10px] font-bold text-indigo-500 hover:text-indigo-400 t-button py-1.5 rounded-md transition-colors"
-            >
-              <ImageIcon size={10} /> Generate Infographic
-            </button>
-          </div>
+          <PhaseAccordion 
+            label="🔬 Micro — Grain-Level Insights" 
+            icon={null} 
+            content={msg.phases.micro} 
+            defaultOpen={false} 
+            onGenerateInfographic={(text) => handleGenerateInfographic(text, msg.userQuery)} 
+          />
+          <PhaseAccordion 
+            label="📊 Meso — Systemic Patterns" 
+            icon={null} 
+            content={msg.phases.meso} 
+            defaultOpen={false} 
+            onGenerateInfographic={(text) => handleGenerateInfographic(text, msg.userQuery)} 
+          />
+          <PhaseAccordion 
+            label="🎯 Macro — Strategic Verdict" 
+            icon={null} 
+            content={msg.phases.macro} 
+            defaultOpen={true} 
+            onGenerateInfographic={(text) => handleGenerateInfographic(text, msg.userQuery)} 
+          />
         </div>
       </div>
     );
