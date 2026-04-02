@@ -1584,11 +1584,62 @@ async def deep_dive_preflight(req: AIExploreRequest, db: Session = Depends(datab
     ds_map = { ds.id: ds.file_path for ds in all_ds if ds.file_path and not ds.file_path.startswith("http") }
     bq_ref = ds_map.get(req.dataset_id, req.dataset_id)
 
+    # ── Step 0: Fetch actual column names from INFORMATION_SCHEMA ──────────────
+    # This lets us snap any guessed dim name to the closest real BQ column name,
+    # preventing "Unrecognized name" errors from Gemini's field ID guesses.
+    real_columns: list[str] = []
+    try:
+        # bq_ref is like "project.dataset.table" — split for INFORMATION_SCHEMA
+        parts = bq_ref.split(".")
+        if len(parts) == 3:
+            proj, ds_name, tbl = parts
+            schema_sql = (
+                f"SELECT column_name FROM `{proj}.{ds_name}.INFORMATION_SCHEMA.COLUMNS` "
+                f"WHERE table_name = '{tbl}'"
+            )
+        else:
+            schema_sql = f"SELECT column_name FROM `{bq_ref}` LIMIT 0"
+        schema_rows = list(bq_client.query(schema_sql).result())
+        real_columns = [r[0] for r in schema_rows]
+        print(f"[Preflight] Real BQ columns: {real_columns}")
+    except Exception as e:
+        print(f"[Preflight] INFORMATION_SCHEMA fetch failed (non-fatal): {e}")
+
+    def snap_to_real(candidate: str) -> str:
+        """Return the real BQ column whose name best matches the candidate string."""
+        if not real_columns or not candidate:
+            return candidate
+        # 1. Exact match
+        for col in real_columns:
+            if col.lower() == candidate.lower():
+                return col
+        # 2. Normalised match (strip underscores/spaces)
+        norm = candidate.lower().replace("_", "").replace(" ", "")
+        for col in real_columns:
+            if col.lower().replace("_", "").replace(" ", "") == norm:
+                return col
+        # 3. Substring match — candidate words appear in col or vice-versa
+        words = set(candidate.lower().replace("_", " ").split())
+        best, best_score = candidate, 0
+        for col in real_columns:
+            col_words = set(col.lower().replace("_", " ").split())
+            score = len(words & col_words)
+            if score > best_score:
+                best, best_score = col, score
+        return best if best_score > 0 else candidate
+
+    # Snap hierarchy dims to real column names
+    micro_dim = snap_to_real(req.micro_dim) if req.micro_dim else req.micro_dim
+    meso_dim  = snap_to_real(req.meso_dim)  if req.meso_dim  else req.meso_dim
+    macro_dim = snap_to_real(req.macro_dim) if req.macro_dim else req.macro_dim
+
+    print(f"[Preflight] Snapped hierarchy: {macro_dim} → {meso_dim} → {micro_dim}")
+
     # Base counts for hierarchy
     selections = []
-    if req.micro_dim: selections.append(f"COUNT(DISTINCT `{req.micro_dim}`) AS _micro_count")
-    if req.meso_dim:  selections.append(f"COUNT(DISTINCT `{req.meso_dim}`) AS _meso_count")
-    if req.macro_dim: selections.append(f"COUNT(DISTINCT `{req.macro_dim}`) AS _macro_count")
+    if micro_dim: selections.append(f"COUNT(DISTINCT `{micro_dim}`) AS _micro_count")
+    if meso_dim:  selections.append(f"COUNT(DISTINCT `{meso_dim}`) AS _meso_count")
+    if macro_dim: selections.append(f"COUNT(DISTINCT `{macro_dim}`) AS _macro_count")
     
     # Time dimension values
     time_dim = ""
@@ -1598,23 +1649,33 @@ async def deep_dive_preflight(req: AIExploreRequest, db: Session = Depends(datab
             break
     if not time_dim:
         time_dim = req.trend_time_grain or next((d.id for d in req.dimensions if "time" in d.id.lower() or "month" in d.id.lower()), "")
+    time_dim = snap_to_real(time_dim) if time_dim else time_dim
 
     if time_dim:
         selections.append(f"COUNT(DISTINCT `{time_dim}`) AS _time_count")
         selections.append(f"ARRAY_AGG(DISTINCT `{time_dim}` IGNORE NULLS ORDER BY `{time_dim}`) AS _time_values")
 
     # Analytical dimensions (anything non-hierarchy and non-time)
-    hierarchy_set = {req.micro_dim, req.meso_dim, req.macro_dim, time_dim}
-    analytical_dims = [d for d in req.dimensions if d.id not in hierarchy_set and d.id]
+    hierarchy_set = {micro_dim, meso_dim, macro_dim, time_dim}
+    analytical_dims_raw = [d for d in req.dimensions if d.id not in hierarchy_set and d.id]
+    # Snap analytical dim IDs to real column names too
+    analytical_dims = []
+    seen = set()
+    for d in analytical_dims_raw:
+        snapped_id = snap_to_real(d.id)
+        if snapped_id not in hierarchy_set and snapped_id not in seen:
+            analytical_dims.append((snapped_id, d.label))
+            seen.add(snapped_id)
     
-    for idx, dim in enumerate(analytical_dims):
-        selections.append(f"COUNT(DISTINCT `{dim.id}`) AS _dim_{idx}_count")
-        selections.append(f"ARRAY_AGG(DISTINCT `{dim.id}` IGNORE NULLS ORDER BY `{dim.id}` LIMIT 100) AS _dim_{idx}_values")
+    for idx, (dim_id, _) in enumerate(analytical_dims):
+        selections.append(f"COUNT(DISTINCT `{dim_id}`) AS _dim_{idx}_count")
+        selections.append(f"ARRAY_AGG(DISTINCT `{dim_id}` IGNORE NULLS ORDER BY `{dim_id}` LIMIT 100) AS _dim_{idx}_values")
 
     if not selections:
         return {"error": "No valid dimensions found to query."}
 
     sql = f"SELECT {', '.join(selections)} FROM `{bq_ref}`"
+
     try:
         job = bq_client.query(sql)
         row = list(job.result())[0]
@@ -1629,10 +1690,10 @@ async def deep_dive_preflight(req: AIExploreRequest, db: Session = Depends(datab
             "analytical_dims": []
         }
         
-        for idx, dim in enumerate(analytical_dims):
+        for idx, (dim_id, dim_label) in enumerate(analytical_dims):
             result["analytical_dims"].append({
-                "id": dim.id,
-                "label": dim.label,
+                "id": dim_id,
+                "label": dim_label,
                 "count": row.get(f"_dim_{idx}_count", 0),
                 "values": row.get(f"_dim_{idx}_values", [])
             })
