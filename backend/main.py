@@ -1777,143 +1777,227 @@ async def deep_dive_preflight_filter(req: AIExploreRequest, db: Session = Depend
 async def _stream_deep_dive(req: AIExploreRequest, ds_map: dict):
     bq_ref = ds_map.get(req.dataset_id, req.dataset_id)
     macro_dim = req.macro_dim
-    meso_dim = req.meso_dim
+    meso_dim  = req.meso_dim
     micro_dim = req.micro_dim
-    
+
+    # ── Time dim resolution ────────────────────────────────────────────────────
     time_dim = ""
     for measure in req.measures:
         if measure.isTimeIntelligence and measure.timePeriod:
             time_dim = measure.timePeriod
             break
     if not time_dim:
-        time_dim = req.trend_time_grain or next((d.id for d in req.dimensions if "time" in d.id.lower() or "month" in d.id.lower()), "")
+        time_dim = req.trend_time_grain or next(
+            (d.id for d in req.dimensions if "time" in d.id.lower() or "month" in d.id.lower()), ""
+        )
 
-    facts = req.selected_facts or [m.id for m in req.measures]
+    facts  = req.selected_facts or [m.id for m in req.measures]
     months = req.selected_months or []
 
-    # Filter clause
-    filter_clause = "1=1"
+    # ── CTE expansion (same logic as preflight) ────────────────────────────────
+    def expand_table_names(sql: str) -> str:
+        for tname, full_ref in ds_map.items():
+            sql = sql.replace(f"FROM `{tname}`", f"FROM `{full_ref}` AS `{tname}`")
+            sql = sql.replace(f"JOIN `{tname}`",  f"JOIN `{full_ref}` AS `{tname}`")
+        return sql
+
+    if req.cte_sql and req.cte_sql.strip():
+        expanded_cte = expand_table_names(req.cte_sql.strip()) + " "
+        query_source = "ds_unified"
+    else:
+        expanded_cte = ""
+        query_source = f"`{bq_ref}`"
+
+    # ── Geo / time filter clause ───────────────────────────────────────────────
+    filter_parts = ["1=1"]
     if req.geo_filter_zones and macro_dim:
-        filter_clause += f" AND `{macro_dim}` IN ({', '.join([f'{chr(39)}{z}{chr(39)}' for z in req.geo_filter_zones])})"
+        z_str = ", ".join([f"'{z}'" for z in req.geo_filter_zones])
+        filter_parts.append(f"`{macro_dim}` IN ({z_str})")
     if req.geo_filter_areas and meso_dim:
-        filter_clause += f" AND `{meso_dim}` IN ({', '.join([f'{chr(39)}{a}{chr(39)}' for a in req.geo_filter_areas])})"
+        a_str = ", ".join([f"'{a}'" for a in req.geo_filter_areas])
+        filter_parts.append(f"`{meso_dim}` IN ({a_str})")
     if months and time_dim:
-        filter_clause += f" AND `{time_dim}` IN ({', '.join([f'{chr(39)}{m}{chr(39)}' for m in months])})"
+        m_str = ", ".join([f"'{m}'" for m in months])
+        filter_parts.append(f"`{time_dim}` IN ({m_str})")
+    filter_clause = " AND ".join(filter_parts)
 
-    # We need combinations of dimensions
-    combinations = []
-    for dim_obj in req.selected_analytical_dims:
-        dim_id = dim_obj.get("dim_id")
-        vals = dim_obj.get("selected_values", [])
-        if dim_id and vals:
-            for val in vals:
-                combinations.append((dim_id, val))
+    # ── Build Cartesian combinations ───────────────────────────────────────────
+    # Plan: n_calls = Π(len(selectedValues) per dim) × n_facts
+    # Each combination is a dict of {dim_id: dim_value} for filtering
+    selected_axes = [d for d in req.selected_analytical_dims if d.get("dim_id") and d.get("selected_values")]
 
-    if not combinations: # fallback if no analytical dims selected
-        combinations = [("Total", "Overall")]
+    def cartesian(axes):
+        """Return list of dicts: [{dim_id: val, ...}, ...]"""
+        if not axes:
+            return [{}]  # 1 combination = no analytical dimension filter
+        result = [{}]
+        for axis in axes:
+            new_result = []
+            for combo in result:
+                for val in axis["selected_values"]:
+                    new_result.append({**combo, axis["dim_id"]: val})
+            result = new_result
+        return result
 
-    total_runs = len(combinations) * len(facts)
+    dim_combos = cartesian(selected_axes)
+    total_runs = len(dim_combos) * len(facts)
     yield f"event: max_waves\ndata: {{\"total\": {total_runs}}}\n\n"
 
-    # Step 1: Fire all BQ queries in parallel to get data slices
-    async def fetch_bq(dim_id, dim_val, fact):
-        if dim_id == "Total":
-            dim_filter = ""
-        else:
-            dim_filter = f" AND `{dim_id}` = '{dim_val}'"
-        
-        # We need CSV format
+    # ── Step 1: Parallel BQ fetches ────────────────────────────────────────────
+    # Each call fetches LONG format: (micro, meso, macro, time, sum(fact))
+    # Then we PIVOT to wide format: rows=locations, columns=time periods
+    # This matches the plan: "rows = locations, columns = time grain"
+    MAX_LOCATIONS = 500  # cap to prevent OOM; sample top by total fact value
+
+    async def fetch_bq(combo: dict, fact: str):
+        """
+        Fetch data for one (dim combo, fact) slice and pivot to wide CSV.
+        combo is e.g. {"Product": "SUV", "CustomerType": "Retail"}
+        """
+        dim_filter = ""
+        for dim_id, dim_val in combo.items():
+            dim_filter += f" AND `{dim_id}` = '{dim_val}'"
+
         sql = (
-            f"SELECT `{micro_dim}`, `{meso_dim}`, `{macro_dim}`, `{time_dim}`, SUM(`{fact}`) as _val "
-            f"FROM `{bq_ref}` "
-            f"WHERE {filter_clause} {dim_filter} "
-            f"GROUP BY 1, 2, 3, 4"
+            f"{expanded_cte}"
+            f"SELECT `{micro_dim}`, `{meso_dim}`, `{macro_dim}`"
+            + (f", `{time_dim}`" if time_dim else "")
+            + f", SUM(`{fact}`) AS _val "
+            f"FROM {query_source} "
+            f"WHERE {filter_clause}{dim_filter} "
+            f"GROUP BY `{micro_dim}`, `{meso_dim}`, `{macro_dim}`"
+            + (f", `{time_dim}`" if time_dim else "")
         )
-        
+
         try:
             loop = asyncio.get_event_loop()
             import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor() as pool:
-                def run_q():
-                    return list(bq_client.query(sql).result())
-                rows = await loop.run_in_executor(pool, run_q)
-                
-            csv_lines = [f"{micro_dim},{meso_dim},{macro_dim},{time_dim},{fact}"]
-            for r in rows:
-                csv_lines.append(f"{r[0]},{r[1]},{r[2]},{r[3]},{r[4]}")
-            return (dim_id, dim_val, fact, chr(10).join(csv_lines))
-        except Exception as e:
-            return (dim_id, dim_val, fact, f"Error: {str(e)}")
+                rows = await loop.run_in_executor(pool, lambda: list(bq_client.query(sql).result()))
 
-    import concurrent.futures
-    import httpx
-    
-    tasks = []
-    for dim_id, dim_val in combinations:
-        for fact in facts:
-            tasks.append(fetch_bq(dim_id, dim_val, fact))
-            
+            if not rows:
+                return (combo, fact, "No data returned for this slice.")
+
+            # ── Pivot: location → {time_period: value} ──────────────────────
+            # key = (micro, meso, macro), columns = time periods
+            pivot = {}   # (micro, meso, macro) → {time_period: value}
+            time_periods_seen = set()
+
+            for r in rows:
+                loc_key = (r[micro_dim], r.get(meso_dim, ""), r.get(macro_dim, ""))
+                tp = str(r[time_dim]) if time_dim and time_dim in r.keys else "Total"
+                time_periods_seen.add(tp)
+                if loc_key not in pivot:
+                    pivot[loc_key] = {}
+                pivot[loc_key][tp] = r["_val"]
+
+            # Sort time periods
+            time_cols = sorted(time_periods_seen)
+
+            # If too many locations, sample: keep top + bottom by total value
+            if len(pivot) > MAX_LOCATIONS:
+                scored = {k: sum(v.values() or [0]) for k, v in pivot.items()}
+                sorted_locs = sorted(scored.keys(), key=lambda k: scored[k], reverse=True)
+                keep = sorted_locs[:250] + sorted_locs[-250:]
+                pivot = {k: pivot[k] for k in keep}
+
+            # Build wide-format CSV
+            header = [micro_dim, meso_dim, macro_dim] + time_cols
+            lines  = [",".join(header)]
+            for (micro, meso, macro), tvals in pivot.items():
+                row_vals = [str(micro), str(meso), str(macro)] + [str(tvals.get(tp, 0)) for tp in time_cols]
+                lines.append(",".join(row_vals))
+
+            combo_label = ", ".join(f"{k}={v}" for k, v in combo.items()) if combo else "Overall"
+            return (combo, fact, "\n".join(lines))
+
+        except Exception as e:
+            return (combo, fact, f"Error: {e}")
+
+    tasks = [fetch_bq(combo, fact) for combo in dim_combos for fact in facts]
     bq_results = await asyncio.gather(*tasks)
 
-    # Step 2: Batched Gemini Calls
-    async def call_gemini_micro(dim_id, dim_val, fact, csv_data):
-        if csv_data.startswith("Error"):
-            return f"Error evaluating {fact} for {dim_id}={dim_val}: {csv_data}"
-            
-        req_micro = AIExploreRequest(
-            query="Analyze this slice",
-            phase="micro_slice",
-            data_table=[{"csv": csv_data}], # we pass it as a generic snippet
+    # ── Step 2: Batched Gemini Micro MAP calls ─────────────────────────────────
+    async def call_gemini_micro(combo: dict, fact: str, csv_data: str):
+        if csv_data.startswith("Error") or csv_data == "No data returned for this slice.":
+            combo_label = ", ".join(f"{k}={v}" for k, v in combo.items()) if combo else "Overall"
+            return f"== {combo_label} | {fact} ==\nNo data or error.\n\n"
+
+        combo_label = ", ".join(f"{k}={v}" for k, v in combo.items()) if combo else "Overall (no dimension filter)"
+        location_count = len(csv_data.splitlines()) - 1  # exclude header
+
+        prompt = (
+            f"You are a business analyst. Analyse this dataset slice.\n\n"
+            f"Analytical Filter: {combo_label}\n"
+            f"Fact / Measure: {fact}\n"
+            f"Hierarchy: {macro_dim} → {meso_dim} → {micro_dim}\n"
+            f"Data: {location_count} locations, columns = time periods.\n\n"
+            f"DATA (CSV — rows=locations, cols=time periods):\n{csv_data}\n\n"
+            f"In 4-6 sentences: identify top and bottom performers across locations, "
+            f"notable time trends, and any anomalies or outliers. Be specific with names and numbers."
         )
-        prompt = _build_explore_prompt(req_micro)
-        url = f"{GEMINI_BASE}/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+        url  = f"{GEMINI_BASE}/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
         body = {"contents": [{"parts": [{"text": prompt}]}]}
-        
+
         try:
             async with httpx.AsyncClient(timeout=45.0) as client:
                 res = await client.post(url, json=body)
                 if res.status_code == 200:
                     text = (res.json().get("candidates") or [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                    return f"== {dim_id}: {dim_val} | FACT: {fact} ==\\n{text}\\n\\n"
+                    return f"== {combo_label} | {fact} ==\n{text}\n\n"
         except Exception:
             pass
-        return f"== {dim_id}: {dim_val} | FACT: {fact} ==\\nAnalysis failed.\\n\\n"
+        return f"== {combo_label} | {fact} ==\nAnalysis failed.\n\n"
 
-    stitched = ""
+    stitched  = ""
     completed = 0
-    
-    # Process in batches of 20
     batch_size = 20
+
     for i in range(0, len(bq_results), batch_size):
-        batch = bq_results[i:i+batch_size]
-        gem_tasks = [call_gemini_micro(d, v, f, csv) for (d, v, f, csv) in batch]
-        results = await asyncio.gather(*gem_tasks)
+        batch     = bq_results[i:i + batch_size]
+        gem_tasks = [call_gemini_micro(combo, fact, csv) for (combo, fact, csv) in batch]
+        results   = await asyncio.gather(*gem_tasks)
         for r in results:
             stitched += r
-            
         completed += len(batch)
         yield f"event: wave_complete\ndata: {{\"completed\": {completed}, \"total\": {total_runs}}}\n\n"
-        
+
     yield f"event: stitch_complete\ndata: {{\"message\": \"Stitched {len(bq_results)} slices.\"}}\n\n"
 
-    # Step 3: Meso Synth
-    req_meso = AIExploreRequest(query="", phase="meso", prior_output=stitched[:150000], macro_dim=macro_dim, meso_dim=meso_dim)
-    meso_prompt = _build_explore_prompt(req_meso)
+    # ── Step 3: Meso REDUCE ────────────────────────────────────────────────────
+    meso_prompt = (
+        f"You are a senior analyst. Below are micro-level insights from {len(bq_results)} analysis slices "
+        f"across {micro_dim} locations, grouped by {meso_dim} areas and {macro_dim} zones.\n\n"
+        f"MICRO INSIGHTS:\n{stitched[:120000]}\n\n"
+        f"Synthesise systemic patterns, recurring themes, and area-level performance differences "
+        f"in 5-8 sentences. Reference specific {meso_dim} areas where relevant."
+    )
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
-            res = await client.post(f"{GEMINI_BASE}/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}", json={"contents": [{"parts": [{"text": meso_prompt}]}]})
+            res = await client.post(
+                f"{GEMINI_BASE}/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}",
+                json={"contents": [{"parts": [{"text": meso_prompt}]}]}
+            )
             meso_text = (res.json().get("candidates") or [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
     except Exception as e:
         meso_text = f"Meso failed: {e}"
-    
+
     yield f"event: meso_complete\ndata: {json.dumps({'text': meso_text})}\n\n"
 
-    # Step 4: Macro Synth
-    req_macro = AIExploreRequest(query="", phase="macro", prior_output=meso_text, macro_dim=macro_dim, meso_dim=meso_dim)
-    macro_prompt = _build_explore_prompt(req_macro)
+    # ── Step 4: Macro REDUCE ───────────────────────────────────────────────────
+    macro_prompt = (
+        f"You are a C-suite strategist. Below is a synthesis of performance patterns "
+        f"across all {macro_dim} zones.\n\n"
+        f"MESO SYNTHESIS:\n{meso_text}\n\n"
+        f"Provide 3-5 strategic action recommendations with specific {macro_dim}-level implications. "
+        f"Be decisive, prioritised, and business-focused."
+    )
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
-            res = await client.post(f"{GEMINI_BASE}/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}", json={"contents": [{"parts": [{"text": macro_prompt}]}]})
+            res = await client.post(
+                f"{GEMINI_BASE}/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}",
+                json={"contents": [{"parts": [{"text": macro_prompt}]}]}
+            )
             macro_text = (res.json().get("candidates") or [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
     except Exception as e:
         macro_text = f"Macro failed: {e}"
