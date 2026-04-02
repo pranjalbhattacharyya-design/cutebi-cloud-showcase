@@ -1430,7 +1430,8 @@ async def ai_explore(req: AIExploreRequest):
                             "properties": {
                                 "id": {"type": "STRING"},
                                 "description": {"type": "STRING"}
-                            }
+                            },
+                            "required": ["id", "description"]
                         }
                     }
                 },
