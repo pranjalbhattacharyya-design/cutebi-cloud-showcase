@@ -74,13 +74,9 @@ export const useAI = () => {
     setAiThinkingLabel('Generating descriptions...');
     showToast('✨ AI is analyzing your data to write descriptions...');
 
-    const columnsList = globalSemanticFields?.length > 0 
-      ? globalSemanticFields.map(f => f.rawLabel || f.value) 
-      : activeDataset.headers;
-
-    const prompt = `Analyze this data model.
+    const prompt = `Analyze this dataset.
 Table Name: ${activeDataset.name}
-Columns: ${columnsList.join(', ')}
+Columns: ${activeDataset.headers.join(', ')}
 
 Write a short, professional business description for the table itself, and a short business description for each column.
 Return JSON format EXACTLY matching this schema:
@@ -96,25 +92,13 @@ Return JSON format EXACTLY matching this schema:
       const clean = text.replace(/```json/gi, '').replace(/```/g, '').trim();
       const aiData = JSON.parse(clean);
       setDatasets(prev => prev.map(d => d.id === activeDatasetId ? { ...d, description: aiData.tableDescription } : d));
-      
       setSemanticModels(prev => {
         const next = { ...prev };
-        Object.keys(next).forEach(dsId => {
-          next[dsId] = next[dsId].map(field => {
-            const aiMatch = aiData.columns?.find(c => {
-               if (!c.id) return false;
-               const cid = String(c.id).trim().toLowerCase();
-               const fid = field.id ? String(field.id).trim().toLowerCase() : '';
-               const fOrigId = field.originalId ? String(field.originalId).trim().toLowerCase() : '';
-               const fLabel = field.label ? String(field.label).trim().toLowerCase() : '';
-               
-               return cid === fid || cid === fOrigId || cid === fLabel;
-            });
-            if (aiMatch && aiMatch.description) {
-               return { ...field, description: aiMatch.description };
-            }
-            return field;
-          });
+        const model = next[activeDatasetId] || [];
+        next[activeDatasetId] = model.map(field => {
+          const aiMatch = aiData.columns?.find(c => c.id === field.id || c.id === field.originalId);
+          if (aiMatch) return { ...field, description: aiMatch.description };
+          return field;
         });
         return syncSemanticModels(next, relationships);
       });
