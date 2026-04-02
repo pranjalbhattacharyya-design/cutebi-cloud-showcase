@@ -202,38 +202,51 @@ const PreflightCard = ({ preflightData, onConfirm, datasetId, cteSql }) => {
           </div>
         </div>
 
-        {/* Analytical Dims */}
-        {(preflightData.analytical_dims || []).map(dim => (
-          <div key={dim.id}>
-            <div className="flex items-center gap-2 mb-2">
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={(selectedDims[dim.id] || []).length > 0} 
-                  onChange={() => toggleAllDimValues(dim.id, dim.values)}
-                  className="rounded bg-slate-800 border-slate-600 text-blue-500" 
-                />
-                <h4 className={"text-xs uppercase font-semibold transition-colors " + ((selectedDims[dim.id] || []).length > 0 ? "text-blue-400" : "text-slate-500")}>
-                  {dim.label || dim.id} 
-                </h4>
-              </label>
-              <span className="text-[10px] text-slate-500 normal-case">
-                ({(selectedDims[dim.id] || []).length} / {dim.count} values)
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-2 max-h-28 overflow-y-auto pr-1">
-              {(dim.values || []).map(val => (
-                <label key={val} className={"flex items-center gap-1.5 px-2.5 py-1 rounded text-xs cursor-pointer transition border " +
-                  ((selectedDims[dim.id] || []).length > 0 && (selectedDims[dim.id] || []).includes(val)
-                    ? "bg-blue-600/20 text-blue-200 border-blue-500/30"
-                    : "bg-slate-800 text-slate-500 border-slate-700 hover:border-slate-600")}>
-                  <input type="checkbox" checked={(selectedDims[dim.id] || []).includes(val)} onChange={() => toggleDimValue(dim.id, val)} className="hidden" />
-                  <span>{val}</span>
+        {/* Analytical Dims Header Toggles */}
+        <div>
+          <h4 className="text-xs uppercase text-slate-400 font-semibold mb-2">
+            Analytical Dimensions <span className="text-[10px] text-slate-500 normal-case">(toggle axis)</span>
+          </h4>
+          <div className="flex flex-wrap gap-2">
+            {(preflightData.analytical_dims || []).map(dim => {
+              const isIncluded = (selectedDims[dim.id] || []).length > 0;
+              return (
+                <label key={dim.id} className={"flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer hover:bg-slate-700 transition border " +
+                  (isIncluded
+                    ? "bg-blue-700/20 border-blue-500/30 text-blue-200"
+                    : "bg-slate-900 border-slate-700 text-slate-500")}>
+                  <input type="checkbox" checked={isIncluded} onChange={() => toggleAllDimValues(dim.id, dim.values)} className="rounded bg-slate-800 border-slate-600" />
+                  <span>{dim.label || dim.id}</span>
                 </label>
-              ))}
-            </div>
+              );
+            })}
           </div>
-        ))}
+        </div>
+
+        {/* Analytical Dims Values (only shows for included dims) */}
+        {(preflightData.analytical_dims || []).map(dim => {
+          const isIncluded = (selectedDims[dim.id] || []).length > 0;
+          if (!isIncluded) return null;
+          
+          return (
+            <div key={dim.id}>
+              <h4 className="text-xs uppercase text-slate-400 font-semibold mb-2">
+                {dim.label || dim.id} <span className="text-[10px] text-slate-500 normal-case">({(selectedDims[dim.id] || []).length} / {dim.count} values)</span>
+              </h4>
+              <div className="flex flex-wrap gap-2 max-h-28 overflow-y-auto pr-1">
+                {(dim.values || []).map(val => (
+                  <label key={val} className={"flex items-center gap-1.5 px-2.5 py-1 rounded text-xs cursor-pointer transition border " +
+                    ((selectedDims[dim.id] || []).includes(val)
+                      ? "bg-blue-600/20 text-blue-200 border-blue-500/30"
+                      : "bg-slate-800 text-slate-500 border-slate-700 hover:border-slate-600")}>
+                    <input type="checkbox" checked={(selectedDims[dim.id] || []).includes(val)} onChange={() => toggleDimValue(dim.id, val)} className="hidden" />
+                    <span>{val}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Actions */}
