@@ -88,7 +88,7 @@ Return JSON format EXACTLY matching this schema:
 }`;
 
     try {
-      const text = await callAI({ query: prompt, phase: 'fast_answer', model_description: '', dimensions: [], measures: [] });
+      const text = await callAI({ query: prompt, phase: 'auto_fill', model_description: '', dimensions: [], measures: [] });
       const clean = text.replace(/```json/gi, '').replace(/```/g, '').trim();
       const aiData = JSON.parse(clean);
       setDatasets(prev => prev.map(d => d.id === activeDatasetId ? { ...d, description: aiData.tableDescription } : d));

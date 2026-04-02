@@ -1342,6 +1342,10 @@ RULES:
 
 Return ONLY valid JSON with no markdown."""
 
+    if req.phase == "auto_fill":
+        # Pass the exact frontend prompt directly
+        return req.query
+
     raise ValueError(f"Unknown phase: {req.phase}")
 
 
@@ -1408,6 +1412,29 @@ async def ai_explore(req: AIExploreRequest):
                     "recommendation": {"type": "STRING"}
                 },
                 "required": ["headline", "findings", "bullets", "recommendation"]
+            }
+        }
+
+    # Auto-fill descriptions phase — returns structured table and column descriptions JSON
+    elif req.phase == "auto_fill":
+        body["generationConfig"] = {
+            "responseMimeType": "application/json",
+            "responseSchema": {
+                "type": "OBJECT",
+                "properties": {
+                    "tableDescription": {"type": "STRING"},
+                    "columns": {
+                        "type": "ARRAY",
+                        "items": {
+                            "type": "OBJECT",
+                            "properties": {
+                                "id": {"type": "STRING"},
+                                "description": {"type": "STRING"}
+                            }
+                        }
+                    }
+                },
+                "required": ["tableDescription", "columns"]
             }
         }
 
