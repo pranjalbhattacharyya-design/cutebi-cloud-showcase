@@ -1298,6 +1298,12 @@ RULES:
 7. CRITICAL — If a reporting hierarchy is provided above, ALWAYS include those dimension IDs
    in sql_query so the data is grouped at the correct grain for downstream analysis.
    Also always include any time dimension (e.g. FY, Month, Quarter) relevant to the question.
+8. DEEP DIVE RICHNESS — This query feeds a multi-level analytical engine. Do NOT minimise
+   the dimension selection. Include ALL of:
+   - Every hierarchy level dimension provided
+   - All time dimensions present in the model (FY, Quarter, Month or equivalent)
+   - All product/segment/category dimensions visible in the model (e.g. Model Group, Segment, Category)
+   The goal is a comprehensive data snapshot, not a minimal answer.
 
 Return JSON: {{ "action": "query"|"answer", "text": "...", "sql_query": {{ "dimensions": [], "measures": [], "filters": [] }} }}"""
 

@@ -43,7 +43,7 @@ export const useAI = () => {
   // ---------------------------------------------------------------------------
   const buildSemanticContext = () => {
     const dimensions = globalSemanticFields
-      .filter(f => f.type === 'dimension')
+      .filter(f => f.type === 'dimension' && !f.isHidden)
       .map(d => ({
         id: d.value,
         label: d.rawLabel,
@@ -51,7 +51,7 @@ export const useAI = () => {
       }));
 
     const measures = globalSemanticFields
-      .filter(f => f.type === 'measure')
+      .filter(f => f.type === 'measure' && !f.isHidden)
       .map(m => ({
         id: m.value,
         label: m.rawLabel,
