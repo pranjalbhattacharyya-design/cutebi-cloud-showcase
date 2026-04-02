@@ -8,6 +8,9 @@ import { useAppState } from '../../contexts/AppStateContext';
 import { useAI } from '../../hooks/useAI';
 import ChartWidget from '../dashboard/ChartWidget';
 import InfographicCanvas from './InfographicCanvas';
+import PreflightCard from '../PreflightCard';
+import DimensionTrendPicker from '../DimensionTrendPicker';
+import DeepDiveProgress from '../DeepDiveProgress';
 
 // ---------------------------------------------------------------------------
 // Accordion Section for Deep Dive phases
@@ -107,7 +110,7 @@ function DataSnippetAccordion({ rows, headers, total }) {
 // ---------------------------------------------------------------------------
 // AI Message Bubble
 // ---------------------------------------------------------------------------
-function AIMessage({ msg, handleGenerateInfographic }) {
+function AIMessage({ msg, handleGenerateInfographic, handleDeepDiveExecute, handleTrendExecute }) {
   const [copied, setCopied] = useState(false);
   const copyToClipboard = async (text) => {
     try {
@@ -161,6 +164,46 @@ function AIMessage({ msg, handleGenerateInfographic }) {
         </div>
       </div>
     );
+  }
+
+  // Preflight Card bubble
+  if (msg.path === 'preflight_card') {
+     return (
+        <div className="flex flex-col items-start animate-in slide-in-from-bottom-2 w-full">
+           <PreflightCard 
+             preflightData={msg.preflightData} 
+             datasetId={msg.datasetId}
+             onConfirm={(scope) => handleDeepDiveExecute(scope, msg.userQuery)} 
+           />
+        </div>
+     );
+  }
+
+  // Trend Picker bubble
+  if (msg.path === 'trend_picker') {
+     return (
+        <div className="flex flex-col items-start animate-in slide-in-from-bottom-2 w-full">
+           <DimensionTrendPicker 
+             dimensions={msg.dimensions}
+             measures={msg.measures}
+             onConfirm={(scope) => handleTrendExecute(scope, msg.userQuery)}
+           />
+        </div>
+     );
+  }
+
+  // Deep Dive Progress bubble
+  if (msg.path === 'deep_dive_progress') {
+     return (
+        <div className="flex flex-col items-start animate-in w-full">
+           <DeepDiveProgress
+             totalCalls={msg.totalWaves}
+             completedCalls={msg.completedWaves}
+             statusMessage={msg.statusMessage}
+             currentPhase={msg.currentPhase}
+           />
+        </div>
+     );
   }
 
   // Deep Dive bubble
@@ -263,7 +306,7 @@ export default function AIInterface({ handleAskAI: handleAskAIFromApp, handleCon
     userRole,
   } = useAppState();
 
-  const { handleGenerateInfographic, handleAskAI, executeExploreDataLogic, handleHierarchyAnswer } = useAI();
+  const { handleGenerateInfographic, handleAskAI, executeExploreDataLogic, handleHierarchyAnswer, handleDeepDiveExecute, handleTrendExecute } = useAI();
   const { hierarchyPending, deepDiveHierarchy, setDeepDiveHierarchy } = useAppState();
 
   const isViewer = userRole === 'viewer';
@@ -342,6 +385,12 @@ export default function AIInterface({ handleAskAI: handleAskAIFromApp, handleCon
             <Zap size={12} /> Quick Answer
           </button>
           <button
+            onClick={() => setAnalysisPath('trend')}
+            className={`flex-1 py-1.5 text-xs font-bold transition-colors rounded-md flex items-center justify-center gap-1 ${analysisPath === 'trend' ? 'bg-emerald-500 text-white shadow-sm' : 't-text-muted hover:t-text-main t-panel border t-border'}`}
+          >
+            <Zap size={12} /> Trend
+          </button>
+          <button
             onClick={() => setAnalysisPath('deep_dive')}
             className={`flex-1 py-1.5 text-xs font-bold transition-colors rounded-md flex items-center justify-center gap-1 ${analysisPath === 'deep_dive' ? 'bg-indigo-500 text-white shadow-sm' : 't-text-muted hover:t-text-main t-panel border t-border'}`}
           >
@@ -361,8 +410,10 @@ export default function AIInterface({ handleAskAI: handleAskAIFromApp, handleCon
             <p className="text-xs mt-2 leading-relaxed t-text-muted bg-black/5 p-3 rounded-lg border t-border">
               {aiMode === 'explore'
                 ? analysisPath === 'fast'
-                  ? "⚡ Quick Answer mode: Ask a direct question and get a concise answer.\n\nTry: 'Who is the top dealer?' or 'What were sales last month?'"
-                  : "🔍 Deep Dive mode: Ask for trends, patterns, or 'why' questions and get a 3-layer strategic analysis.\n\nTry: 'Why did Q3 performance drop?' or 'Analyze fuel type trends.'"
+                  ? "⚡ Quick Answer mode: Ask a direct question and get a concise answer.\n\nTry: 'Who is the top dealer?'"
+                  : analysisPath === 'trend'
+                    ? "⚡ Trend mode: Quick 15-second analysis of one dimension over time. No hierarchy required."
+                    : "🔍 Deep Dive mode: Ask for trends, patterns, or 'why' questions and get a 3-layer strategic analysis.\n\nTry: 'Why did Q3 performance drop?' or 'Analyze fuel type trends.'"
                 : "Tell me what to build!\n\nTry: 'Create a sales performance dashboard' or 'Build a pie chart showing orders by category'"
               }
             </p>
@@ -384,7 +435,12 @@ export default function AIInterface({ handleAskAI: handleAskAIFromApp, handleCon
                 </div>
               </div>
             ) : (
-              <AIMessage msg={msg} handleGenerateInfographic={handleGenerateInfographic} />
+              <AIMessage 
+                msg={msg} 
+                handleGenerateInfographic={handleGenerateInfographic} 
+                handleDeepDiveExecute={handleDeepDiveExecute}
+                handleTrendExecute={handleTrendExecute}
+              />
             )}
           </div>
         ))}
@@ -451,7 +507,7 @@ export default function AIInterface({ handleAskAI: handleAskAIFromApp, handleCon
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
             placeholder={aiMode === 'explore'
-              ? analysisPath === 'fast' ? '⚡ Ask a quick question...' : '🔍 Ask for deep analysis...'
+              ? analysisPath === 'fast' ? '⚡ Ask a quick question...' : analysisPath === 'trend' ? '⚡ Select dimension for trend...' : '🔍 Ask for deep analysis...'
               : 'Prompt dashboard/charts...'}
             disabled={isThinking || pendingAIAction || !activeDataset}
             className="w-full t-panel border t-border pl-4 pr-10 py-3 text-sm font-medium focus:ring-2 focus:ring-[var(--theme-accent)] shadow-sm disabled:opacity-50"
@@ -468,7 +524,7 @@ export default function AIInterface({ handleAskAI: handleAskAIFromApp, handleCon
         </form>
         <div className="mt-2 text-[10px] text-center t-text-muted font-semibold tracking-wide flex items-center justify-center gap-1">
           <Sparkles size={10} className="t-accent opacity-70" />
-          {aiMode === 'explore' ? (analysisPath === 'fast' ? 'Quick Answer Mode' : 'Deep Dive — 3 Phase Analysis') : 'Powered by Semantic Dictionary Map'}
+          {aiMode === 'explore' ? (analysisPath === 'fast' ? 'Quick Answer Mode' : analysisPath === 'trend' ? 'Dimension Trend Mode' : 'Deep Dive — 3 Phase Analysis') : 'Powered by Semantic Dictionary Map'}
         </div>
       </div>
     </div>

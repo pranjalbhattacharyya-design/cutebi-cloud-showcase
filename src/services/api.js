@@ -99,6 +99,15 @@ export const apiClient = {
   async aiExplore(payload) {
     return this.post('/ai/explore', payload);
   },
+  async aiDeepDivePreflight(payload) {
+    return this.post('/ai/deep-dive/preflight', payload);
+  },
+  async aiDeepDivePreflightFilter(payload) {
+    return this.post('/ai/deep-dive/preflight-filter', payload);
+  },
+  async aiDimensionTrend(payload) {
+    return this.post('/ai/dimension-trend', payload);
+  },
   async aiImage(payload) {
     return this.post('/ai/image', payload);
   },

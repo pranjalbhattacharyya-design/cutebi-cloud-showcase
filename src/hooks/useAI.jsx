@@ -300,6 +300,18 @@ Return JSON format EXACTLY matching this schema:
 
     // ── COUNTER-QUESTION: ask hierarchy before deep dive ─────────────────────
     if (path === 'deep_dive' && !hierarchyOverride && !deepDiveHierarchy) {
+      // First, we call sql_gen to get the dims and facts dynamically 
+      try {
+        const sqlRes = await callAI({ ...commonPayload, query, phase: 'sql_gen', data_table: [] });
+        const parsed = JSON.parse(sqlRes.replace(/```json/gi, '').replace(/```/g, '').trim());
+        if (parsed.sql_query && parsed.sql_query.dimensions) {
+           sessionCache.current.preflightDims = parsed.sql_query.dimensions;
+        }
+        if (parsed.sql_query && parsed.sql_query.measures) {
+           sessionCache.current.preflightFacts = parsed.sql_query.measures;
+        }
+      } catch (e) { console.error("sql_gen prep fail:", e); }
+      
       setExploreHistory([...newHistory, {
         role: 'ai',
         path: 'hierarchy_question',
@@ -309,6 +321,20 @@ Return JSON format EXACTLY matching this schema:
       setHierarchyPending(query);
       setIsThinking(false);
       return;
+    }
+
+    // ── DIMENSION TREND: show picker ─────────────────────────
+    if (path === 'trend') {
+       setExploreHistory([...newHistory, {
+         role: 'ai',
+         path: 'trend_picker',
+         dimensions,
+         measures,
+         datasetId: activeDatasetId,
+         userQuery: query
+       }]);
+       setIsThinking(false);
+       return;
     }
 
     const hierarchy = hierarchyOverride || deepDiveHierarchy || {};
@@ -357,44 +383,36 @@ Return JSON format EXACTLY matching this schema:
         setExploreHistory([...newHistory, { role: 'ai', text: answer, path: 'fast', data: dataResult, userQuery: query }]);
 
       // ── DEEP DIVE PATH ───────────────────────────────────────────────────────
-      } else {
-        // Phase 1 — Micro
-        setAiThinkingLabel('Phase 1 of 3 — Running Micro Analysis...');
-        let micro = sessionCache.current.microInsight;
-        if (!micro) {
-          try {
-            micro = await callAI({ ...commonPayload, query, phase: 'micro', data_table: dataResult, macro_dim, meso_dim, micro_dim });
-            sessionCache.current.microInsight = micro;
-          } catch (e) { micro = `[Micro analysis could not be completed: ${e.message}]`; }
+      } else if (path === 'deep_dive') {
+        // Pre-Flight phase 
+        setAiThinkingLabel('Gathering Pre-flight Statistics...');
+        
+        // We ensure we send all dimensions, preflight endpoint will extract hierarchy/time vs analytical
+        try {
+          const preflightReq = {
+             dataset_id: activeDatasetId,
+             micro_dim: micro_dim,
+             meso_dim: meso_dim,
+             macro_dim: macro_dim,
+             dimensions: dimensions.filter(d => (sessionCache.current.preflightDims || []).includes(d.id)),
+             measures: measures.filter(m => (sessionCache.current.preflightFacts || []).includes(m.id)),
+             query: query
+          };
+          
+          const preflightResult = await apiClient.aiDeepDivePreflight(preflightReq);
+          
+          setExploreHistory(prev => [...prev, {
+             role: 'ai',
+             path: 'preflight_card',
+             preflightData: preflightResult,
+             datasetId: activeDatasetId,
+             userQuery: query,
+             hierarchy: hierarchy
+          }]);
+          
+        } catch (e) {
+           setAiError(`Failed to run preflight bounds: ${e.message}`);
         }
-
-        // Phase 2 — Meso (receives Phase 1 text only)
-        setAiThinkingLabel('Phase 2 of 3 — Collating Meso Patterns...');
-        let meso = sessionCache.current.mesoInsight;
-        if (!meso) {
-          try {
-            meso = await callAI({ ...commonPayload, query, phase: 'meso', data_table: [], prior_output: micro, macro_dim, meso_dim, micro_dim });
-            sessionCache.current.mesoInsight = meso;
-          } catch (e) { meso = `[Meso analysis could not be completed: ${e.message}]`; }
-        }
-
-        // Phase 3 — Macro (receives Phase 2 text only)
-        setAiThinkingLabel('Phase 3 of 3 — Forming Macro Strategy...');
-        let macro = sessionCache.current.macroInsight;
-        if (!macro) {
-          try {
-            macro = await callAI({ ...commonPayload, query, phase: 'macro', data_table: [], prior_output: meso, macro_dim, meso_dim, micro_dim });
-            sessionCache.current.macroInsight = macro;
-          } catch (e) { macro = `[Macro strategy could not be completed: ${e.message}]`; }
-        }
-
-        const isPartial = micro.startsWith('[') || meso.startsWith('[') || macro.startsWith('[');
-
-        setExploreHistory([...newHistory, {
-          role: 'ai', path: 'deep_dive', isPartial,
-          data: dataResult, userQuery: query,
-          phases: { micro, meso, macro },
-        }]);
       }
 
     } catch (e) {
@@ -403,6 +421,161 @@ Return JSON format EXACTLY matching this schema:
     } finally {
       setIsThinking(false);
       setAiThinkingLabel('Analyzing...');
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // handleTrendExecute — Fast trend analysis path
+  // ---------------------------------------------------------------------------
+  const handleTrendExecute = async (scope, query) => {
+    setIsThinking(true);
+    setAiError(null);
+    setAiThinkingLabel('Analyzing dimension trend...');
+    
+    // First, push a placeholder deep\_dive\_progress into history to show SSE loading
+    setExploreHistory(prev => [...prev, {
+      role: 'ai',
+      text: 'Analyzing trend...',
+      path: 'fast',
+      userQuery: query
+    }]);
+
+    try {
+      const res = await apiClient.aiDimensionTrend({
+         dataset_id: activeDatasetId,
+         trend_dim: scope.dim,
+         trend_time_grain: scope.time,
+         selected_facts: undefined, // uses default currently
+         macro_dim: deepDiveHierarchy?.macro_dim,
+         meso_dim: deepDiveHierarchy?.meso_dim,
+      });
+      
+      setExploreHistory(prev => {
+        const next = [...prev];
+        next[next.length - 1] = { role: 'ai', text: res.text || 'Done', path: 'fast', userQuery: query };
+        return next;
+      });
+      
+    } catch (e) {
+      setExploreHistory(prev => {
+         const next = [...prev];
+         next.pop();
+         return next;
+      });
+      setAiError(`Trend Analysis Failed: ${e.message}`);
+    } finally {
+      setIsThinking(false);
+      setAiThinkingLabel('Analyzing...');
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // handleDeepDiveExecute — SSE Streaming Map-Reduce
+  // ---------------------------------------------------------------------------
+  const handleDeepDiveExecute = async (scope, query, preflightData) => {
+    setIsThinking(false); 
+    setAiError(null);
+    
+    const hierarchy = deepDiveHierarchy || {};
+
+    const progressMsg = {
+       role: 'ai',
+       path: 'deep_dive_progress',
+       totalWaves: 1, // updated dynamically
+       completedWaves: 0,
+       statusMessage: "Starting Map-Reduce Pipeline...",
+       currentPhase: 'micro',
+       userQuery: query
+    };
+
+    setExploreHistory(prev => [...prev, progressMsg]);
+    
+    const token = null; // No custom auth token needed if local/proxy 
+    
+    const basePayload = {
+      dataset_id: activeDatasetId,
+      micro_dim: hierarchy.micro_dim,
+      meso_dim: hierarchy.meso_dim,
+      macro_dim: hierarchy.macro_dim,
+      ...scope
+    };
+
+    // Use raw fetch for SSE
+    const isProd = window.location.hostname !== 'localhost';
+    const baseUrl = isProd ? '/api' : 'http://localhost:8000/api';
+    
+    try {
+      const response = await fetch(`${baseUrl}/ai/deep-dive`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "text/event-stream",
+        },
+        body: JSON.stringify(basePayload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`SSE request failed: ${response.statusText}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder()
+      
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        const chunk = decoder.decode(value)
+        const lines = chunk.split('\\n');
+        
+        let currentEvent = "";
+        for (const line of lines) {
+           if (line.startsWith("event: ")) {
+              currentEvent = line.substring(7).trim();
+           } else if (line.startsWith("data: ")) {
+              const dataStr = line.substring(6).trim();
+              if (!dataStr) continue;
+              
+              let dataObj = {};
+              try { dataObj = JSON.parse(dataStr); } catch (e) { }
+              
+              setExploreHistory(prev => {
+                 const next = [...prev];
+                 const lastIdx = next.length - 1;
+                 const msg = { ...next[lastIdx] };
+                 
+                 if (msg.path !== 'deep_dive_progress') return next;
+                 
+                 if (currentEvent === 'max_waves') {
+                    msg.totalWaves = dataObj.total;
+                 } else if (currentEvent === 'wave_complete') {
+                    msg.completedWaves = dataObj.completed;
+                    msg.statusMessage = `Processing ${dataObj.completed} of ${msg.totalWaves} micro-slices...`;
+                 } else if (currentEvent === 'stitch_complete') {
+                    msg.currentPhase = 'stitch';
+                    msg.statusMessage = dataObj.message || 'Stitching complete.';
+                 } else if (currentEvent === 'meso_complete') {
+                    msg.currentPhase = 'meso';
+                    msg.statusMessage = 'Meso synthesis finished.';
+                 } else if (currentEvent === 'macro_complete') {
+                    msg.currentPhase = 'macro';
+                    msg.statusMessage = 'Macro synthesis finished.';
+                 } else if (currentEvent === 'done') {
+                    msg.path = 'deep_dive'; 
+                    msg.phases = {
+                       micro: dataObj.micro_stitched_preview,
+                       meso: dataObj.meso,
+                       macro: dataObj.macro
+                    };
+                    msg.data = []; // Not retaining full huge dataset in UI table
+                 }
+                 next[lastIdx] = msg;
+                 return next;
+              });
+           }
+        }
+      }
+    } catch (err) {
+      setAiError(`Deep Dive Failed: ${err.message}`);
     }
   };
 
@@ -551,5 +724,7 @@ Return JSON: { "charts": [...], "new_measures": [] }`;
     handleAskAI,
     executeExploreDataLogic,
     handleHierarchyAnswer,
+    handleDeepDiveExecute,
+    handleTrendExecute,
   };
 };

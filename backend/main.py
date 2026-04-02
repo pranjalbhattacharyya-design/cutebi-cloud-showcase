@@ -1242,7 +1242,7 @@ class AIFieldMeasure(BaseModel):
 
 class AIExploreRequest(BaseModel):
     query: str
-    phase: str                            # "sql_gen" | "fast_answer" | "micro" | "meso" | "macro"
+    phase: str                            # "sql_gen" | "fast_answer" | "micro" | "meso" | "macro" | "preflight" | "micro_slice" | "dimension_trend"
     model_description: Optional[str] = ""
     dimensions: Optional[List[AIFieldDim]] = []
     measures: Optional[List[AIFieldMeasure]] = []
@@ -1251,8 +1251,15 @@ class AIExploreRequest(BaseModel):
     macro_dim: Optional[str] = ""        # Broadest hierarchy level (e.g. Zone, Region)
     meso_dim: Optional[str] = ""         # Mid-tier hierarchy level (e.g. Area Office)
     micro_dim: Optional[str] = ""        # Finest grain level (e.g. Dealer, Location)
-
-
+    selected_analytical_dims: Optional[List[Dict[str, Any]]] = []
+    selected_facts: Optional[List[str]] = []
+    selected_months: Optional[List[str]] = []
+    geo_filter_zones: Optional[List[str]] = []
+    geo_filter_areas: Optional[List[str]] = []
+    analysis_mode: Optional[str] = "full"  # "full" | "dimension_trend"
+    trend_dim: Optional[str] = ""
+    trend_time_grain: Optional[str] = ""
+    dataset_id: Optional[str] = ""
 class AIImageRequest(BaseModel):
     verdict_text: str
 
@@ -1298,12 +1305,7 @@ RULES:
 7. CRITICAL — If a reporting hierarchy is provided above, ALWAYS include those dimension IDs
    in sql_query so the data is grouped at the correct grain for downstream analysis.
    Also always include any time dimension (e.g. FY, Month, Quarter) relevant to the question.
-8. DEEP DIVE RICHNESS — This query feeds a multi-level analytical engine. Do NOT minimise
-   the dimension selection. Include ALL of:
-   - Every hierarchy level dimension provided
-   - All time dimensions present in the model (FY, Quarter, Month or equivalent)
-   - All product/segment/category dimensions visible in the model (e.g. Model Group, Segment, Category)
-   The goal is a comprehensive data snapshot, not a minimal answer.
+8. EXHAUSTIVE FIELD IDENTIFICATION — If the user is requesting a deep-dive, identify ALL relevant semantic fields (especially dimensions like Product, Category, Customer, and Time) so they can be provided as analytical axes. Do NOT attempt to generate a full SQL query that groups by ALL of them at once. The system will handle the Cartesian aggregations. Just list the relevant field IDs in the sql_query.dimensions and sql_query.measures arrays.
 
 Return JSON: {{ "action": "query"|"answer", "text": "...", "sql_query": {{ "dimensions": [], "measures": [], "filters": [] }} }}"""
 
@@ -1317,71 +1319,48 @@ Provide a concise 1-2 sentence natural language answer based STRICTLY on this da
 Use aggType to describe values correctly (sum → "total X was...", avg → "average X was...").
 Do NOT mention JSON, databases, or technical field IDs."""
 
-    if req.phase == "micro":
-        meas_ctx = [{"id": m.id, "label": m.label, "aggType": m.aggType, "isTimeIntelligence": m.isTimeIntelligence} for m in req.measures]
-        macro_dim = req.macro_dim or "Macro Level"
-        meso_dim  = req.meso_dim  or "Meso Level"
-        micro_dim = req.micro_dim or "lowest grain"
-        return f"""{model_ctx}You are a senior business analyst performing a structured deep-dive.
+    if req.phase == "micro_slice":
+        return f"""{model_ctx}You are a senior business analyst.
 
-Reporting hierarchy (as defined by the user):
-- Macro Level (broadest): {macro_dim}
-- Meso Level (mid-tier): {meso_dim}
-- Micro Level (finest grain): {micro_dim}
-
-Data summarised by {micro_dim}:
+Data snippet (filtered to specific analytical dimension value):
 {data_snippet}
 
-Measures available: {meas_ctx}
+Identify standout performers, declining units, and seasonal anomalies. Be specific with numbers. Do NOT output markdown. Write 3-5 sentences maximum."""
 
-Write one dedicated analytical paragraph for EACH unique {micro_dim} value in the data.
-Each paragraph must:
-1. Open by naming the {micro_dim} unit, its parent {meso_dim}, and its {macro_dim}.
-2. Analyse ALL measures for that unit — volumes, ratios, and divergences between measures.
-3. Treat every value, including zero or absent measures, as a valid business signal.
-   A measure that is absent for a unit means that business event has not occurred — analyse what that implies commercially.
-4. Be specific with actual numbers from the data.
-5. Do NOT flag any value as a data quality or integrity issue.
+    if req.phase == "dimension_trend":
+        return f"""{model_ctx}You are an expert data analyst.
 
-Write sequential numbered paragraphs — one per {micro_dim}. Do NOT write a single overall summary."""
+Data snippet (showing {req.trend_dim} over {req.trend_time_grain}):
+{data_snippet}
+
+Write a comprehensive business analysis identifying trending dimensions, declining dimensions, seasonal patterns, and notable cross-dimensional comparisons. Be specific with numbers."""
 
     if req.phase == "meso":
         macro_dim = req.macro_dim or "Macro Level"
         meso_dim  = req.meso_dim  or "Meso Level"
-        micro_dim = req.micro_dim or "lowest grain"
-        return f"""You are a senior business analyst. Below are granular findings from a micro-level analysis across individual {micro_dim} units:
+        return f"""You are a senior business analyst. Below are granular findings from many micro-level analyses across various products and facts:
 {req.prior_output}
 
 Reporting hierarchy:
 - Macro Level (broadest): {macro_dim}
 - Meso Level (mid-tier): {meso_dim}
-- Micro Level (finest grain): {micro_dim}
 
 Write one dedicated analytical paragraph for EACH unique {meso_dim} value.
-Each paragraph must:
 1. Open by naming the {meso_dim} and which {macro_dim} it belongs to.
-2. Consolidate findings from all {micro_dim} units within it.
-3. Identify dominant patterns, best and worst performing {micro_dim} units, and consistent signals across the group.
-4. Do NOT flag absent or zero values as data issues — interpret them as business performance signals.
+2. Consolidate findings covering all products and facts seen for that area.
+3. Identify dominant patterns, best and worst performing elements, and consistent signals.
 
-Write sequential numbered paragraphs — one per {meso_dim}. Do NOT write a single overall summary."""
+Write sequential paragraphs — one per {meso_dim}."""
 
     if req.phase == "macro":
         macro_dim = req.macro_dim or "Macro Level"
         meso_dim  = req.meso_dim  or "Meso Level"
-        micro_dim = req.micro_dim or "lowest grain"
         return f"""You are a senior business analyst. Below are mid-tier findings consolidated from {meso_dim} level analysis:
 {req.prior_output}
 
-Reporting hierarchy:
-- Macro Level (broadest): {macro_dim}
-- Meso Level (mid-tier): {meso_dim}
-- Micro Level (finest grain): {micro_dim}
-
-Write 2-3 concise, forward-looking strategic recommendations at the {macro_dim} level.
+Write 2-3 concise, forward-looking strategic recommendations at the {macro_dim} (broadest) level.
 - Synthesise the key patterns observed across all {meso_dim} units.
 - Focus on: growth opportunities, conversion gaps, efficiency levers, and risk areas.
-- Do NOT mention data quality, data integrity, or system issues under any circumstance.
 - Do NOT repeat the meso analysis — only provide executive-level strategic guidance."""
 
     if req.phase == "infographic_data":
@@ -1569,3 +1548,312 @@ async def ai_image(req: AIImageRequest):
                 await _asyncio.sleep(delay)
 
     raise HTTPException(status_code=502, detail=f"Imagen failed after retries: {last_err}")
+
+import asyncio
+from fastapi.responses import StreamingResponse
+import json
+
+@app.post("/api/ai/deep-dive/preflight")
+async def deep_dive_preflight(req: AIExploreRequest, db: Session = Depends(database.get_db)):
+    """Runs a COUNT DISTINCT query against BQ for all provided dimensions."""
+    if not bq_client:
+        raise HTTPException(status_code=500, detail="BigQuery not configured.")
+
+    all_ds = db.query(models.Dataset).all()
+    ds_map = { ds.id: ds.file_path for ds in all_ds if ds.file_path and not ds.file_path.startswith("http") }
+    bq_ref = ds_map.get(req.dataset_id, req.dataset_id)
+
+    # Base counts for hierarchy
+    selections = []
+    if req.micro_dim: selections.append(f"COUNT(DISTINCT `{req.micro_dim}`) AS _micro_count")
+    if req.meso_dim:  selections.append(f"COUNT(DISTINCT `{req.meso_dim}`) AS _meso_count")
+    if req.macro_dim: selections.append(f"COUNT(DISTINCT `{req.macro_dim}`) AS _macro_count")
+    
+    # Time dimension values
+    time_dim = ""
+    for measure in req.measures:
+        if measure.isTimeIntelligence and measure.timePeriod:
+            time_dim = measure.timePeriod
+            break
+    if not time_dim:
+        time_dim = req.trend_time_grain or next((d.id for d in req.dimensions if "time" in d.id.lower() or "month" in d.id.lower()), "")
+
+    if time_dim:
+        selections.append(f"COUNT(DISTINCT `{time_dim}`) AS _time_count")
+        selections.append(f"ARRAY_AGG(DISTINCT `{time_dim}` IGNORE NULLS ORDER BY `{time_dim}`) AS _time_values")
+
+    # Analytical dimensions (anything non-hierarchy and non-time)
+    hierarchy_set = {req.micro_dim, req.meso_dim, req.macro_dim, time_dim}
+    analytical_dims = [d for d in req.dimensions if d.id not in hierarchy_set and d.id]
+    
+    for idx, dim in enumerate(analytical_dims):
+        selections.append(f"COUNT(DISTINCT `{dim.id}`) AS _dim_{idx}_count")
+        selections.append(f"ARRAY_AGG(DISTINCT `{dim.id}` IGNORE NULLS ORDER BY `{dim.id}` LIMIT 100) AS _dim_{idx}_values")
+
+    if not selections:
+        return {"error": "No valid dimensions found to query."}
+
+    sql = f"SELECT {', '.join(selections)} FROM `{bq_ref}`"
+    try:
+        job = bq_client.query(sql)
+        row = list(job.result())[0]
+        
+        result = {
+            "location_count": row.get("_micro_count", 0),
+            "area_count": row.get("_meso_count", 0),
+            "zone_count": row.get("_macro_count", 0),
+            "time_dim": time_dim,
+            "time_count": row.get("_time_count", 0),
+            "time_values": row.get("_time_values", []),
+            "analytical_dims": []
+        }
+        
+        for idx, dim in enumerate(analytical_dims):
+            result["analytical_dims"].append({
+                "id": dim.id,
+                "label": dim.label,
+                "count": row.get(f"_dim_{idx}_count", 0),
+                "values": row.get(f"_dim_{idx}_values", [])
+            })
+            
+        result["facts"] = [m.id for m in req.measures]
+        return result
+    except Exception as e:
+        print(f"[Preflight] Extracted SQL: {sql}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/ai/deep-dive/preflight-filter")
+async def deep_dive_preflight_filter(req: AIExploreRequest, db: Session = Depends(database.get_db)):
+    """Re-runs location count when geo filters change."""
+    if not bq_client or not req.micro_dim:
+        return {"location_count": 0}
+        
+    all_ds = db.query(models.Dataset).all()
+    ds_map = { ds.id: ds.file_path for ds in all_ds if ds.file_path and not ds.file_path.startswith("http") }
+    bq_ref = ds_map.get(req.dataset_id, req.dataset_id)
+    
+    sql = f"SELECT COUNT(DISTINCT `{req.micro_dim}`) as count FROM `{bq_ref}` WHERE 1=1 "
+    if req.geo_filter_zones and req.macro_dim:
+        z_str = ", ".join([f"'{z}'" for z in req.geo_filter_zones])
+        sql += f" AND `{req.macro_dim}` IN ({z_str})"
+    if req.geo_filter_areas and req.meso_dim:
+        a_str = ", ".join([f"'{a}'" for a in req.geo_filter_areas])
+        sql += f" AND `{req.meso_dim}` IN ({a_str})"
+        
+    try:
+        row = list(bq_client.query(sql).result())[0]
+        return {"location_count": row.get("count", 0)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+async def _stream_deep_dive(req: AIExploreRequest, ds_map: dict):
+    bq_ref = ds_map.get(req.dataset_id, req.dataset_id)
+    macro_dim = req.macro_dim
+    meso_dim = req.meso_dim
+    micro_dim = req.micro_dim
+    
+    time_dim = ""
+    for measure in req.measures:
+        if measure.isTimeIntelligence and measure.timePeriod:
+            time_dim = measure.timePeriod
+            break
+    if not time_dim:
+        time_dim = req.trend_time_grain or next((d.id for d in req.dimensions if "time" in d.id.lower() or "month" in d.id.lower()), "")
+
+    facts = req.selected_facts or [m.id for m in req.measures]
+    months = req.selected_months or []
+
+    # Filter clause
+    filter_clause = "1=1"
+    if req.geo_filter_zones and macro_dim:
+        filter_clause += f" AND `{macro_dim}` IN ({', '.join([f'{chr(39)}{z}{chr(39)}' for z in req.geo_filter_zones])})"
+    if req.geo_filter_areas and meso_dim:
+        filter_clause += f" AND `{meso_dim}` IN ({', '.join([f'{chr(39)}{a}{chr(39)}' for a in req.geo_filter_areas])})"
+    if months and time_dim:
+        filter_clause += f" AND `{time_dim}` IN ({', '.join([f'{chr(39)}{m}{chr(39)}' for m in months])})"
+
+    # We need combinations of dimensions
+    combinations = []
+    for dim_obj in req.selected_analytical_dims:
+        dim_id = dim_obj.get("dim_id")
+        vals = dim_obj.get("selected_values", [])
+        if dim_id and vals:
+            for val in vals:
+                combinations.append((dim_id, val))
+
+    if not combinations: # fallback if no analytical dims selected
+        combinations = [("Total", "Overall")]
+
+    total_runs = len(combinations) * len(facts)
+    yield f"event: max_waves\ndata: {{\"total\": {total_runs}}}\n\n"
+
+    # Step 1: Fire all BQ queries in parallel to get data slices
+    async def fetch_bq(dim_id, dim_val, fact):
+        if dim_id == "Total":
+            dim_filter = ""
+        else:
+            dim_filter = f" AND `{dim_id}` = '{dim_val}'"
+        
+        # We need CSV format
+        sql = f\"\"\"
+        SELECT `{micro_dim}`, `{meso_dim}`, `{macro_dim}`, `{time_dim}`, SUM(`{fact}`) as _val
+        FROM `{bq_ref}`
+        WHERE {filter_clause} {dim_filter}
+        GROUP BY 1, 2, 3, 4
+        \"\"\"
+        
+        try:
+            loop = asyncio.get_event_loop()
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                def run_q():
+                    return list(bq_client.query(sql).result())
+                rows = await loop.run_in_executor(pool, run_q)
+                
+            csv_lines = [f"{micro_dim},{meso_dim},{macro_dim},{time_dim},{fact}"]
+            for r in rows:
+                csv_lines.append(f"{r[0]},{r[1]},{r[2]},{r[3]},{r[4]}")
+            return (dim_id, dim_val, fact, chr(10).join(csv_lines))
+        except Exception as e:
+            return (dim_id, dim_val, fact, f"Error: {str(e)}")
+
+    import concurrent.futures
+    import httpx
+    
+    tasks = []
+    for dim_id, dim_val in combinations:
+        for fact in facts:
+            tasks.append(fetch_bq(dim_id, dim_val, fact))
+            
+    bq_results = await asyncio.gather(*tasks)
+
+    # Step 2: Batched Gemini Calls
+    async def call_gemini_micro(dim_id, dim_val, fact, csv_data):
+        if csv_data.startswith("Error"):
+            return f"Error evaluating {fact} for {dim_id}={dim_val}: {csv_data}"
+            
+        req_micro = AIExploreRequest(
+            query="Analyze this slice",
+            phase="micro_slice",
+            data_table=[{"csv": csv_data}], # we pass it as a generic snippet
+        )
+        prompt = _build_explore_prompt(req_micro)
+        url = f"{GEMINI_BASE}/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+        body = {"contents": [{"parts": [{"text": prompt}]}]}
+        
+        try:
+            async with httpx.AsyncClient(timeout=45.0) as client:
+                res = await client.post(url, json=body)
+                if res.status_code == 200:
+                    text = (res.json().get("candidates") or [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                    return f"== {dim_id}: {dim_val} | FACT: {fact} ==\\n{text}\\n\\n"
+        except Exception:
+            pass
+        return f"== {dim_id}: {dim_val} | FACT: {fact} ==\\nAnalysis failed.\\n\\n"
+
+    stitched = ""
+    completed = 0
+    
+    # Process in batches of 20
+    batch_size = 20
+    for i in range(0, len(bq_results), batch_size):
+        batch = bq_results[i:i+batch_size]
+        gem_tasks = [call_gemini_micro(d, v, f, csv) for (d, v, f, csv) in batch]
+        results = await asyncio.gather(*gem_tasks)
+        for r in results:
+            stitched += r
+            
+        completed += len(batch)
+        yield f"event: wave_complete\ndata: {{\"completed\": {completed}, \"total\": {total_runs}}}\n\n"
+        
+    yield f"event: stitch_complete\ndata: {{\"message\": \"Stitched {len(bq_results)} slices.\"}}\n\n"
+
+    # Step 3: Meso Synth
+    req_meso = AIExploreRequest(query="", phase="meso", prior_output=stitched[:150000], macro_dim=macro_dim, meso_dim=meso_dim)
+    meso_prompt = _build_explore_prompt(req_meso)
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            res = await client.post(f"{GEMINI_BASE}/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}", json={"contents": [{"parts": [{"text": meso_prompt}]}]})
+            meso_text = (res.json().get("candidates") or [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+    except Exception as e:
+        meso_text = f"Meso failed: {e}"
+    
+    yield f"event: meso_complete\ndata: {json.dumps({'text': meso_text})}\n\n"
+
+    # Step 4: Macro Synth
+    req_macro = AIExploreRequest(query="", phase="macro", prior_output=meso_text, macro_dim=macro_dim, meso_dim=meso_dim)
+    macro_prompt = _build_explore_prompt(req_macro)
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            res = await client.post(f"{GEMINI_BASE}/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}", json={"contents": [{"parts": [{"text": macro_prompt}]}]})
+            macro_text = (res.json().get("candidates") or [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+    except Exception as e:
+        macro_text = f"Macro failed: {e}"
+        
+    yield f"event: macro_complete\ndata: {json.dumps({'text': macro_text})}\n\n"
+    
+    # Final Done
+    final_payload = {"micro_stitched_preview": stitched[:1000], "meso": meso_text, "macro": macro_text}
+    yield f"event: done\ndata: {json.dumps(final_payload)}\n\n"
+
+@app.post("/api/ai/deep-dive")
+async def deep_dive_streaming(req: AIExploreRequest, db: Session = Depends(database.get_db)):
+    if not bq_client:
+        raise HTTPException(status_code=500, detail="BigQuery not configured.")
+    all_ds = db.query(models.Dataset).all()
+    ds_map = { ds.id: ds.file_path for ds in all_ds if ds.file_path and not ds.file_path.startswith("http") }
+    return StreamingResponse(_stream_deep_dive(req, ds_map), media_type="text/event-stream")
+
+@app.post("/api/ai/dimension-trend")
+async def dimension_trend(req: AIExploreRequest, db: Session = Depends(database.get_db)):
+    if not bq_client:
+        raise HTTPException(status_code=500, detail="BigQuery not configured.")
+        
+    all_ds = db.query(models.Dataset).all()
+    ds_map = { ds.id: ds.file_path for ds in all_ds if ds.file_path and not ds.file_path.startswith("http") }
+    bq_ref = ds_map.get(req.dataset_id, req.dataset_id)
+    
+    time_dim = req.trend_time_grain
+    trend_dim = req.trend_dim
+    facts = req.selected_facts
+    
+    if not time_dim or not trend_dim or not facts:
+        raise HTTPException(status_code=400, detail="Missing trend dimensions or facts")
+
+    filter_clause = "1=1"
+    if req.geo_filter_zones and req.macro_dim:
+        filter_clause += f" AND `{req.macro_dim}` IN ({', '.join([f'{chr(39)}{z}{chr(39)}' for z in req.geo_filter_zones])})"
+    if req.geo_filter_areas and req.meso_dim:
+        filter_clause += f" AND `{req.meso_dim}` IN ({', '.join([f'{chr(39)}{a}{chr(39)}' for a in req.geo_filter_areas])})"
+
+    fact_sels = ", ".join([f"SUM(`{f}`) AS _{idx}" for idx, f in enumerate(facts)])
+    sql = f"SELECT `{trend_dim}`, `{time_dim}`, {fact_sels} FROM `{bq_ref}` WHERE {filter_clause} GROUP BY 1, 2 ORDER BY 1, 2"
+    
+    try:
+        rows = list(bq_client.query(sql).result())
+        csv_lines = [f"{trend_dim},{time_dim}," + ",".join(facts)]
+        for r in rows:
+            line_vals = [str(r[0]), str(r[1])] + [str(r[i+2]) for i in range(len(facts))]
+            csv_lines.append(",".join(line_vals))
+            
+        csv_data = chr(10).join(csv_lines)
+        
+        req_trend = AIExploreRequest(
+            query="Analyze dimension trend",
+            phase="dimension_trend",
+            data_table=[{"csv": csv_data}],
+            trend_dim=trend_dim,
+            trend_time_grain=time_dim
+        )
+        prompt = _build_explore_prompt(req_trend)
+        url = f"{GEMINI_BASE}/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            res = await client.post(url, json={"contents": [{"parts": [{"text": prompt}]}]})
+            if res.status_code == 200:
+                text = (res.json().get("candidates") or [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                return {"text": text}
+            else:
+                raise HTTPException(status_code=502, detail="Gemini failed")
+                
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
