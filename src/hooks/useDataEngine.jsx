@@ -377,18 +377,40 @@ export const useDataEngine = () => {
             // Apply high-recall fuzzy matching for dimensions (handles 26 -> 2026, nort -> North Zone)
             filterParts.push(`LOWER(CAST(${colIdent} AS STRING)) LIKE LOWER('%${val}%')`);
         } else if (op === "in") {
-            // handle delimiters like ',', 'and', 'vs', 'or'
-            const valClean = val.replace(/\b(and|vs|or)\b/gi, ',');
-            const inList = valClean.split(',').map(v => `LOWER('${v.trim()}')`).filter(v => v !== "LOWER('')").join(', ');
+            // Robust Parsing: AI might send JSON array strings like '["2026", "2025"]'
+            // or natural language like '2026 and 2025' or 'FY26, FY25'
+            let items = [];
+            const rawVal = String(f.value).trim();
             
-            if (isDim) {
-                // For dimensions in an IN list, we use a series of LIKEs joined by OR for maximum recall
-                // or just stick to LOWER IN if precise values are provided.
-                // Given the AI's behavior, we'll keep IN but ensure the values are normalized.
-                filterParts.push(`LOWER(CAST(${colIdent} AS STRING)) IN (${inList})`);
-            } else {
-                filterParts.push(`CAST(${colIdent} AS STRING) IN (${inList})`);
+            try {
+                // 1. Try JSON Parse (handles AI-generated JSON arrays)
+                if (rawVal.startsWith('[') && rawVal.endsWith(']')) {
+                    const parsed = JSON.parse(rawVal);
+                    if (Array.isArray(parsed)) items = parsed.map(v => String(v));
+                }
+            } catch (jsonErr) {
+                // Not valid JSON, proceed to natural language split
             }
+            
+            if (items.length === 0) {
+                // 2. Fallback: Natural Language Split (handles 'and', 'vs', 'or', ',')
+                const valClean = rawVal.replace(/\b(and|vs|or)\b/gi, ',');
+                items = valClean.split(',').map(v => v.trim()).filter(v => v !== "");
+            }
+            
+            const inList = items.map(v => `LOWER('${String(v).replace(/'/g, "''")}')`).join(', ');
+            
+            if (items.length > 0) {
+                if (isDim) {
+                    filterParts.push(`LOWER(CAST(${colIdent} AS STRING)) IN (${inList})`);
+                } else {
+                    filterParts.push(`CAST(${colIdent} AS STRING) IN (${inList})`);
+                }
+            } else {
+                // Safety: ignore the filter if we couldn't parse anything usable
+                console.warn(`Empty or un-parseable IN list for field: ${f.field}`);
+            }
+
         } else if (op === "=" || op === "==") {
             filterParts.push(`LOWER(CAST(${colIdent} AS STRING)) = LOWER('${val}')`);
         } else {
