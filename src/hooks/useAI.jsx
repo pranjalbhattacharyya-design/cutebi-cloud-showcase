@@ -398,13 +398,40 @@ Return JSON format EXACTLY matching this schema:
         setAiThinkingLabel('Fetching your answer...');
 
         const aiPhase = path === 'fast' ? 'sql_gen_fast' : 'sql_gen';
-        const sqlRes = await callAI({ ...commonPayload, query, phase: aiPhase, data_table: [], macro_dim, meso_dim, micro_dim });
-        const parsed = JSON.parse(sqlRes.replace(/```json/gi, '').replace(/```/g, '').trim());
+        const aiResponseText = await callAI({ ...commonPayload, query, phase: aiPhase, data_table: [], macro_dim, meso_dim, micro_dim });
+        
+        let parsed = {};
+        try {
+            if (aiPhase === 'sql_gen_fast') {
+                const thinkingMatch = aiResponseText.match(/<thinking>([\s\S]*?)<\/thinking>/);
+                const jsonMatch = aiResponseText.match(/<json>([\s\S]*?)<\/json>/);
+                
+                if (thinkingMatch) {
+                   const reasoning = thinkingMatch[1].trim();
+                   window.dispatchEvent(new CustomEvent('cutebi-debug', { 
+                       detail: { type: 'info', category: 'AI Trace', message: 'Deductive Reasoning', details: { reasoning } } 
+                   }));
+                }
+                
+                if (jsonMatch) {
+                    parsed = JSON.parse(jsonMatch[1].trim().replace(/```json/gi, '').replace(/```/g, '').trim());
+                } else {
+                    // Fallback for untagged JSON
+                    parsed = JSON.parse(aiResponseText.replace(/```json/gi, '').replace(/```/g, '').trim());
+                }
+            } else {
+                parsed = JSON.parse(aiResponseText.replace(/```json/gi, '').replace(/```/g, '').trim());
+            }
+        } catch (e) {
+            console.error("AI Parse Error:", e, aiResponseText);
+            throw new Error("Failed to parse AI intent. Please try rephrasing.");
+        }
 
         if (parsed.action === 'answer') {
           setExploreHistory([...newHistory, { role: 'ai', text: parsed.text, path: 'fast' }]);
           return;
         }
+
 
         if (parsed.action === 'query' && parsed.sql_query) {
           const { dimensions: dims, measures: meas, filters } = parsed.sql_query;

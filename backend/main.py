@@ -1311,24 +1311,48 @@ RULES:
 Return JSON: {{ "action": "query"|"answer", "text": "...", "sql_query": {{ "dimensions": [], "measures": [], "filters": [] }} }}"""
 
     if req.phase == "sql_gen_fast":
-        return f"""{model_ctx}You are a Data Analyst. The user is querying a unified semantic model.
-Dimensions (category fields — each has a business description):
+        return f"""{model_ctx}You are the Intent Extraction Engine for CuteBI. Your objective is to translate a user's natural language business question into a structured JSON query payload.
+
+Dimensions (category fields with descriptions):
 {dim_list}
 
-Measures (numeric fields — each has a business description; aggType indicates aggregation; isTimeIntelligence=true means it is a time-period calculation):
+Measures (numeric fields with descriptions):
 {meas_list}
 
 User question: "{req.query}"
 
-RULES:
-1. Identify ONLY the absolute minimum semantic fields required to answer the user's specific question.
-2. DO NOT return exhaustive lists of analytical axes. Keep it generic. If the user asks for some fact by some dimension (or 2 or 3 of them), return ONLY that much to be grouped by or aggregated.
-3. If data fetch is needed, set action="query" and populate sql_query with these exact field IDs.
-4. If answerable without data, set action="answer" and provide the text.
-5. NEVER invent field IDs. Only use exact IDs provided.
-6. For time-based questions, prefer fields where isTimeIntelligence=true.
+CRITICAL INSTRUCTIONS FOR SEMANTIC MATCHING:
+1. Do NOT rely on exact keyword matches between the user's prompt and the field names. 
+2. Users will use broad, conversational business terms (e.g., "sales performance", "funnel metrics", "growth"). 
+3. You MUST read the "description" property of every Measure and Dimension provided in the Semantic Context to deduce the best conceptual match.
+4. If a user's broad term logically encompasses multiple related metrics described in the data dictionary (e.g., "sales performance" covering both "Enquiries" and "Test Drives"), you must select ALL relevant measures to provide a comprehensive view.
+5. Identify ONLY the absolute minimum semantic fields required to answer the user's specific question.
+6. NEVER invent field IDs. Only use exact IDs provided above.
+7. For dimensional filters, use operator="REGEXP_CONTAINS" and provide the value in lowercase (e.g., "nort" or "26").
 
-Return JSON: {{ "action": "query"|"answer", "text": "...", "sql_query": {{ "dimensions": [], "measures": [], "filters": [] }} }}"""
+OUTPUT FORMAT:
+You must structure your response in two distinct blocks. 
+
+First, provide a brief reasoning block explaining how you mapped the user's intent to the specific descriptions in the semantic context.
+<thinking>
+[Your 2-3 sentences of deductive reasoning here]
+</thinking>
+
+Second, provide the strict JSON output required by the system engine. Do not include markdown formatting inside the json block.
+<json>
+{{
+  "action": "query"|"answer",
+  "text": "...",
+  "sql_query": {{ 
+    "dimensions": ["list of dimension field_ids"], 
+    "measures": ["list of measure field_ids"], 
+    "filters": [
+       {{ "field": "id", "operator": "REGEXP_CONTAINS", "value": "pattern" }}
+    ] 
+  }}
+}}
+</json>"""
+
 
 
     if req.phase == "fast_answer":
@@ -1441,8 +1465,8 @@ async def ai_explore(req: AIExploreRequest):
     url    = f"{GEMINI_BASE}/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
     body   = {"contents": [{"parts": [{"text": prompt}]}]}
 
-    # SQL gen phase needs structured JSON output
-    if req.phase in ("sql_gen", "sql_gen_fast"):
+    # SQL gen phase (Deep Dive only) needs structured JSON output
+    if req.phase == "sql_gen":
         body["generationConfig"] = {
             "responseMimeType": "application/json",
             "responseSchema": {
