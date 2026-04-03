@@ -1296,7 +1296,7 @@ class SummaryResponse(BaseModel):
     strategic_macro_verdict: str
 
 SUMMARY_SYSTEM_PROMPT = """
-You are generating a highly visual executive infographic for the Mahindra board.
+You are generating a highly visual infographic for an executive board.
 Your ONLY output must be a strict JSON object following the schema defined below.
 
 CRITICAL DATA RULE:

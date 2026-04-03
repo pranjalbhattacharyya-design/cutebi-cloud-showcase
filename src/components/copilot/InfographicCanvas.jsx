@@ -132,11 +132,11 @@ function drawInfographic(canvas, data, H) {
   ctx.font = 'bold 24px -apple-system, Inter, sans-serif';
   wrapText(ctx, data.strategic_macro_verdict || 'Analytical Summary', 54, 105, W - 120, 32);
 
-  // Mahindra Branding
+  // Branding Top Right
   ctx.fillStyle = theme.mahindraRed;
   ctx.font = '900 16px Arial black, sans-serif';
   ctx.textAlign = 'right';
-  ctx.fillText('Mahindra', W - 48, 35);
+  ctx.fillText('EXECUTIVE INSIGHT', W - 48, 35);
 
   // 4. MICRO — GRAIN-LEVEL INSIGHTS
   ctx.fillStyle = theme.slate;
@@ -220,7 +220,7 @@ function drawInfographic(canvas, data, H) {
   ctx.textAlign = 'right';
   const now = new Date();
   ctx.fillText(
-    `Mahindra Identity Analytics · ${now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`,
+    `CuteBI AI Executive Insight · ${now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`,
     W - 32, H - 20
   );
 }
