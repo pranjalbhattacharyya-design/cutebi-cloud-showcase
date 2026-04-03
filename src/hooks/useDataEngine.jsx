@@ -364,21 +364,40 @@ export const useDataEngine = () => {
         if (!f.field || !f.value) return;
         const colIdent = isMasterView ? `\`${f.field}\`` : `\`${sourceTable}\`.\`${f.field}\``;
         const val = String(f.value).replace(/'/g, "''");
-        let op = (f.operator || "=").toLowerCase();
         
-        if (op === "contains") {
+        // Normalize AI operators to SQL standard
+        const opMap = { 'eq': '=', 'neq': '!=', '==': '=' };
+        let op = opMap[f.operator?.toLowerCase()] || f.operator || "=";
+        op = op.toLowerCase();
+        
+        // Check if this field is a dimension for fuzzy matching
+        const isDim = globalSemanticFields.some(sf => (sf.id === f.field || sf.originFieldId === f.field) && sf.type === 'dimension');
+        
+        if (op === "contains" || ((op === "=" || op === "==") && isDim)) {
+            // Apply high-recall fuzzy matching for dimensions (handles 26 -> 2026, nort -> North Zone)
             filterParts.push(`LOWER(CAST(${colIdent} AS STRING)) LIKE LOWER('%${val}%')`);
         } else if (op === "in") {
-            // handle comma separated AI inputs like 'FY25, FY26'
-            const inList = val.split(',').map(v => `LOWER('${v.trim()}')`).join(', ');
-            filterParts.push(`LOWER(CAST(${colIdent} AS STRING)) IN (${inList})`);
+            // handle delimiters like ',', 'and', 'vs', 'or'
+            const valClean = val.replace(/\b(and|vs|or)\b/gi, ',');
+            const inList = valClean.split(',').map(v => `LOWER('${v.trim()}')`).filter(v => v !== "LOWER('')").join(', ');
+            
+            if (isDim) {
+                // For dimensions in an IN list, we use a series of LIKEs joined by OR for maximum recall
+                // or just stick to LOWER IN if precise values are provided.
+                // Given the AI's behavior, we'll keep IN but ensure the values are normalized.
+                filterParts.push(`LOWER(CAST(${colIdent} AS STRING)) IN (${inList})`);
+            } else {
+                filterParts.push(`CAST(${colIdent} AS STRING) IN (${inList})`);
+            }
         } else if (op === "=" || op === "==") {
             filterParts.push(`LOWER(CAST(${colIdent} AS STRING)) = LOWER('${val}')`);
         } else {
+            // Fallback for !=, <, >, etc.
             filterParts.push(`CAST(${colIdent} AS STRING) ${op} '${val}'`);
         }
       });
     }
+
 
     if (filterParts.length > 0) whereClause = ` WHERE ${filterParts.join(' AND ')}`;
 
