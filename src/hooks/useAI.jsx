@@ -397,7 +397,8 @@ Return JSON format EXACTLY matching this schema:
       if (!hasFreshCache) {
         setAiThinkingLabel('Fetching your answer...');
 
-        const sqlRes = await callAI({ ...commonPayload, query, phase: 'sql_gen', data_table: [], macro_dim, meso_dim, micro_dim });
+        const aiPhase = path === 'fast' ? 'sql_gen_fast' : 'sql_gen';
+        const sqlRes = await callAI({ ...commonPayload, query, phase: aiPhase, data_table: [], macro_dim, meso_dim, micro_dim });
         const parsed = JSON.parse(sqlRes.replace(/```json/gi, '').replace(/```/g, '').trim());
 
         if (parsed.action === 'answer') {
@@ -407,7 +408,8 @@ Return JSON format EXACTLY matching this schema:
 
         if (parsed.action === 'query' && parsed.sql_query) {
           const { dimensions: dims, measures: meas, filters } = parsed.sql_query;
-          dataResult = await executeExploreQuery(activeDatasetId, dims, meas, filters);
+          const limit = path === 'fast' ? 1500 : null;
+          dataResult = await executeExploreQuery(activeDatasetId, dims, meas, filters, limit);
           sessionCache.current = { dataTable: dataResult, microInsight: null, mesoInsight: null, macroInsight: null };
         }
       } else {

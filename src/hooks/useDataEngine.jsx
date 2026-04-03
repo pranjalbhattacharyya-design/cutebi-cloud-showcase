@@ -218,7 +218,7 @@ export const useDataEngine = () => {
 
 
   // --- SQL Generator Helper: Unified Approach ---
-  const generateSQL = useCallback((datasetId, dimensions = [], measures = [], filters = []) => {
+  const generateSQL = useCallback((datasetId, dimensions = [], measures = [], filters = [], limit = null) => {
     const activeJoinGroup = getJoinGroup(activeDatasetId);
     const isMasterView = activeJoinGroup.includes(datasetId);
     const activeDs = datasets.find(d => d.id === datasetId);
@@ -351,7 +351,8 @@ export const useDataEngine = () => {
     if (filterParts.length > 0) whereClause = ` WHERE ${filterParts.join(' AND ')}`;
 
     const groupByClause = dimensions.length > 0 ? ` GROUP BY ${dimensions.map((_, i) => i + 1).join(', ')}` : "";
-    return `${ctePrefix}SELECT ${selectClause.join(', ')} FROM \`${sourceTable}\`${whereClause}${groupByClause}`;
+    const limitClause = limit ? ` LIMIT ${limit}` : "";
+    return `${ctePrefix}SELECT ${selectClause.join(', ')} FROM \`${sourceTable}\`${whereClause}${groupByClause}${limitClause}`;
   }, [datasets, semanticModels, activeDatasetId, relationships, globalFilters, generateUnifiedCTE]);
 
   const applyFilters = useCallback((data, datasetId) => {
@@ -496,7 +497,7 @@ export const useDataEngine = () => {
     getPivotData,
     getTableData,
     getScatterData,
-    executeExploreQuery: async (dsId, dims, meass, filts) => await queryDuckDB(generateSQL(dsId, dims, meass, filts)),
+    executeExploreQuery: async (dsId, dims, meass, filts, limit) => await queryDuckDB(generateSQL(dsId, dims, meass, filts, limit)),
     generateUnifiedCTE,
     datesReady
   };

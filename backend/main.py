@@ -1310,6 +1310,27 @@ RULES:
 
 Return JSON: {{ "action": "query"|"answer", "text": "...", "sql_query": {{ "dimensions": [], "measures": [], "filters": [] }} }}"""
 
+    if req.phase == "sql_gen_fast":
+        return f"""{model_ctx}You are a Data Analyst. The user is querying a unified semantic model.
+Dimensions (category fields — each has a business description):
+{dim_list}
+
+Measures (numeric fields — each has a business description; aggType indicates aggregation; isTimeIntelligence=true means it is a time-period calculation):
+{meas_list}
+
+User question: "{req.query}"
+
+RULES:
+1. Identify ONLY the absolute minimum semantic fields required to answer the user's specific question.
+2. DO NOT return exhaustive lists of analytical axes. Keep it generic. If the user asks for some fact by some dimension (or 2 or 3 of them), return ONLY that much to be grouped by or aggregated.
+3. If data fetch is needed, set action="query" and populate sql_query with these exact field IDs.
+4. If answerable without data, set action="answer" and provide the text.
+5. NEVER invent field IDs. Only use exact IDs provided.
+6. For time-based questions, prefer fields where isTimeIntelligence=true.
+
+Return JSON: {{ "action": "query"|"answer", "text": "...", "sql_query": {{ "dimensions": [], "measures": [], "filters": [] }} }}"""
+
+
     if req.phase == "fast_answer":
         meas_ctx = [{"id": m.id, "label": m.label, "aggType": m.aggType} for m in req.measures]
         return f"""{model_ctx}The user asked: "{req.query}".
