@@ -8,6 +8,8 @@ import uuid
 import threading
 import duckdb
 import httpx
+import json
+import asyncio
 
 from . import models, database, engine
 from supabase import create_client, Client
@@ -1275,6 +1277,29 @@ class AIExploreRequest(BaseModel):
 class AIImageRequest(BaseModel):
     verdict_text: str
 
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+class SummaryRequest(BaseModel):
+    chat_history: List[ChatMessage]
+
+class SummaryResponse(BaseModel):
+    micro_insights: List[str]
+    meso_trends: List[str]
+    strategic_macro_verdict: str
+
+SUMMARY_SYSTEM_PROMPT = """
+You are a Senior Business Analyst presenting to an executive board. Your objective is to read the provided `chat_history` of data queries and synthesize the findings into a highly structured presentation. 
+
+Do not write SQL. Do not ask follow-up questions. Your ONLY output must be a strict JSON object following the schema defined by the system.
+
+You must categorize your analysis into three tiers:
+1. "micro_insights": Specific, localized data points (e.g., "Patna's conversion rate hit 65%").
+2. "meso_trends": Broader regional or categorical patterns observed across the data.
+3. "strategic_macro_verdict": A single, punchy executive takeaway that summarizes the entire conversational session. This verdict must be highly visual and descriptive, as it will be used as a prompt to generate an accompanying presentation slide.
+"""
+
 
 def _build_explore_prompt(req: AIExploreRequest) -> str:
     """Build the correct Gemini prompt based on which phase is being executed."""
@@ -1598,7 +1623,6 @@ async def ai_explore(req: AIExploreRequest):
         print(f"[AI/explore] Unexpected error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @app.post("/api/ai/image")
 async def ai_image(req: AIImageRequest):
     """Secure proxy: generates infographic via Imagen. API key never leaves the server."""
@@ -1645,9 +1669,52 @@ async def ai_image(req: AIImageRequest):
 
     raise HTTPException(status_code=502, detail=f"Imagen failed after retries: {last_err}")
 
-import asyncio
-from fastapi.responses import StreamingResponse
-import json
+
+@app.post("/api/generate_summary", response_model=SummaryResponse)
+async def generate_summary(req: SummaryRequest):
+    """Executive synthesis: summarizes a chat history into actionable board-room insights."""
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured on server.")
+
+    try:
+        # Flatten the chat history into a script for the AI
+        conversation_text = "CHAT HISTORY TO ANALYZE:\n\n"
+        for turn in req.chat_history:
+            conversation_text += f"{turn.role.upper()}: {turn.content}\n\n"
+
+        url  = f"{GEMINI_BASE}/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+        
+        # CRITICAL: We use responseMimeType: "application/json" via the REST API
+        body = {
+            "contents": [{"parts": [{"text": conversation_text}]}],
+            "systemInstruction": {"parts": [{"text": SUMMARY_SYSTEM_PROMPT}]},
+            "generationConfig": {
+                "responseMimeType": "application/json"
+            }
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(url, json=body)
+
+        if response.status_code != 200:
+            print(f"[AI/summary] Gemini error {response.status_code}: {response.text[:200]}")
+            raise HTTPException(status_code=502, detail=f"Gemini returned {response.status_code}")
+
+        data = response.json()
+        text = (data.get("candidates") or [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+        
+        if not text:
+            raise HTTPException(status_code=502, detail="Empty summary response from Gemini.")
+
+        # Because responseMimeType is JSON, we can safely parse it directly
+        parsed_json = json.loads(text)
+        return parsed_json
+
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="AI failed to generate valid JSON for the summary.")
+    except Exception as e:
+        print(f"[AI/summary] Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/ai/deep-dive/preflight")
 async def deep_dive_preflight(req: AIExploreRequest, db: Session = Depends(database.get_db)):
