@@ -824,6 +824,38 @@ Return JSON: { "charts": [...], "new_measures": [] }`;
     }
   };
 
+  const handleGenerateSummary = async () => {
+    if (isThinking || exploreHistory.length === 0) return;
+    setIsThinking(true);
+    setAiThinkingLabel('Synthesizing boardroom summary...');
+    try {
+      // Filter out errors and previous summaries to prevent recursion/token bloat
+      const history = exploreHistory
+        .filter(m => !m.isError && m.path !== 'summary')
+        .map(m => ({
+          role: m.role === 'user' ? 'user' : 'assistant',
+          content: m.text || ''
+        }));
+
+      const res = await apiClient.aiGenerateSummary({ chat_history: history });
+      
+      setExploreHistory(prev => [
+        ...prev, 
+        { 
+          role: 'assistant', 
+          path: 'summary', 
+          summary: res 
+        }
+      ]);
+    } catch (e) {
+      console.error('Summary Error:', e);
+      setAiError(`Summary Synthesis Failed: ${e.message}`);
+    } finally {
+      setIsThinking(false);
+      setAiThinkingLabel('Analyzing...');
+    }
+  };
+
   return {
     handleAutoFillDescriptions,
     handleConfirmPendingAI,
@@ -833,5 +865,6 @@ Return JSON: { "charts": [...], "new_measures": [] }`;
     handleHierarchyAnswer,
     handleDeepDiveExecute,
     handleTrendExecute,
+    handleGenerateSummary,
   };
 };

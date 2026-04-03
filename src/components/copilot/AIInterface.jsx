@@ -257,6 +257,40 @@ function AIMessage({ msg, handleGenerateInfographic, handleDeepDiveExecute, hand
     );
   }
 
+  // Summary Synthesis bubble
+  if (msg.path === 'summary' && msg.summary) {
+    return (
+      <div className="flex flex-col items-start animate-in slide-in-from-bottom-2 w-full">
+        <div className="t-panel border t-border rounded-t-2xl rounded-br-2xl px-3 py-3 w-full shadow-sm">
+          <p className="text-[10px] font-black t-text-muted uppercase tracking-widest mb-2 flex items-center gap-1">
+            <Sparkles size={10} className="t-accent" /> Executive synthesis
+          </p>
+          <PhaseAccordion 
+            label="🔬 Micro — Grain-Level Insights" 
+            icon={null} 
+            content={msg.summary.micro_insights?.join('\n\n')} 
+            defaultOpen={false} 
+            onGenerateInfographic={(text) => handleGenerateInfographic(text, msg.userQuery)} 
+          />
+          <PhaseAccordion 
+            label="📊 Meso — Systemic Patterns" 
+            icon={null} 
+            content={msg.summary.meso_trends?.join('\n\n')} 
+            defaultOpen={false} 
+            onGenerateInfographic={(text) => handleGenerateInfographic(text, msg.userQuery)} 
+          />
+          <PhaseAccordion 
+            label="🎯 Macro — Strategic Verdict" 
+            icon={null} 
+            content={msg.summary.strategic_macro_verdict} 
+            defaultOpen={true} 
+            onGenerateInfographic={(text) => handleGenerateInfographic(text, msg.userQuery)} 
+          />
+        </div>
+      </div>
+    );
+  }
+
   // Fast Path / plain AI bubble
   return (
     <div className="flex flex-col items-start animate-in slide-in-from-bottom-2">
@@ -308,7 +342,7 @@ export default function AIInterface({ handleAskAI: handleAskAIFromApp, handleCon
     userRole,
   } = useAppState();
 
-  const { handleGenerateInfographic, handleAskAI, executeExploreDataLogic, handleHierarchyAnswer, handleDeepDiveExecute, handleTrendExecute } = useAI();
+  const { handleGenerateInfographic, handleAskAI, executeExploreDataLogic, handleHierarchyAnswer, handleDeepDiveExecute, handleTrendExecute, handleGenerateSummary } = useAI();
   const { hierarchyPending, deepDiveHierarchy, setDeepDiveHierarchy } = useAppState();
   const { generateUnifiedCTE } = useDataEngine();
 
@@ -504,10 +538,21 @@ export default function AIInterface({ handleAskAI: handleAskAIFromApp, handleCon
       {/* Input Footer */}
       <div className="p-4 border-t t-border bg-[var(--theme-panel-bg)] shrink-0">
         {exploreHistory.length > 0 && (
-          <div className="flex justify-end mb-2">
-            <button onClick={() => setExploreHistory([])} className="text-xs font-bold t-text-muted hover:text-red-400 flex items-center gap-1 transition-colors">
-              <Trash2 size={12} /> Clear Chat
-            </button>
+          <div className="flex flex-col gap-2 mb-2">
+            {!isThinking && !pendingAIAction && (
+              <button 
+                onClick={handleGenerateSummary}
+                className="w-full t-panel border t-border border-indigo-500/30 hover:border-indigo-500/60 py-2.5 rounded-lg flex items-center justify-center gap-2 text-xs font-bold t-text-main transition-all group shadow-sm bg-indigo-500/[0.05]"
+              >
+                <Sparkles size={14} className="text-indigo-500 group-hover:scale-110 transition-transform" />
+                Generate Executive Summary
+              </button>
+            )}
+            <div className="flex justify-end">
+              <button onClick={() => setExploreHistory([])} className="text-[10px] font-bold t-text-muted hover:text-red-400 flex items-center gap-1 transition-colors">
+                <Trash2 size={10} /> Clear Chat
+              </button>
+            </div>
           </div>
         )}
         <form onSubmit={handleSubmit} className="relative">

@@ -117,4 +117,7 @@ export const apiClient = {
   async aiImage(payload) {
     return this.post('/ai/image', payload);
   },
+  async aiGenerateSummary(payload) {
+    return this.post('/api/generate_summary', payload);
+  },
 };
