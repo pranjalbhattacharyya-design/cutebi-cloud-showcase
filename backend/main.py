@@ -1328,7 +1328,9 @@ CRITICAL INSTRUCTIONS FOR SEMANTIC MATCHING:
 4. If a user's broad term logically encompasses multiple related metrics described in the data dictionary (e.g., "sales performance" covering both "Enquiries" and "Test Drives"), you must select ALL relevant measures to provide a comprehensive view.
 5. Identify ONLY the absolute minimum semantic fields required to answer the user's specific question.
 6. NEVER invent field IDs. Only use exact IDs provided above.
-7. For dimensional filters, use operator="REGEXP_CONTAINS" and provide the value in lowercase (e.g., "nort" or "26").
+7. For dimensional filters, use operator="REGEXP_CONTAINS" and provide the value in lowercase.
+   - IMPORTANT: If extracting numerical shorthand like "26" for a year dimension (FY), append the "$" anchor (e.g., "26$") to the pattern. This ensures it matches the end of the string (matching 2026 but NOT 2600).
+   - For lists, use the pipe separator: "(25$|26$)".
 
 OUTPUT FORMAT:
 You must structure your response in two distinct blocks. 

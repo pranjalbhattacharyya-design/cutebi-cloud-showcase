@@ -370,17 +370,23 @@ export const useDataEngine = () => {
         // Normalize AI operators to SQL standard
         const opMap = { 'eq': '=', 'neq': '!=', '==': '=' };
         let op = opMap[f.operator?.toLowerCase()] || f.operator || "=";
-        op = op.toLowerCase();
+        const opLower = op.toLowerCase();
         
         // Check if this field is a dimension for fuzzy matching
         const isDim = globalSemanticFields.some(sf => (sf.id === f.field || sf.originFieldId === f.field) && sf.type === 'dimension');
+
+        // Explicitly handle REGEXP_CONTAINS as a function (BigQuery requirement)
+        if (opLower === 'regexp_contains') {
+            filterParts.push(`REGEXP_CONTAINS(LOWER(CAST(${colIdent} AS STRING)), LOWER('${rawVal.replace(/'/g, "''")}'))`);
+            return;
+        }
         
-        if (isDim && (op === "=" || op === "==" || op === "contains" || op === "in")) {
+        if (isDim && (opLower === "=" || opLower === "==" || opLower === "contains" || opLower === "in")) {
             // HIGH-RECALL ARCHITECTURE: Use REGEXP_CONTAINS for all dimensional lookups
             // This handles partial matches ("26" -> "2026"), Case-Insensitivity, and Lists ("26|25")
             let items = [];
             
-            if (op === "in") {
+            if (opLower === "in") {
                 try {
                     if (rawVal.startsWith('[') && rawVal.endsWith(']')) {
                         const parsed = JSON.parse(rawVal);
@@ -400,18 +406,19 @@ export const useDataEngine = () => {
                 const pattern = items.map(escapeRegex).join('|');
                 filterParts.push(`REGEXP_CONTAINS(LOWER(CAST(${colIdent} AS STRING)), LOWER('${pattern.replace(/'/g, "''")}'))`);
             }
-        } else if (op === "in") {
+        } else if (opLower === "in") {
             // Standard IN for measures (strict matching)
             const valClean = rawVal.replace(/\b(and|vs|or)\b/gi, ',');
             const items = valClean.split(',').map(v => v.trim()).filter(v => v !== "");
             const inList = items.map(v => `'${String(v).replace(/'/g, "''")}'`).join(', ');
             if (items.length > 0) filterParts.push(`CAST(${colIdent} AS STRING) IN (${inList})`);
-        } else if (op === "=" || op === "==") {
+        } else if (opLower === "=" || opLower === "==") {
             filterParts.push(`LOWER(CAST(${colIdent} AS STRING)) = LOWER('${rawVal.replace(/'/g, "''")}')`);
         } else {
             // Fallback for !=, <, >, etc.
             filterParts.push(`CAST(${colIdent} AS STRING) ${op} '${rawVal.replace(/'/g, "''")}'`);
         }
+
       });
     }
 
