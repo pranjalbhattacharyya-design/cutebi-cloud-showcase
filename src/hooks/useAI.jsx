@@ -17,6 +17,13 @@ async function callAI(payload) {
 
 export const useAI = () => {
   const {
+    activeDataset, isThinking, setIsThinking, showToast,
+    setDatasets, setSemanticModels, activeDatasetId, relationships,
+    semanticModels, datasets, chatInput, setChatInput,
+    aiMode, exploreHistory, setExploreHistory,
+    setPendingAIAction, activePageId,
+    setAiError, setIsExploreOpen, setAiMode, pendingAIAction,
+    aiThinkingLabel, setAiThinkingLabel,
     deepDiveHierarchy, setDeepDiveHierarchy,
     hierarchyPending, setHierarchyPending,
     lastIntentState, setLastIntentState,
