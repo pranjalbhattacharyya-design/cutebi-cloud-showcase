@@ -1240,27 +1240,38 @@ class AIFieldMeasure(BaseModel):
     timePeriod: Optional[str] = None
 
 
+class AIChatMessage(BaseModel):
+    role: str
+    content: str
+
+class AIIntentState(BaseModel):
+    dimensions: List[str]
+    measures: List[str]
+    filters: List[Dict[str, Any]]
+
 class AIExploreRequest(BaseModel):
     query: Optional[str] = ""
-    phase: Optional[str] = ""                            # "sql_gen" | "fast_answer" | "micro" | "meso" | "macro" | "preflight" | "micro_slice" | "dimension_trend"
+    phase: Optional[str] = "" 
+    chat_history: Optional[List[AIChatMessage]] = []
+    active_state: Optional[AIIntentState] = None
     model_description: Optional[str] = ""
     dimensions: Optional[List[AIFieldDim]] = []
     measures: Optional[List[AIFieldMeasure]] = []
     data_table: Optional[List[Dict[str, Any]]] = []
-    prior_output: Optional[str] = ""     # Phase 1 text for Meso; Phase 2 text for Macro
-    macro_dim: Optional[str] = ""        # Broadest hierarchy level (e.g. Zone, Region)
-    meso_dim: Optional[str] = ""         # Mid-tier hierarchy level (e.g. Area Office)
-    micro_dim: Optional[str] = ""        # Finest grain level (e.g. Dealer, Location)
+    prior_output: Optional[str] = ""
+    macro_dim: Optional[str] = ""
+    meso_dim: Optional[str] = ""
+    micro_dim: Optional[str] = ""
     selected_analytical_dims: Optional[List[Dict[str, Any]]] = []
     selected_facts: Optional[List[str]] = []
     selected_months: Optional[List[str]] = []
     geo_filter_zones: Optional[List[str]] = []
     geo_filter_areas: Optional[List[str]] = []
-    analysis_mode: Optional[str] = "full"  # "full" | "dimension_trend"
+    analysis_mode: Optional[str] = "full"
     trend_dim: Optional[str] = ""
     trend_time_grain: Optional[str] = ""
     dataset_id: Optional[str] = ""
-    cte_sql: Optional[str] = ""  # Unified CTE SQL from the frontend join engine
+    cte_sql: Optional[str] = ""
 class AIImageRequest(BaseModel):
     verdict_text: str
 
@@ -1311,6 +1322,14 @@ RULES:
 Return JSON: {{ "action": "query"|"answer", "text": "...", "sql_query": {{ "dimensions": [], "measures": [], "filters": [] }} }}"""
 
     if req.phase == "sql_gen_fast":
+        history_ctx = ""
+        if req.chat_history:
+            history_ctx = "\nRecent Chat History:\n" + "\n".join([f"{m.role}: {m.content}" for m in req.chat_history])
+        
+        state_ctx = ""
+        if req.active_state:
+            state_ctx = f"\nActive Intent State (JSON from last turn):\n{json.dumps(req.active_state.dict())}\n"
+
         return f"""{model_ctx}You are the Intent Extraction Engine for CuteBI. Your objective is to translate a user's natural language business question into a structured JSON query payload.
 
 Dimensions (category fields with descriptions):
@@ -1318,6 +1337,13 @@ Dimensions (category fields with descriptions):
 
 Measures (numeric fields with descriptions):
 {meas_list}
+
+CONVERSATIONAL STATE & CONTEXT HANDLING:
+You are maintaining an ongoing analytical conversation. {state_ctx}{history_ctx}
+
+1. When a user asks a follow-up question (e.g., "break this down by area", "what about the east zone?", "filter for X5 models"), you MUST inherit the relevant measures and filters from the `active_state` unless the user's new prompt explicitly overrides them.
+2. If the user says "this" or "that", assume they want to keep the current filters and measures, but add the newly requested dimension.
+3. If the user changes a filter (e.g., previous state was "North Zone", user says "What about East?"), replace the specific filter but keep everything else intact.
 
 User question: "{req.query}"
 
@@ -1336,6 +1362,7 @@ OUTPUT FORMAT:
 You must structure your response in two distinct blocks. 
 
 First, provide a brief reasoning block explaining how you mapped the user's intent to the specific descriptions in the semantic context.
+In your reasoning, explicitly state which filters/dimensions you are carrying over from the previous state.
 <thinking>
 [Your 2-3 sentences of deductive reasoning here]
 </thinking>

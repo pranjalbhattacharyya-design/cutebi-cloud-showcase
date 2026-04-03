@@ -17,15 +17,9 @@ async function callAI(payload) {
 
 export const useAI = () => {
   const {
-    activeDataset, isThinking, setIsThinking, showToast,
-    setDatasets, setSemanticModels, activeDatasetId, relationships,
-    semanticModels, datasets, chatInput, setChatInput,
-    aiMode, exploreHistory, setExploreHistory,
-    setPendingAIAction, activePageId,
-    setAiError, setIsExploreOpen, setAiMode, pendingAIAction,
-    aiThinkingLabel, setAiThinkingLabel,
     deepDiveHierarchy, setDeepDiveHierarchy,
     hierarchyPending, setHierarchyPending,
+    lastIntentState, setLastIntentState,
   } = useAppState();
 
   const { globalSemanticFields, executeExploreQuery, generateUnifiedCTE } = useDataEngine();
@@ -397,8 +391,29 @@ Return JSON format EXACTLY matching this schema:
       if (!hasFreshCache) {
         setAiThinkingLabel('Fetching your answer...');
 
+        // ── CONVERSATIONAL MEMORY: Format chat history for AI ─────────────────
+        const recentHistory = exploreHistory
+          .filter(h => h.role === 'user' || (h.role === 'ai' && h.text && !h.isError))
+          .slice(-6) // Last 3 turns
+          .map(h => ({
+            role: h.role === 'user' ? 'user' : 'assistant',
+            content: h.text || ''
+          }));
+
         const aiPhase = path === 'fast' ? 'sql_gen_fast' : 'sql_gen';
-        const aiResponseText = await callAI({ ...commonPayload, query, phase: aiPhase, data_table: [], macro_dim, meso_dim, micro_dim });
+        const aiPayload = { 
+          ...commonPayload, 
+          query, 
+          phase: aiPhase, 
+          data_table: [], 
+          macro_dim, 
+          meso_dim, 
+          micro_dim,
+          chat_history: recentHistory,
+          active_state: aiPhase === 'sql_gen_fast' ? lastIntentState : null
+        };
+
+        const aiResponseText = await callAI(aiPayload);
         
         let parsed = {};
         try {
@@ -415,8 +430,12 @@ Return JSON format EXACTLY matching this schema:
                 
                 if (jsonMatch) {
                     parsed = JSON.parse(jsonMatch[1].trim().replace(/```json/gi, '').replace(/```/g, '').trim());
+                    
+                    // Conversational Memory: Store the JSON intent for next turn
+                    if (parsed.action === 'query' && parsed.sql_query) {
+                        setLastIntentState(parsed.sql_query);
+                    }
                 } else {
-                    // Fallback for untagged JSON
                     parsed = JSON.parse(aiResponseText.replace(/```json/gi, '').replace(/```/g, '').trim());
                 }
             } else {

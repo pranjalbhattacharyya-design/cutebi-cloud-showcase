@@ -114,9 +114,9 @@ export const AppStateProvider = ({ children }) => {
   const [aiThinkingLabel, setAiThinkingLabel] = useState('Analyzing...');
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   // Hierarchy for deep dive: { macro_dim, meso_dim, micro_dim } — set via counter-question
-  const [deepDiveHierarchy, setDeepDiveHierarchy] = useState(null);
-  // When true, the next user message in explore chat is treated as the hierarchy answer
   const [hierarchyPending, setHierarchyPending] = useState(null); // stores the pending query
+  // Conversational Intent Memory: stores the {dimensions, measures, filters} of the last successful analytical query
+  const [lastIntentState, setLastIntentState] = useState(null);
 
   // --- Inline Edit States ---
   const [editingDatasetId, setEditingDatasetId] = useState(null);
@@ -638,6 +638,7 @@ export const AppStateProvider = ({ children }) => {
     pendingAIAction, setPendingAIAction, aiError, setAiError, aiThinkingLabel, setAiThinkingLabel,
     isLibraryOpen, setIsLibraryOpen, importLibraryDataset, handleImportModel,
     deepDiveHierarchy, setDeepDiveHierarchy, hierarchyPending, setHierarchyPending,
+    lastIntentState, setLastIntentState,
     // Inline Edits
     editingDatasetId, setEditingDatasetId, editingDatasetName, setEditingDatasetName,
     editingPageId, setEditingPageId, editingPageName, setEditingPageName,
