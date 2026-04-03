@@ -114,6 +114,7 @@ export const AppStateProvider = ({ children }) => {
   const [aiThinkingLabel, setAiThinkingLabel] = useState('Analyzing...');
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   // Hierarchy for deep dive: { macro_dim, meso_dim, micro_dim } — set via counter-question
+  const [deepDiveHierarchy, setDeepDiveHierarchy] = useState(null);
   const [hierarchyPending, setHierarchyPending] = useState(null); // stores the pending query
   // Conversational Intent Memory: stores the {dimensions, measures, filters} of the last successful analytical query
   const [lastIntentState, setLastIntentState] = useState(null);
