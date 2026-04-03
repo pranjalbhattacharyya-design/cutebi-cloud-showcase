@@ -118,6 +118,7 @@ export const AppStateProvider = ({ children }) => {
   const [hierarchyPending, setHierarchyPending] = useState(null); // stores the pending query
   // Conversational Intent Memory: stores the {dimensions, measures, filters} of the last successful analytical query
   const [lastIntentState, setLastIntentState] = useState(null);
+  const [lastSummaryPayload, setLastSummaryPayload] = useState(null);
 
   // --- Inline Edit States ---
   const [editingDatasetId, setEditingDatasetId] = useState(null);
@@ -639,7 +640,7 @@ export const AppStateProvider = ({ children }) => {
     pendingAIAction, setPendingAIAction, aiError, setAiError, aiThinkingLabel, setAiThinkingLabel,
     isLibraryOpen, setIsLibraryOpen, importLibraryDataset, handleImportModel,
     deepDiveHierarchy, setDeepDiveHierarchy, hierarchyPending, setHierarchyPending,
-    lastIntentState, setLastIntentState,
+    lastIntentState, setLastIntentState, lastSummaryPayload, setLastSummaryPayload,
     // Inline Edits
     editingDatasetId, setEditingDatasetId, editingDatasetName, setEditingDatasetName,
     editingPageId, setEditingPageId, editingPageName, setEditingPageName,

@@ -109,20 +109,20 @@ function drawInfographic(canvas, data) {
   ctx.fillStyle = '#0f172a'; // Navy blue
   ctx.fillRect(0, 0, W, 6);
 
-  // 3. Header Area
+  // 3. Header Area (Strategic Macro Verdict)
   ctx.fillStyle = '#f8fafc';
-  rr(ctx, 32, 32, W - 64, 88, 8); ctx.fill();
+  rr(ctx, 32, 32, W - 64, 95, 8); ctx.fill();
   ctx.strokeStyle = '#e2e8f0';
   ctx.stroke();
 
   ctx.fillStyle = '#64748b';
   ctx.font = '600 11px -apple-system, Inter, sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillText('EXECUTIVE INSIGHT SUMMARY', 54, 56);
+  ctx.fillText('STRATEGIC VERDICT', 54, 56);
 
   ctx.fillStyle = '#0f172a';
-  ctx.font = 'bold 24px -apple-system, Inter, sans-serif';
-  wrapText(ctx, data.headline || 'Analysis Summary', 54, 88, W - 120, 32, 1);
+  ctx.font = 'bold 22px -apple-system, Inter, sans-serif';
+  wrapText(ctx, data.strategic_macro_verdict || 'Analytical Summary', 54, 88, W - 120, 28, 2);
 
   // CuteBI Badge Top Right
   ctx.fillStyle = '#f1f5f9';
@@ -131,83 +131,60 @@ function drawInfographic(canvas, data) {
   ctx.font = 'bold 11px -apple-system, Inter, sans-serif';
   ctx.fillText('CuteBI', W - 88, 67);
 
-  // 4. KPI Tiles (Dynamic Wrapping + Real Data)
-  const findings = (data.findings || []).slice(0, 3);
-  const tileW = Math.floor((W - 100) / 3);
-  const tileX0 = 36;
-  const tileY = 144;
+  // 4. Micro Insight Cards (Middle Band)
+  const insights = (data.micro_insights || []).slice(0, 3);
+  const cardW = Math.floor((W - 104) / 3);
+  const cardX0 = 40;
+  const cardY = 150;
 
-  findings.forEach((f, i) => {
-    const tx = tileX0 + i * (tileW + 14);
+  insights.forEach((insight, i) => {
+    const tx = cardX0 + i * (cardW + 12);
     
-    // Tile Base
+    // Card Base
     ctx.fillStyle = '#ffffff';
-    rr(ctx, tx, tileY, tileW, 140, 6); ctx.fill();
+    rr(ctx, tx, cardY, cardW, 130, 6); ctx.fill();
     ctx.strokeStyle = '#e2e8f0';
     ctx.stroke();
     
-    // Top Color Bar
-    const tc = trendColor(f.trend);
-    ctx.fillStyle = tc;
-    ctx.fillRect(tx, tileY, tileW, 4);
+    // Top Color Accent
+    ctx.fillStyle = '#38bdf8'; // Sky blue
+    ctx.fillRect(tx, cardY, cardW, 4);
 
-    // Trend Badge
-    ctx.fillStyle = tc + '1A'; // 10% opacity
-    rr(ctx, tx + 16, tileY + 20, Math.max(60, ctx.measureText(f.delta || '').width + 28), 24, 4); ctx.fill();
-    ctx.fillStyle = tc;
-    ctx.font = 'bold 12px -apple-system, Inter, sans-serif';
-    ctx.fillText(trendIcon(f.trend) + ' ' + (f.delta || '—'), tx + 24, tileY + 36);
+    // Label
+    ctx.fillStyle = '#64748b';
+    ctx.font = 'bold 10px -apple-system, Inter, sans-serif';
+    ctx.fillText('MICRO INSIGHT ' + (i + 1), tx + 16, cardY + 24);
 
-    // Value (allows very long strings to be truncated safely)
+    // Content
     ctx.fillStyle = '#0f172a';
-    ctx.font = 'bold 30px -apple-system, Inter, sans-serif';
-    wrapText(ctx, f.value || '—', tx + 16, tileY + 84, tileW - 32, 34, 1);
-
-    // Label (supports 2 lines for longer text)
-    ctx.fillStyle = '#475569';
-    ctx.font = '500 13px -apple-system, Inter, sans-serif';
-    wrapText(ctx, f.label || '', tx + 16, tileY + 112, tileW - 32, 18, 2);
+    ctx.font = '500 14px -apple-system, Inter, sans-serif';
+    wrapText(ctx, insight || '—', tx + 16, cardY + 54, cardW - 32, 20, 4);
   });
 
-  // 5. Key Findings
-  const sectY = tileY + 164;
+  // 5. Meso Trend Findings (Bottom Block)
+  const sectY = cardY + 154;
   ctx.fillStyle = '#f8fafc';
-  rr(ctx, 36, sectY, W - 72, 116, 6); ctx.fill();
+  rr(ctx, 40, sectY, W - 80, 140, 6); ctx.fill();
   ctx.strokeStyle = '#e2e8f0';
   ctx.stroke();
 
   ctx.fillStyle = '#475569';
   ctx.font = 'bold 11px -apple-system, Inter, sans-serif';
   ctx.letterSpacing = '1.5px';
-  ctx.fillText('KEY FINDINGS', 56, sectY + 28);
+  ctx.fillText('MESO-LEVEL SYSTEMIC PATTERNS', 60, sectY + 32);
   ctx.letterSpacing = '0px';
 
-  const bullets = (data.bullets || []).slice(0, 3);
-  bullets.forEach((b, i) => {
-    const by = sectY + 54 + i * 26;
+  const trends = (data.meso_trends || []).slice(0, 4);
+  trends.forEach((t, i) => {
+    const by = sectY + 60 + i * 26;
     // Blue dot
-    ctx.fillStyle = '#0284c7'; // Corporate blue
-    ctx.beginPath(); ctx.arc(56, by - 4, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#0284c7'; 
+    ctx.beginPath(); ctx.arc(60, by - 4, 3.5, 0, Math.PI * 2); ctx.fill();
 
     ctx.fillStyle = '#334155';
     ctx.font = '14px -apple-system, Inter, sans-serif';
-    wrapText(ctx, b, 70, by, W - 140, 20, 1);
+    wrapText(ctx, t, 74, by, W - 140, 20, 1);
   });
-
-  // 6. Strategic Recommendation Box
-  const recY = sectY + 136;
-  ctx.fillStyle = '#f0f9ff'; // Very light blue
-  rr(ctx, 36, recY, W - 72, 54, 6); ctx.fill();
-  ctx.strokeStyle = '#bae6fd'; // Light blue border
-  ctx.stroke();
-
-  ctx.fillStyle = '#0f172a';
-  ctx.font = 'bold 14px -apple-system, Inter, sans-serif';
-  ctx.fillText('Strategic Action:', 56, recY + 32);
-  
-  ctx.fillStyle = '#0369a1'; // Deeper blue text
-  ctx.font = '500 14px -apple-system, Inter, sans-serif';
-  wrapText(ctx, data.recommendation || 'No recommendation.', 184, recY + 32, W - 240, 20, 1);
 
   // 7. Footer
   ctx.fillStyle = '#94a3b8';

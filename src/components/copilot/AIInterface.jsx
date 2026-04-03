@@ -49,14 +49,12 @@ function PhaseAccordion({ label, icon, content, defaultOpen = false, onGenerateI
             >
                {copied ? <Check size={10}/> : <Copy size={10}/>} {copied ? 'Copied' : 'Copy'}
             </button>
-            {onGenerateInfographic && (
-              <button
-                 onClick={() => onGenerateInfographic(content)}
-                 className="flex items-center gap-1 text-[10px] font-bold text-indigo-500 hover:text-indigo-400 t-button py-1 px-2 rounded-md transition-colors"
-              >
-                 <ImageIcon size={10} /> Generate Infographic
-              </button>
-            )}
+            <button
+               onClick={handleCopy}
+               className="flex items-center gap-1 text-[10px] font-bold t-text-muted hover:t-text-main px-2 py-1 rounded transition-colors"
+            >
+               {copied ? <Check size={10}/> : <Copy size={10}/>} {copied ? 'Copied' : 'Copy'}
+            </button>
           </div>
         </div>
       )}
@@ -236,21 +234,18 @@ function AIMessage({ msg, handleGenerateInfographic, handleDeepDiveExecute, hand
             icon={null} 
             content={msg.phases.micro} 
             defaultOpen={false} 
-            onGenerateInfographic={(text) => handleGenerateInfographic(text, msg.userQuery)} 
           />
           <PhaseAccordion 
             label="📊 Meso — Systemic Patterns" 
             icon={null} 
             content={msg.phases.meso} 
             defaultOpen={false} 
-            onGenerateInfographic={(text) => handleGenerateInfographic(text, msg.userQuery)} 
           />
           <PhaseAccordion 
             label="🎯 Macro — Strategic Verdict" 
             icon={null} 
             content={msg.phases.macro} 
             defaultOpen={true} 
-            onGenerateInfographic={(text) => handleGenerateInfographic(text, msg.userQuery)} 
           />
         </div>
       </div>
@@ -270,21 +265,18 @@ function AIMessage({ msg, handleGenerateInfographic, handleDeepDiveExecute, hand
             icon={null} 
             content={msg.summary.micro_insights?.join('\n\n')} 
             defaultOpen={false} 
-            onGenerateInfographic={(text) => handleGenerateInfographic(text, msg.userQuery)} 
           />
           <PhaseAccordion 
             label="📊 Meso — Systemic Patterns" 
             icon={null} 
             content={msg.summary.meso_trends?.join('\n\n')} 
             defaultOpen={false} 
-            onGenerateInfographic={(text) => handleGenerateInfographic(text, msg.userQuery)} 
           />
           <PhaseAccordion 
             label="🎯 Macro — Strategic Verdict" 
             icon={null} 
             content={msg.summary.strategic_macro_verdict} 
             defaultOpen={true} 
-            onGenerateInfographic={(text) => handleGenerateInfographic(text, msg.userQuery)} 
           />
         </div>
       </div>
@@ -307,12 +299,6 @@ function AIMessage({ msg, handleGenerateInfographic, handleDeepDiveExecute, hand
               className="flex items-center gap-1 text-[10px] font-bold t-text-muted hover:t-text-main transition-colors"
             >
               {copied ? <Check size={10} /> : <Copy size={10} />} {copied ? 'Copied' : 'Copy'}
-            </button>
-            <button
-              onClick={() => handleGenerateInfographic(msg.text, msg.userQuery)}
-              className="flex items-center gap-1 text-[10px] font-bold text-indigo-500 hover:text-indigo-400 transition-colors"
-            >
-              <ImageIcon size={10} /> Generate Infographic
             </button>
           </div>
         )}
@@ -340,9 +326,10 @@ export default function AIInterface({ handleAskAI: handleAskAIFromApp, handleCon
     pendingAIAction, setPendingAIAction,
     setIsExploreOpen,
     userRole,
+    lastSummaryPayload,
   } = useAppState();
 
-  const { handleGenerateInfographic, handleAskAI, executeExploreDataLogic, handleHierarchyAnswer, handleDeepDiveExecute, handleTrendExecute, handleGenerateSummary } = useAI();
+  const { handleGenerateInfographic, handleAskAI, executeExploreDataLogic, handleHierarchyAnswer, handleDeepDiveExecute, handleTrendExecute, handleGenerateSummary, handleClearChat } = useAI();
   const { hierarchyPending, deepDiveHierarchy, setDeepDiveHierarchy } = useAppState();
   const { generateUnifiedCTE } = useDataEngine();
 
@@ -537,9 +524,9 @@ export default function AIInterface({ handleAskAI: handleAskAIFromApp, handleCon
 
       {/* Input Footer */}
       <div className="p-4 border-t t-border bg-[var(--theme-panel-bg)] shrink-0">
-        {exploreHistory.length > 0 && (
+        {!isThinking && !pendingAIAction && exploreHistory.length > 0 && (
           <div className="flex flex-col gap-2 mb-2">
-            {!isThinking && !pendingAIAction && (
+            {!lastSummaryPayload ? (
               <button 
                 onClick={handleGenerateSummary}
                 className="w-full t-panel border t-border border-indigo-500/30 hover:border-indigo-500/60 py-2.5 rounded-lg flex items-center justify-center gap-2 text-xs font-bold t-text-main transition-all group shadow-sm bg-indigo-500/[0.05]"
@@ -547,9 +534,27 @@ export default function AIInterface({ handleAskAI: handleAskAIFromApp, handleCon
                 <Sparkles size={14} className="text-indigo-500 group-hover:scale-110 transition-transform" />
                 Generate Executive Summary
               </button>
+            ) : (
+              <button 
+                onClick={() => {
+                  setExploreHistory(prev => [
+                    ...prev,
+                    {
+                      role: 'assistant',
+                      isInfographic: true,
+                      infographicData: lastSummaryPayload,
+                      text: 'Synthesized your executive presentation slide based on recent conversation findings.'
+                    }
+                  ]);
+                }}
+                className="w-full t-panel border t-border border-emerald-500/30 hover:border-emerald-500/60 py-2.5 rounded-lg flex items-center justify-center gap-2 text-xs font-bold t-text-main transition-all group shadow-sm bg-emerald-500/[0.05]"
+              >
+                <ImageIcon size={14} className="text-emerald-500 group-hover:scale-110 transition-transform" />
+                Generate Executive Infographic
+              </button>
             )}
             <div className="flex justify-end">
-              <button onClick={() => setExploreHistory([])} className="text-[10px] font-bold t-text-muted hover:text-red-400 flex items-center gap-1 transition-colors">
+              <button onClick={handleClearChat} className="text-[10px] font-bold t-text-muted hover:text-red-400 flex items-center gap-1 transition-colors">
                 <Trash2 size={10} /> Clear Chat
               </button>
             </div>

@@ -27,6 +27,7 @@ export const useAI = () => {
     deepDiveHierarchy, setDeepDiveHierarchy,
     hierarchyPending, setHierarchyPending,
     lastIntentState, setLastIntentState,
+    lastSummaryPayload, setLastSummaryPayload,
   } = useAppState();
 
   const { globalSemanticFields, executeExploreQuery, generateUnifiedCTE } = useDataEngine();
@@ -332,6 +333,7 @@ Return JSON format EXACTLY matching this schema:
   // ---------------------------------------------------------------------------
   const executeExploreDataLogic = async (query, mode, path = 'fast', hierarchyOverride = null, skipUserBubble = false) => {
     if (!query.trim() || !activeDataset || isThinking) return;
+    setLastSummaryPayload(null);
 
     setIsThinking(true);
     setAiError(null);
@@ -824,6 +826,11 @@ Return JSON: { "charts": [...], "new_measures": [] }`;
     }
   };
 
+  const handleClearChat = () => {
+    setExploreHistory([]);
+    setLastSummaryPayload(null);
+  };
+
   const handleGenerateSummary = async () => {
     if (isThinking || exploreHistory.length === 0) return;
     setIsThinking(true);
@@ -838,6 +845,7 @@ Return JSON: { "charts": [...], "new_measures": [] }`;
         }));
 
       const res = await apiClient.aiGenerateSummary({ chat_history: history });
+      setLastSummaryPayload(res);
       
       setExploreHistory(prev => [
         ...prev, 
@@ -866,5 +874,6 @@ Return JSON: { "charts": [...], "new_measures": [] }`;
     handleDeepDiveExecute,
     handleTrendExecute,
     handleGenerateSummary,
+    handleClearChat,
   };
 };
