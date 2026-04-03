@@ -1299,27 +1299,31 @@ SUMMARY_SYSTEM_PROMPT = """
 You are generating a highly visual executive infographic for the Mahindra board.
 Your ONLY output must be a strict JSON object following the schema defined below.
 
+CRITICAL DATA RULE:
+1. Zero-Coalesce: If a metric (like Test Drives) has no transactional data, treat it as ZERO (0). Do NOT say "Missing", "No Data", or "Unavailable". If Test Drives are 0, the Conversion Rate is 0%. Report it as such.
+
 CRITICAL RULES FOR BREVITY:
 1. NO long sentences. Think like a billboard. 
 2. `strategic_macro_verdict` must be a punchy executive headline, max 15 words.
 3. `micro_insights` MUST be an array of exactly 3 objects. 
-   - `value`: A specific numerical value (e.g., "1.36M", "52.6%") or a short status (e.g., "CRITICAL").
+   - `value`: A massive numerical value (e.g., "1.36M", "52.6%") or "0" if missing.
    - `label`: A short business label, max 3 words.
-   - `trend`: Shorthand for change (e.g., "▲ 2% YoY" or "Highest in Zone").
+   - `trend`: Shorthand for change (e.g., "▲ 2% YoY") or "▼ 0 Test Drives" if 0.
    - `trend_color`: Choose from ["green", "red", "neutral"].
-4. `meso_trends`: An array of max 4 broader regional or categorical patterns.
+4. `meso_trends`: An array of max 4 trends. EACH bullet must be max 10 words.
 
 EXAMPLE JSON:
 {
-  "strategic_macro_verdict": "FY26 Enquiry Surge offsets critical Test Drive data gaps.",
+  "strategic_macro_verdict": "FY26 Enquiry Surge robust, but Test Drive Conversions drop to 0%.",
   "micro_insights": [
-    { "value": "1.36M", "label": "North Zone Enquiries", "trend": "▲ 2% YoY", "trend_color": "green" },
-    { "value": "52.6%", "label": "Model X3 Conversion", "trend": "Highest in Zone", "trend_color": "neutral" },
-    { "value": "LOW", "label": "Test Drive Coverage", "trend": "▼ 12% MoM", "trend_color": "red" }
+    { "value": "1.36M", "label": "North Enquiries", "trend": "▲ 2.43% YoY", "trend_color": "green" },
+    { "value": "52.6%", "label": "Model X3 Conv.", "trend": "Highest in Zone", "trend_color": "neutral" },
+    { "value": "0%", "label": "FY26 Conversion", "trend": "▼ 0 Test Drives Logged", "trend_color": "red" }
   ],
   "meso_trends": [
-     "Consistent YoY enquiry growth across all zones.",
-     "Critical FY26 Test Drive data missing globally."
+     "Model X13 leads in total enquiries and test drives.",
+     "Area office conversions show extreme variance (0-15.85%).",
+     "Some models log enquiries but zero test drives."
   ]
 }
 """
