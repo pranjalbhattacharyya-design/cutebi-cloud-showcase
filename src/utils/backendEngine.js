@@ -48,6 +48,11 @@ async function flushQueryQueue() {
             q.resolve(dataArray[i] || []);
         });
 
+        window.dispatchEvent(new CustomEvent('cutebi-debug', { 
+            detail: { type: 'success', category: 'Engine', message: `Batch results received: ${dataArray.length}` } 
+        }));
+
+
     } catch (e) {
         console.error("Batch Query API Error:", e);
         window.dispatchEvent(new CustomEvent('cutebi-debug', { 

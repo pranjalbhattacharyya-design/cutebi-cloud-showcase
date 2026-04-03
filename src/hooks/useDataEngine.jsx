@@ -225,7 +225,14 @@ export const useDataEngine = () => {
     const sourceTable = isMasterView ? "ds_unified" : (activeDs?.tableName || datasetId);
     const ctePrefix = isMasterView ? generateUnifiedCTE(datasetId) : "";
 
-    window.dispatchEvent(new CustomEvent('cutebi-debug', { detail: { type: 'info', category: 'Engine', message: `Generating SQL. Source: ${sourceTable}`, details: { dimensions, measures, ctePresent: !!ctePrefix } } }));
+    window.dispatchEvent(new CustomEvent('cutebi-debug', { 
+      detail: { 
+        type: 'info', 
+        category: 'Engine', 
+        message: `Generating SQL. Source: ${sourceTable}`, 
+        details: { dimensions, measures, filters, ctePresent: !!ctePrefix } 
+      } 
+    }));
 
     let selectClause = [];
     const sm = semanticModels[datasetId] || [];
@@ -377,8 +384,15 @@ export const useDataEngine = () => {
 
     const groupByClause = dimensions.length > 0 ? ` GROUP BY ${dimensions.map((_, i) => i + 1).join(', ')}` : "";
     const limitClause = limit ? ` LIMIT ${limit}` : "";
-    return `${ctePrefix}SELECT ${selectClause.join(', ')} FROM \`${sourceTable}\`${whereClause}${groupByClause}${limitClause}`;
+    const sql = `${ctePrefix}SELECT ${selectClause.join(', ')} FROM \`${sourceTable}\`${whereClause}${groupByClause}${limitClause}`;
+    
+    window.dispatchEvent(new CustomEvent('cutebi-debug', { 
+       detail: { type: 'success', category: 'Engine', message: 'SQL Generated Successfully', details: { sql } } 
+    }));
+    
+    return sql;
   }, [datasets, semanticModels, activeDatasetId, relationships, globalFilters, generateUnifiedCTE]);
+
 
   const applyFilters = useCallback((data, datasetId) => {
       let filteredData = data;
