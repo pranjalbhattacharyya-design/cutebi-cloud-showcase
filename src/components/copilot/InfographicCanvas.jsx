@@ -9,6 +9,11 @@ import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 const W = 900;
 const H = 520;
 
+const MAHINDRA_RED     = '#E31837';
+const MAHINDRA_CHARCOAL = '#212121';
+const MAHINDRA_SLATE    = '#757575';
+const MAHINDRA_SUCCESS  = '#2E7D32';
+
 const InfographicCanvas = forwardRef(function InfographicCanvas({ data }, ref) {
   const canvasRef = useRef(null);
 
@@ -53,40 +58,28 @@ function rr(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-function wrapText(ctx, text, x, y, maxWidth, lineHeight, maxLines = 1) {
-  const words = (text || '').toString().split(/\s+/);
+function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = (text || '').toString().split(' ');
   let line = '';
-  let currentY = y;
-  let linesDrawn = 0;
-
   for (let n = 0; n < words.length; n++) {
     const testLine = line + words[n] + ' ';
     const metrics = ctx.measureText(testLine);
     const testWidth = metrics.width;
-    
     if (testWidth > maxWidth && n > 0) {
-      if (linesDrawn === maxLines - 1) {
-        ctx.fillText(line.trim() + '…', x, currentY);
-        return;
-      } else {
-        ctx.fillText(line, x, currentY);
-        line = words[n] + ' ';
-        currentY += lineHeight;
-        linesDrawn++;
-      }
+      ctx.fillText(line, x, y);
+      line = words[n] + ' ';
+      y += lineHeight;
     } else {
       line = testLine;
     }
   }
-  if (linesDrawn < maxLines) {
-    ctx.fillText(line, x, currentY);
-  }
+  ctx.fillText(line, x, y);
 }
 
 function trendColor(t) {
-  if (t === 'up')   return '#059669'; // Corporate Green
-  if (t === 'down') return '#dc2626'; // Corporate Red
-  return '#64748b'; // Neutral Slate
+  if (t === 'green')   return MAHINDRA_SUCCESS;
+  if (t === 'red')     return MAHINDRA_RED;
+  return MAHINDRA_SLATE;
 }
 function trendIcon(t) {
   if (t === 'up')   return '▲';
@@ -106,32 +99,32 @@ function drawInfographic(canvas, data) {
   ctx.fillRect(0, 0, W, H);
 
   // 2. Top accent bar
-  ctx.fillStyle = '#0f172a'; // Navy blue
-  ctx.fillRect(0, 0, W, 6);
+  ctx.fillStyle = MAHINDRA_RED;
+  ctx.fillRect(0, 0, W, 8);
 
   // 3. Header Area (Strategic Macro Verdict)
-  ctx.fillStyle = '#f8fafc';
-  rr(ctx, 32, 32, W - 64, 95, 8); ctx.fill();
-  ctx.strokeStyle = '#e2e8f0';
+  ctx.fillStyle = '#f9f9f9';
+  rr(ctx, 32, 32, W - 64, 95, 2); ctx.fill(); // Sharp corners
+  ctx.strokeStyle = '#eeeeee';
   ctx.stroke();
 
-  ctx.fillStyle = '#64748b';
-  ctx.font = '600 11px -apple-system, Inter, sans-serif';
+  ctx.fillStyle = MAHINDRA_SLATE;
+  ctx.font = '900 11px -apple-system, Inter, sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillText('STRATEGIC VERDICT', 54, 56);
+  ctx.textBaseline = 'middle';
+  ctx.fillText('EXECUTIVE STRATEGIC VERDICT', 54, 58);
 
-  ctx.fillStyle = '#0f172a';
-  ctx.font = 'bold 22px -apple-system, Inter, sans-serif';
-  wrapText(ctx, data.strategic_macro_verdict || 'Analytical Summary', 54, 88, W - 120, 28, 2);
+  ctx.fillStyle = MAHINDRA_CHARCOAL;
+  ctx.font = 'bold 24px -apple-system, Inter, sans-serif';
+  wrapText(ctx, data.strategic_macro_verdict || 'Analytical Summary', 54, 90, W - 120, 30);
 
-  // CuteBI Badge Top Right
-  ctx.fillStyle = '#f1f5f9';
-  rr(ctx, W - 100, 52, 54, 22, 11); ctx.fill();
-  ctx.fillStyle = '#0284c7';
-  ctx.font = 'bold 11px -apple-system, Inter, sans-serif';
-  ctx.fillText('CuteBI', W - 88, 67);
+  // Branding Top Right
+  ctx.fillStyle = MAHINDRA_RED;
+  ctx.font = '900 14px Arial black, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText('Mahindra', W - 54, 60);
 
-  // 4. Micro Insight Cards (Middle Band)
+  // 4. Billboard KPI Tiles (Middle Band)
   const insights = (data.micro_insights || []).slice(0, 3);
   const cardW = Math.floor((W - 104) / 3);
   const cardX0 = 40;
@@ -140,59 +133,77 @@ function drawInfographic(canvas, data) {
   insights.forEach((insight, i) => {
     const tx = cardX0 + i * (cardW + 12);
     
-    // Card Base
+    // Apply Elevation Shadow
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.08)';
+    ctx.shadowBlur = 15;
+    ctx.shadowOffsetY = 5;
+
+    // Card Base (Sharp Corners)
     ctx.fillStyle = '#ffffff';
-    rr(ctx, tx, cardY, cardW, 130, 6); ctx.fill();
-    ctx.strokeStyle = '#e2e8f0';
+    rr(ctx, tx, cardY, cardW, 140, 2); ctx.fill();
+    ctx.strokeStyle = '#f0f0f0';
     ctx.stroke();
     
-    // Top Color Accent
-    ctx.fillStyle = '#38bdf8'; // Sky blue
+    // Reset Shadow for text/labels
+    ctx.shadowColor = 'transparent';
+
+    // Accent Bar
+    ctx.fillStyle = trendColor(insight.trend_color);
     ctx.fillRect(tx, cardY, cardW, 4);
 
     // Label
-    ctx.fillStyle = '#64748b';
-    ctx.font = 'bold 10px -apple-system, Inter, sans-serif';
-    ctx.fillText('MICRO INSIGHT ' + (i + 1), tx + 16, cardY + 24);
+    ctx.fillStyle = MAHINDRA_SLATE;
+    ctx.font = 'bold 11px -apple-system, Inter, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(insight.label?.toUpperCase() || 'INSIGHT', tx + 20, cardY + 30);
 
-    // Content
-    ctx.fillStyle = '#0f172a';
-    ctx.font = '500 14px -apple-system, Inter, sans-serif';
-    wrapText(ctx, insight || '—', tx + 16, cardY + 54, cardW - 32, 20, 4);
+    // Value (Authoritative Billboard Typography)
+    ctx.fillStyle = MAHINDRA_CHARCOAL;
+    ctx.font = '900 48px Arial black, Inter, sans-serif';
+    ctx.fillText(insight.value || '—', tx + 20, cardY + 85);
+
+    // Trend Indicator
+    ctx.fillStyle = trendColor(insight.trend_color);
+    ctx.font = 'bold 14px -apple-system, Inter, sans-serif';
+    ctx.fillText(insight.trend || '', tx + 20, cardY + 115);
   });
 
   // 5. Meso Trend Findings (Bottom Block)
-  const sectY = cardY + 154;
-  ctx.fillStyle = '#f8fafc';
-  rr(ctx, 40, sectY, W - 80, 140, 6); ctx.fill();
-  ctx.strokeStyle = '#e2e8f0';
+  const sectY = cardY + 165;
+  ctx.fillStyle = '#f9f9f9';
+  rr(ctx, 40, sectY, W - 80, 140, 2); ctx.fill();
+  ctx.strokeStyle = '#eeeeee';
   ctx.stroke();
 
-  ctx.fillStyle = '#475569';
-  ctx.font = 'bold 11px -apple-system, Inter, sans-serif';
+  // BUG FIX: Reset alignment for Meso Trends
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+
+  ctx.fillStyle = MAHINDRA_RED;
+  ctx.font = '900 11px -apple-system, Inter, sans-serif';
   ctx.letterSpacing = '1.5px';
-  ctx.fillText('MESO-LEVEL SYSTEMIC PATTERNS', 60, sectY + 32);
+  ctx.fillText('MESO-LEVEL SYSTEMIC PATTERNS', 64, sectY + 24);
   ctx.letterSpacing = '0px';
 
   const trends = (data.meso_trends || []).slice(0, 4);
   trends.forEach((t, i) => {
-    const by = sectY + 60 + i * 26;
-    // Blue dot
-    ctx.fillStyle = '#0284c7'; 
-    ctx.beginPath(); ctx.arc(60, by - 4, 3.5, 0, Math.PI * 2); ctx.fill();
+    const by = sectY + 55 + i * 26;
+    // Sharp Square Bullet
+    ctx.fillStyle = MAHINDRA_RED; 
+    ctx.fillRect(64, by + 4, 6, 6);
 
-    ctx.fillStyle = '#334155';
-    ctx.font = '14px -apple-system, Inter, sans-serif';
-    wrapText(ctx, t, 74, by, W - 140, 20, 1);
+    ctx.fillStyle = MAHINDRA_CHARCOAL;
+    ctx.font = '500 14px -apple-system, Inter, sans-serif';
+    wrapText(ctx, t, 85, by, W - 150, 20);
   });
 
   // 7. Footer
-  ctx.fillStyle = '#94a3b8';
+  ctx.fillStyle = MAHINDRA_SLATE;
   ctx.font = '500 11px -apple-system, Inter, sans-serif';
   ctx.textAlign = 'right';
   const now = new Date();
   ctx.fillText(
-    `Generated by CuteBI AI · ${now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`,
-    W - 36, H - 18
+    `Mahindra Corporate AI Insight · ${now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`,
+    W - 40, H - 18
   );
 }

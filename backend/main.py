@@ -1284,20 +1284,44 @@ class ChatMessage(BaseModel):
 class SummaryRequest(BaseModel):
     chat_history: List[ChatMessage]
 
+class MicroInsight(BaseModel):
+    value: str
+    label: str
+    trend: str
+    trend_color: str
+
 class SummaryResponse(BaseModel):
-    micro_insights: List[str]
+    micro_insights: List[MicroInsight]
     meso_trends: List[str]
     strategic_macro_verdict: str
 
 SUMMARY_SYSTEM_PROMPT = """
-You are a Senior Business Analyst presenting to an executive board. Your objective is to read the provided `chat_history` of data queries and synthesize the findings into a highly structured presentation. 
+You are generating a highly visual executive infographic for the Mahindra board.
+Your ONLY output must be a strict JSON object following the schema defined below.
 
-Do not write SQL. Do not ask follow-up questions. Your ONLY output must be a strict JSON object following the schema defined by the system.
+CRITICAL RULES FOR BREVITY:
+1. NO long sentences. Think like a billboard. 
+2. `strategic_macro_verdict` must be a punchy executive headline, max 15 words.
+3. `micro_insights` MUST be an array of exactly 3 objects. 
+   - `value`: A specific numerical value (e.g., "1.36M", "52.6%") or a short status (e.g., "CRITICAL").
+   - `label`: A short business label, max 3 words.
+   - `trend`: Shorthand for change (e.g., "▲ 2% YoY" or "Highest in Zone").
+   - `trend_color`: Choose from ["green", "red", "neutral"].
+4. `meso_trends`: An array of max 4 broader regional or categorical patterns.
 
-You must categorize your analysis into three tiers:
-1. "micro_insights": Specific, localized data points (e.g., "Patna's conversion rate hit 65%").
-2. "meso_trends": Broader regional or categorical patterns observed across the data.
-3. "strategic_macro_verdict": A single, punchy executive takeaway that summarizes the entire conversational session. This verdict must be highly visual and descriptive, as it will be used as a prompt to generate an accompanying presentation slide.
+EXAMPLE JSON:
+{
+  "strategic_macro_verdict": "FY26 Enquiry Surge offsets critical Test Drive data gaps.",
+  "micro_insights": [
+    { "value": "1.36M", "label": "North Zone Enquiries", "trend": "▲ 2% YoY", "trend_color": "green" },
+    { "value": "52.6%", "label": "Model X3 Conversion", "trend": "Highest in Zone", "trend_color": "neutral" },
+    { "value": "LOW", "label": "Test Drive Coverage", "trend": "▼ 12% MoM", "trend_color": "red" }
+  ],
+  "meso_trends": [
+     "Consistent YoY enquiry growth across all zones.",
+     "Critical FY26 Test Drive data missing globally."
+  ]
+}
 """
 
 
