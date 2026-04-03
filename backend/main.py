@@ -1442,7 +1442,7 @@ async def ai_explore(req: AIExploreRequest):
     body   = {"contents": [{"parts": [{"text": prompt}]}]}
 
     # SQL gen phase needs structured JSON output
-    if req.phase == "sql_gen":
+    if req.phase in ("sql_gen", "sql_gen_fast"):
         body["generationConfig"] = {
             "responseMimeType": "application/json",
             "responseSchema": {

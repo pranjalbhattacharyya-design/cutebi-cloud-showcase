@@ -339,6 +339,8 @@ export const useDataEngine = () => {
 
     let whereClause = "";
     const filterParts = [];
+    
+    // 1. Process global UI filters
     Object.entries(globalFilters).forEach(([originKey, vals]) => {
       if (!vals || vals.length === 0) return;
       const [oDsId, oFId] = originKey.split('::');
@@ -348,6 +350,22 @@ export const useDataEngine = () => {
       const valList = vals.map(v => typeof v === 'string' ? `'${String(v).replace(/'/g, "''")}'` : v).join(', ');
       filterParts.push(`CAST(${colIdent} AS STRING) IN (${valList})`);
     });
+    
+    // 2. Process AI-generated filters
+    if (Array.isArray(filters)) {
+      filters.forEach(f => {
+        if (!f.field || !f.value) return;
+        const colIdent = isMasterView ? `\`${f.field}\`` : `\`${sourceTable}\`.\`${f.field}\``;
+        const val = String(f.value).replace(/'/g, "''");
+        let op = f.operator || "=";
+        if (op.toLowerCase() === "contains") {
+            filterParts.push(`LOWER(CAST(${colIdent} AS STRING)) LIKE LOWER('%${val}%')`);
+        } else {
+            filterParts.push(`CAST(${colIdent} AS STRING) ${op} '${val}'`);
+        }
+      });
+    }
+
     if (filterParts.length > 0) whereClause = ` WHERE ${filterParts.join(' AND ')}`;
 
     const groupByClause = dimensions.length > 0 ? ` GROUP BY ${dimensions.map((_, i) => i + 1).join(', ')}` : "";
