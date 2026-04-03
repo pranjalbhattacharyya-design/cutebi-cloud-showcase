@@ -357,9 +357,16 @@ export const useDataEngine = () => {
         if (!f.field || !f.value) return;
         const colIdent = isMasterView ? `\`${f.field}\`` : `\`${sourceTable}\`.\`${f.field}\``;
         const val = String(f.value).replace(/'/g, "''");
-        let op = f.operator || "=";
-        if (op.toLowerCase() === "contains") {
+        let op = (f.operator || "=").toLowerCase();
+        
+        if (op === "contains") {
             filterParts.push(`LOWER(CAST(${colIdent} AS STRING)) LIKE LOWER('%${val}%')`);
+        } else if (op === "in") {
+            // handle comma separated AI inputs like 'FY25, FY26'
+            const inList = val.split(',').map(v => `LOWER('${v.trim()}')`).join(', ');
+            filterParts.push(`LOWER(CAST(${colIdent} AS STRING)) IN (${inList})`);
+        } else if (op === "=" || op === "==") {
+            filterParts.push(`LOWER(CAST(${colIdent} AS STRING)) = LOWER('${val}')`);
         } else {
             filterParts.push(`CAST(${colIdent} AS STRING) ${op} '${val}'`);
         }
