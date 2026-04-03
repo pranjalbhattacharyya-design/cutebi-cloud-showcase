@@ -359,11 +359,13 @@ export const useDataEngine = () => {
     });
     
     // 2. Process AI-generated filters
+    const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
     if (Array.isArray(filters)) {
       filters.forEach(f => {
         if (!f.field || !f.value) return;
         const colIdent = isMasterView ? `\`${f.field}\`` : `\`${sourceTable}\`.\`${f.field}\``;
-        const val = String(f.value).replace(/'/g, "''");
+        const rawVal = String(f.value).trim();
         
         // Normalize AI operators to SQL standard
         const opMap = { 'eq': '=', 'neq': '!=', '==': '=' };
@@ -373,52 +375,46 @@ export const useDataEngine = () => {
         // Check if this field is a dimension for fuzzy matching
         const isDim = globalSemanticFields.some(sf => (sf.id === f.field || sf.originFieldId === f.field) && sf.type === 'dimension');
         
-        if (op === "contains" || ((op === "=" || op === "==") && isDim)) {
-            // Apply high-recall fuzzy matching for dimensions (handles 26 -> 2026, nort -> North Zone)
-            filterParts.push(`LOWER(CAST(${colIdent} AS STRING)) LIKE LOWER('%${val}%')`);
-        } else if (op === "in") {
-            // Robust Parsing: AI might send JSON array strings like '["2026", "2025"]'
-            // or natural language like '2026 and 2025' or 'FY26, FY25'
+        if (isDim && (op === "=" || op === "==" || op === "contains" || op === "in")) {
+            // HIGH-RECALL ARCHITECTURE: Use REGEXP_CONTAINS for all dimensional lookups
+            // This handles partial matches ("26" -> "2026"), Case-Insensitivity, and Lists ("26|25")
             let items = [];
-            const rawVal = String(f.value).trim();
             
-            try {
-                // 1. Try JSON Parse (handles AI-generated JSON arrays)
-                if (rawVal.startsWith('[') && rawVal.endsWith(']')) {
-                    const parsed = JSON.parse(rawVal);
-                    if (Array.isArray(parsed)) items = parsed.map(v => String(v));
-                }
-            } catch (jsonErr) {
-                // Not valid JSON, proceed to natural language split
-            }
-            
-            if (items.length === 0) {
-                // 2. Fallback: Natural Language Split (handles 'and', 'vs', 'or', ',')
-                const valClean = rawVal.replace(/\b(and|vs|or)\b/gi, ',');
-                items = valClean.split(',').map(v => v.trim()).filter(v => v !== "");
-            }
-            
-            const inList = items.map(v => `LOWER('${String(v).replace(/'/g, "''")}')`).join(', ');
-            
-            if (items.length > 0) {
-                if (isDim) {
-                    filterParts.push(`LOWER(CAST(${colIdent} AS STRING)) IN (${inList})`);
-                } else {
-                    filterParts.push(`CAST(${colIdent} AS STRING) IN (${inList})`);
+            if (op === "in") {
+                try {
+                    if (rawVal.startsWith('[') && rawVal.endsWith(']')) {
+                        const parsed = JSON.parse(rawVal);
+                        if (Array.isArray(parsed)) items = parsed.map(v => String(v));
+                    }
+                } catch (e) { /* fallback to NLP split */ }
+                
+                if (items.length === 0) {
+                    const valClean = rawVal.replace(/\b(and|vs|or)\b/gi, ',');
+                    items = valClean.split(',').map(v => v.trim()).filter(v => v !== "");
                 }
             } else {
-                // Safety: ignore the filter if we couldn't parse anything usable
-                console.warn(`Empty or un-parseable IN list for field: ${f.field}`);
+                items = [rawVal];
             }
 
+            if (items.length > 0) {
+                const pattern = items.map(escapeRegex).join('|');
+                filterParts.push(`REGEXP_CONTAINS(LOWER(CAST(${colIdent} AS STRING)), LOWER('${pattern.replace(/'/g, "''")}'))`);
+            }
+        } else if (op === "in") {
+            // Standard IN for measures (strict matching)
+            const valClean = rawVal.replace(/\b(and|vs|or)\b/gi, ',');
+            const items = valClean.split(',').map(v => v.trim()).filter(v => v !== "");
+            const inList = items.map(v => `'${String(v).replace(/'/g, "''")}'`).join(', ');
+            if (items.length > 0) filterParts.push(`CAST(${colIdent} AS STRING) IN (${inList})`);
         } else if (op === "=" || op === "==") {
-            filterParts.push(`LOWER(CAST(${colIdent} AS STRING)) = LOWER('${val}')`);
+            filterParts.push(`LOWER(CAST(${colIdent} AS STRING)) = LOWER('${rawVal.replace(/'/g, "''")}')`);
         } else {
             // Fallback for !=, <, >, etc.
-            filterParts.push(`CAST(${colIdent} AS STRING) ${op} '${val}'`);
+            filterParts.push(`CAST(${colIdent} AS STRING) ${op} '${rawVal.replace(/'/g, "''")}'`);
         }
       });
     }
+
 
 
     if (filterParts.length > 0) whereClause = ` WHERE ${filterParts.join(' AND ')}`;
