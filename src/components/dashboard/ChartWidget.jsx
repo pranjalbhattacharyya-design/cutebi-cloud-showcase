@@ -331,10 +331,10 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
         return (
           <div className="overflow-auto h-full w-full t-border border bg-black/5" style={{ borderRadius: 'calc(var(--theme-radius-panel) / 2)' }}>
              <table className="w-full text-left text-xs border-collapse">
-                <thead className="t-text-muted text-[10px] uppercase tracking-wider border-b t-border sticky top-0 bg-[var(--theme-panel-bg)] z-10 shadow-sm">
+                <thead className="t-text-main text-[11px] uppercase tracking-wider border-b t-border sticky top-0 z-10 shadow-sm font-bold" style={{ background: 'var(--theme-header-bg)' }}>
                    <tr>
                       {headers.map((h, i) => (
-                          <th key={i} className="px-3 py-2 font-bold" style={{ whiteSpace: tWrap ? "normal" : "nowrap" }}>{h}</th>
+                          <th key={i} className="px-3 py-3 border-r t-border last:border-r-0" style={{ whiteSpace: tWrap ? "normal" : "nowrap" }}>{h}</th>
                       ))}
                    </tr>
                 </thead>
@@ -391,9 +391,9 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
         }
 
         const headerRows = Array.from({ length: headerDepth }).map((_, levelIndex) => (
-           <tr key={`hrow-${levelIndex}`}>
+           <tr key={`hrow-${levelIndex}`} style={{ background: 'var(--theme-header-bg)' }}>
               {levelIndex === 0 && (chart.pivotRows || []).map((r, i) => (
-                 <th key={`rh-${i}`} rowSpan={headerDepth} className="px-3 py-1.5 font-black t-text-main t-border border-b border-r align-bottom bg-black/5 text-xs">
+                 <th key={`rh-${i}`} rowSpan={headerDepth} className="px-3 py-2.5 font-bold t-text-main t-border border-b border-r align-bottom text-[11px] uppercase tracking-wider">
                     {semanticModel.find(m => m.id === r)?.label || r}
                  </th>
               ))}
@@ -403,7 +403,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                   const parts = ck.split(' | ');
                   const val = parts[levelIndex] || '';
                   return (
-                      <th key={`${ck}-${levelIndex}`} colSpan={span} className="px-3 py-1.5 font-bold t-text-main t-border border-b border-r text-center bg-black/5 text-[10px]" style={{ whiteSpace: tWrap ? 'normal' : 'nowrap' }}>
+                      <th key={`${ck}-${levelIndex}`} colSpan={span} className="px-3 py-2.5 font-bold t-text-main t-border border-b border-r text-center text-[11px] uppercase tracking-wider" style={{ whiteSpace: tWrap ? 'normal' : 'nowrap' }}>
                           {levelIndex < (chart.pivotCols || []).length ? formatDimVal(val, chart.pivotCols[levelIndex]) : val}
                       </th>
                   );

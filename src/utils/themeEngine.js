@@ -13,6 +13,7 @@ export const THEMES = {
     '--theme-radius-panel': '0.75rem',
     '--theme-radius-button': '0.375rem',
     '--theme-shadow': '0 4px 12px rgba(0,0,0,0.05)',
+    '--theme-header-bg': '#f3f4f6',
     colors: ['#FF9CEE', '#B28DFF', '#6EB5FF', '#85E3FF', '#FFF5BA', '#FFB5E8', '#AFF8DB', '#F6A6FF', '#C4FAF8', '#FFABAB']
   },
   dark: {
@@ -29,6 +30,7 @@ export const THEMES = {
     '--theme-radius-panel': '0.75rem',
     '--theme-radius-button': '0.375rem',
     '--theme-shadow': '0 4px 12px rgba(0,0,0,0.3)',
+    '--theme-header-bg': '#334155',
     colors: ['#818cf8', '#22d3ee', '#34d399', '#fbbf24', '#f87171', '#a78bfa', '#2dd4bf', '#fb7185', '#a3e635', '#60a5fa']
   },
   corporate: {
@@ -45,6 +47,7 @@ export const THEMES = {
     '--theme-radius-panel': '0.5rem',
     '--theme-radius-button': '0.25rem',
     '--theme-shadow': '0 1px 3px 0 rgba(0,0,0,0.1)',
+    '--theme-header-bg': '#f1f5f9',
     colors: ['#1e40af', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#0f766e', '#14b8a6', '#5eead4', '#ccfbf1', '#2563eb']
   },
   nature: {
@@ -61,6 +64,7 @@ export const THEMES = {
     '--theme-radius-panel': '0.75rem',
     '--theme-radius-button': '0.375rem',
     '--theme-shadow': '0 4px 12px rgba(0,0,0,0.05)',
+    '--theme-header-bg': '#f0fdf4',
     colors: ['#065f46', '#10b981', '#34d399', '#6ee7b7', '#a7f3d0', '#4d7c0f', '#84cc16', '#bef264', '#d9f99d', '#059669']
   },
   professional: {
@@ -77,6 +81,7 @@ export const THEMES = {
     '--theme-radius-panel': '4px',
     '--theme-radius-button': '4px',
     '--theme-shadow': '0 4px 6px rgba(0,0,0,0.1)',
+    '--theme-header-bg': '#f1f5f9',
     colors: ['#0284c7', '#0369a1', '#075985', '#0c4a6e', '#38bdf8', '#7dd3fc']
   },
   cool: {
@@ -93,6 +98,7 @@ export const THEMES = {
     '--theme-radius-panel': '16px',
     '--theme-radius-button': '8px',
     '--theme-shadow': '0 0 20px rgba(139, 92, 246, 0.2)',
+    '--theme-header-bg': '#27272a',
     colors: ['#8b5cf6', '#d946ef', '#ec4899', '#f43f5e', '#3b82f6', '#06b6d4']
   },
   ceo: {
@@ -109,6 +115,7 @@ export const THEMES = {
     '--theme-radius-panel': '0px',
     '--theme-radius-button': '0px',
     '--theme-shadow': 'none',
+    '--theme-header-bg': '#f9fafb',
     colors: ['#111111', '#333333', '#555555', '#777777', '#999999', '#b8860b']
   },
   retro: {
@@ -125,6 +132,7 @@ export const THEMES = {
     '--theme-radius-panel': '0px',
     '--theme-radius-button': '0px',
     '--theme-shadow': '4px 4px 0px #3e2723',
+    '--theme-header-bg': '#e3d8c1',
     colors: ['#d84315', '#ff8f00', '#2e7d32', '#1565c0', '#c62828', '#6a1b9a']
   },
   bw: {
@@ -141,6 +149,7 @@ export const THEMES = {
     '--theme-radius-panel': '0px',
     '--theme-radius-button': '0px',
     '--theme-shadow': 'none',
+    '--theme-header-bg': '#f5f5f5',
     colors: ['#000000', '#222222', '#444444', '#666666', '#888888', '#aaaaaa']
   },
   typewriter: {
@@ -157,6 +166,7 @@ export const THEMES = {
     '--theme-radius-panel': '0px',
     '--theme-radius-button': '0px',
     '--theme-shadow': 'inset 0 0 0 1px #d4d4d8',
+    '--theme-header-bg': '#eee8d5',
     colors: ['#1e1e1e', '#3f3f3f', '#52525b', '#71717a', '#a1a1aa', '#b91c1c']
   },
   mahindra: {
@@ -173,6 +183,7 @@ export const THEMES = {
     '--theme-radius-panel': '0.5rem',
     '--theme-radius-button': '0.25rem',
     '--theme-shadow': '0 2px 4px rgba(0,0,0,0.1)',
+    '--theme-header-bg': '#f9fafb',
     colors: ['#e31837', '#333333', '#666666', '#999999', '#cccccc', '#ffffff']
   },
   vihaan: {
@@ -189,6 +200,7 @@ export const THEMES = {
     '--theme-radius-panel': '0.5rem',
     '--theme-radius-button': '9999px',
     '--theme-shadow': '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
+    '--theme-header-bg': '#E1E7F5',
     colors: ['#76C8D5', '#304571', '#94A3B8', '#CBD5E1', '#E2E8F0', '#111827']
   }
 };
