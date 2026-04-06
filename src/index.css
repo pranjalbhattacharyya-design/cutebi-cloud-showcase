@@ -23,7 +23,7 @@
 .t-app { 
   background: var(--theme-app-bg) !important; 
   color: var(--theme-text-main) !important; 
-  font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+  font-family: 'Inter', var(--theme-font) !important;
   font-size: calc(14px * var(--theme-font-scale-base));
 }
 .t-app * { 
@@ -32,7 +32,7 @@
 .t-panel { 
   background: var(--theme-panel-bg) !important; 
   border: 1px solid var(--theme-border); 
-  border-radius: var(--radius-container) !important; 
+  border-radius: var(--theme-radius-panel) !important; 
   box-shadow: var(--theme-shadow) !important;
   font-variant-numeric: tabular-nums;
 }
@@ -59,13 +59,13 @@ table, .t-pivot-cell {
   background: var(--theme-accent-bg) !important; 
   color: var(--theme-accent-text) !important; 
   border-color: var(--theme-border) !important; 
-  border-radius: var(--radius-container); 
+  border-radius: var(--theme-radius-button); 
 }
 .t-button { 
   background: var(--theme-panel-bg) !important; 
   border: 1px solid var(--theme-border) !important; 
   color: var(--theme-text-main) !important; 
-  border-radius: var(--radius-container) !important; 
+  border-radius: var(--theme-radius-button) !important; 
   box-shadow: var(--theme-shadow) !important; 
 }
 .t-button:hover { 

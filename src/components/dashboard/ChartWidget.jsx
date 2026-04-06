@@ -60,39 +60,6 @@ const WrappedLabel = (props) => {
   );
 };
 
-/**
- * Enterprise-Grade SVG Multi-line Labeling for Pie Charts
- */
-const WrappedPieLabel = (props) => {
-  const { cx, cy, midAngle, innerRadius, outerRadius, textWrap, fontSize, fill, name, percent } = props;
-  const RADIAN = Math.PI / 180;
-  const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-  const x = cx + radius * Math.cos(-midAngle * RADIAN);
-  const y = cy + radius * Math.sin(-midAngle * RADIAN);
-  
-  const val = `${name} ${(percent * 100).toFixed(0)}%`;
-
-  if (!textWrap || val.length < 12) {
-    return (
-      <text x={x} y={y} fill={fill} textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={fontSize} fontWeight="bold">
-        {val}
-      </text>
-    );
-  }
-
-  const words = val.split(' ');
-  const mid = Math.ceil(words.length / 2);
-  const line1 = words.slice(0, mid).join(' ');
-  const line2 = words.slice(mid).join(' ');
-
-  return (
-    <text x={x} y={y} fill={fill} textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={fontSize} fontWeight="bold">
-      <tspan x={x} dy="-0.5em">{line1}</tspan>
-      <tspan x={x} dy="1.1em">{line2}</tspan>
-    </text>
-  );
-};
-
 const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilter, handlePinChart, isViewer = false }) => {
   const {
       semanticModels, theme, activePageId, setDashboards, 
@@ -330,7 +297,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                 <thead className="t-text-muted text-[10px] uppercase tracking-wider border-b t-border sticky top-0 bg-[var(--theme-panel-bg)] z-10 shadow-sm">
                    <tr>
                       {headers.map((h, i) => (
-                          <th key={i} className="px-3 py-2 font-bold" style={{ fontSize: `calc(10px * ${fScale})`, whiteSpace: tWrap ? "normal" : "nowrap" }}>{h}</th>
+                          <th key={i} className="px-3 py-2 font-bold" style={{ whiteSpace: tWrap ? "normal" : "nowrap" }}>{h}</th>
                       ))}
                    </tr>
                 </thead>
@@ -419,7 +386,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                        return (
                           <tr key={rk} className="t-border border-b hover:bg-black/5 transition-colors text-xs">
                              {rkVals.map((rv, idx) => (
-                                 <td key={idx} className="px-3 py-1.5 font-bold t-text-main t-border border-r" style={{ whiteSpace: tWrap ? 'normal' : 'nowrap' }}>{formatDimVal(rv, chart.pivotRows[idx])}</td>
+                                 <td key={idx} className="px-3 py-1.5 font-bold t-text-main t-border border-r whitespace-nowrap">{formatDimVal(rv, chart.pivotRows[idx])}</td>
                              ))}
                              {colKeys.map(ck => {
                                  const val = matrix[rk]?.[ck];
@@ -507,14 +474,14 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
               {legendKeys.map((k, i) => (
                  <Bar key={k} dataKey={k} stackId="a" name={k === 'value' ? (semanticModel.find(m => m.id === chart.measure)?.label || chart.measure || 'Value') : k} fill={tColors[i % tColors.length]} onClick={(d) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, d.name);}} className={isExploreMode ? "" : "cursor-pointer transition-all duration-300"}>
                    {data.map((e, idx) => <Cell key={idx} opacity={!isExploreMode && activeFilterVal.length > 0 && !activeFilterVal.includes(String(e.name)) ? 0.3 : 1} />)}
-                   {chart.showDataLabels && <LabelList dataKey={k} position="insideTop" fill="#fff" fontSize={10 * fScale} fontWeight="bold" formatter={(v) => formatMeasVal(v, chart.measure)} content={<WrappedLabel textWrap={textWrap} />} />}
+                   {chart.showDataLabels && <LabelList dataKey={k} position="insideTop" fill="#fff" fontSize={10} fontWeight="bold" formatter={(v) => formatMeasVal(v, chart.measure)} content={<WrappedLabel textWrap={textWrap} />} />}
                  </Bar>
               ))}
             </BarChart>
           ) : chart.type === 'pie' ? (
             <RechartsPieChart>
               <RechartsTooltip contentStyle={{ borderRadius: 'var(--theme-radius-panel)', border: 'none', boxShadow: 'var(--theme-shadow)', background: 'var(--theme-panel-bg)', color: 'var(--theme-text-main)' }} formatter={(v, n) => [formatMeasVal(v, chart.measure), formatDimVal(n, chart.dimension)]} />
-              <Pie data={data} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" onClick={(d) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, d.name);}} className={isExploreMode ? "" : "cursor-pointer"} label={chart.showDataLabels ? (props) => <WrappedPieLabel {...props} textWrap={tWrap} fontSize={10} fill="var(--theme-text-main)" /> : false} labelLine={false}>
+              <Pie data={data} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" onClick={(d) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, d.name);}} className={isExploreMode ? "" : "cursor-pointer"} label={chart.showDataLabels ? ({ name, percent }) => `${formatDimVal(name, chart.dimension)} ${(percent * 100).toFixed(0)}%` : false} labelLine={false}>
                 {data.map((e, i) => <Cell key={i} fill={tColors[i % tColors.length]} opacity={!isExploreMode && activeFilterVal.length > 0 && !activeFilterVal.includes(String(e.name)) ? 0.3 : 1} style={{ outline: 'none' }} />)}
               </Pie>
               <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', color: 'var(--theme-text-main)' }} />
@@ -528,7 +495,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
               {chart.legend && <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', color: 'var(--theme-text-main)' }} />}
                {legendKeys.map((k, i) => (
                  <Line key={k} type="monotone" name={k === 'value' ? (semanticModel.find(m => m.id === chart.measure)?.label || chart.measure || 'Value') : k} dataKey={k} stroke={tColors[i % tColors.length]} strokeWidth={3} dot={{ r: 4, fill: tColors[i % tColors.length], strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6, onClick: (e, p) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, p.payload.name); } }} className={isExploreMode ? "" : "cursor-pointer"}>
-                   {chart.showDataLabels && <LabelList dataKey={k} position="top" fill={tColors[i % tColors.length]} fontSize={11 * fScale} fontWeight="bold" formatter={(v) => formatMeasVal(v, chart.measure)} content={<WrappedLabel textWrap={textWrap} />} />}
+                   {chart.showDataLabels && <LabelList dataKey={k} position="top" fill={tColors[i % tColors.length]} fontSize={11} fontWeight="bold" formatter={(v) => formatMeasVal(v, chart.measure)} content={<WrappedLabel textWrap={textWrap} />} />}
                  </Line>
               ))}
             </LineChart>
@@ -541,7 +508,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
       return (
          <div key={chart.id} className={`${isExploreMode ? 'bg-black/5 w-full mt-2' : 't-panel'} shadow-sm border t-border flex flex-col hover:shadow-md transition-all duration-300 ${!isExploreMode && chart.size === 'full' ? 'md:col-span-2' : 'md:col-span-1'} overflow-hidden`} style={{ borderRadius: 'var(--theme-radius-panel)' }}>
             <div className="flex justify-between items-start p-4 mb-0 bg-black/5 border-b t-border shrink-0">
-               <h4 className="font-bold t-text-main" style={{ fontSize: `calc(14px * ${fScale})`, whiteSpace: tWrap ? "normal" : "nowrap" }}>{chart.title}</h4>
+               <h4 className="font-bold t-text-main text-sm" style={{ whiteSpace: tWrap ? "normal" : "nowrap" }}>{chart.title}</h4>
                <div className="flex gap-2 t-text-muted">
                   {!isExploreMode && !isViewer && (
                      <>
@@ -562,7 +529,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
   return (
     <div key={chart.id} className={`${isExploreMode ? 'bg-black/5 w-full mt-2' : 't-panel'} p-3 shadow-sm border flex flex-col hover:shadow-md transition-all duration-300 ${!isExploreMode && chart.size === 'full' ? 'md:col-span-2' : 'md:col-span-1'}`} style={{ borderRadius: 'var(--theme-radius-panel)' }}>
       <div className="flex justify-between items-start mb-2 shrink-0">
-        <h4 className="font-bold t-text-main" style={{ fontSize: `calc(12px * ${fScale})`, whiteSpace: tWrap ? "normal" : "nowrap" }}>{chart.title}</h4>
+        <h4 className="font-bold t-text-main text-xs" style={{ whiteSpace: tWrap ? "normal" : "nowrap" }}>{chart.title}</h4>
         <div className="flex gap-1.5 t-text-muted">
           {isExploreMode ? (
               <button onClick={() => handlePinChart(chart)} className="hover:t-accent" title="Pin to Dashboard"><Pin size={16}/></button>
