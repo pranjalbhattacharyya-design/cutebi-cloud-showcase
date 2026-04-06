@@ -44,22 +44,47 @@ const WrappedTick = (props) => {
  * Custom content renderer for Recharts <LabelList />
  */
 const WrappedLabel = (props) => {
-  const { x, y, value, textWrap, fontSize, fill, fontWeight, disableHalo } = props;
+  const { x, y, width, height, value, textWrap, fontSize, fill, fontWeight, disableHalo } = props;
   const haloStyle = disableHalo ? {} : { stroke: 'var(--theme-panel-bg)', strokeWidth: 3, paintOrder: 'stroke' };
 
+  // For Bar Charts: Calculate the mathematical center of the bar
+  const isBarLabel = width !== undefined && height !== undefined;
+  const lx = isBarLabel ? x + width / 2 : x;
+  const ly = isBarLabel ? y + height / 2 : y;
+  const baseline = isBarLabel ? 'middle' : 'auto';
+  const dy = isBarLabel ? 0 : (textWrap && typeof value === 'string' && value.length >= 12 ? -10 : -6);
+
   if (!textWrap || typeof value !== 'string' || value.length < 12) {
-    return <text x={x} y={y} dy={-6} fill={fill} fontSize={fontSize} fontWeight={fontWeight} textAnchor="middle" style={haloStyle}>{value}</text>;
+    return <text x={lx} y={ly} dy={dy} fill={fill} fontSize={fontSize} fontWeight={fontWeight} textAnchor="middle" dominantBaseline={baseline} style={haloStyle}>{value}</text>;
   }
   const words = value.split(' ');
   const mid = Math.ceil(words.length / 2);
   const line1 = words.slice(0, mid).join(' ');
   const line2 = words.slice(mid).join(' ');
   return (
-    <text x={x} y={y} dy={-10} fill={fill} fontSize={fontSize} fontWeight={fontWeight} textAnchor="middle" style={haloStyle}>
-      <tspan x={x} dy="0">{line1}</tspan>
-      <tspan x={x} dy="1.1em">{line2}</tspan>
+    <text x={lx} y={ly} dy={dy} fill={fill} fontSize={fontSize} fontWeight={fontWeight} textAnchor="middle" dominantBaseline={baseline} style={haloStyle}>
+      <tspan x={lx} dy="0">{line1}</tspan>
+      <tspan x={lx} dy="1.1em">{line2}</tspan>
     </text>
   );
+};
+
+/**
+ * Intelligent Sparse Rendering for Dense Series
+ * Only render for First, Last, Local Max, and Local Min if points > 6
+ */
+const getIntelligentLabelVisibility = (index, data, dataKey) => {
+  if (!data || data.length <= 6) return true;
+  if (index === 0 || index === data.length - 1) return true;
+  
+  const val = data[index][dataKey];
+  const allVals = data.map(d => d[dataKey]).filter(v => typeof v === 'number');
+  if (allVals.length === 0) return true;
+  
+  const max = Math.max(...allVals);
+  const min = Math.min(...allVals);
+  
+  return val === max || val === min;
 };
 
 /**
@@ -224,11 +249,12 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
       
       const numVal = Number(cleanVal.replace(/[^0-9.-]/g, ''));
       
-      if (fmt === 'currency') return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(isNaN(numVal) ? 0 : numVal);
+      const indianFmt = new Intl.NumberFormat('en-IN');
+      if (fmt === 'currency') return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(isNaN(numVal) ? 0 : numVal).replace('INR', '₹');
       if (fmt === 'percentage') return `${((isNaN(numVal) ? 0 : numVal) * 100).toFixed(1)}%`;
-      if (fmt === 'number') return new Intl.NumberFormat('en-US').format(isNaN(numVal) ? 0 : numVal);
+      if (fmt === 'number') return indianFmt.format(isNaN(numVal) ? 0 : numVal);
       
-      if (!isNaN(numVal) && cleanVal.trim() !== '') return numVal.toLocaleString();
+      if (!isNaN(numVal) && cleanVal.trim() !== '') return indianFmt.format(numVal);
       return typeof val === 'object' && !val.toString ? JSON.stringify(val) : cleanVal;
   }, [semanticModels]);
 
@@ -461,7 +487,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                         }
                         return <Cell key={idx} fill={fill} opacity={!isExploreMode && activeFilterVal.length > 0 && !activeFilterVal.includes(String(e.name)) ? 0.3 : 0.8} />;
                      })}
-                     {chart.showDataLabels && <LabelList dataKey="name" position="top" fill="var(--theme-text-main)" fontSize={11} fontWeight="bold" content={(props) => shouldRenderLabel(props.index, scatterData.length) ? <WrappedLabel {...props} textWrap={textWrap} disableHalo={false} /> : null} />}
+                     {chart.showDataLabels && <LabelList dataKey="name" position="top" fill="var(--theme-text-main)" fontSize={11} fontWeight="bold" content={(props) => getIntelligentLabelVisibility(props.index, scatterData, 'name') ? <WrappedLabel {...props} textWrap={textWrap} disableHalo={false} /> : null} />}
                   </Scatter>
                </ScatterChart>
             </ResponsiveContainer>
@@ -485,7 +511,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
               {legendKeys.map((k, i) => (
                  <Bar key={k} dataKey={k} stackId="a" name={k === 'value' ? (semanticModel.find(m => m.id === chart.measure)?.label || chart.measure || 'Value') : k} fill={tColors[i % tColors.length]} onClick={(d) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, d.name);}} className={isExploreMode ? "" : "cursor-pointer transition-all duration-300"}>
                    {data.map((e, idx) => <Cell key={idx} opacity={!isExploreMode && activeFilterVal.length > 0 && !activeFilterVal.includes(String(e.name)) ? 0.3 : 1} />)}
-                   {chart.showDataLabels && <LabelList dataKey={k} position="insideTop" fill="#fff" fontSize={10} fontWeight="bold" formatter={(v) => formatMeasVal(v, chart.measure)} content={(props) => shouldRenderLabel(props.index, data.length) ? <WrappedLabel {...props} textWrap={textWrap} disableHalo={true} /> : null} />}
+                   {chart.showDataLabels && <LabelList dataKey={k} position="insideTop" fill="#fff" fontSize={10} fontWeight="bold" formatter={(v) => formatMeasVal(v, chart.measure)} content={(props) => <WrappedLabel {...props} textWrap={textWrap} disableHalo={true} />} />}
                  </Bar>
               ))}
             </BarChart>
@@ -506,7 +532,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
               {chart.legend && <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', color: 'var(--theme-text-main)' }} />}
                {legendKeys.map((k, i) => (
                  <Line key={k} type="monotone" name={k === 'value' ? (semanticModel.find(m => m.id === chart.measure)?.label || chart.measure || 'Value') : k} dataKey={k} stroke={tColors[i % tColors.length]} strokeWidth={3} dot={{ r: 4, fill: tColors[i % tColors.length], strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6, onClick: (e, p) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, p.payload.name); } }} className={isExploreMode ? "" : "cursor-pointer"}>
-                   {chart.showDataLabels && <LabelList dataKey={k} position="top" fill={tColors[i % tColors.length]} fontSize={11} fontWeight="bold" formatter={(v) => formatMeasVal(v, chart.measure)} content={(props) => shouldRenderLabel(props.index, data.length) ? <WrappedLabel {...props} textWrap={textWrap} disableHalo={false} /> : null} />}
+                   {chart.showDataLabels && <LabelList dataKey={k} position="top" fill={tColors[i % tColors.length]} fontSize={11} fontWeight="bold" formatter={(v) => formatMeasVal(v, chart.measure)} content={(props) => getIntelligentLabelVisibility(props.index, data, k) ? <WrappedLabel {...props} textWrap={textWrap} disableHalo={false} /> : null} />}
                  </Line>
               ))}
             </LineChart>
