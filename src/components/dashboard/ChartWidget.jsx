@@ -4,7 +4,9 @@ import { useChartData } from '../../hooks/useChartData';
 import { THEMES } from '../../utils/themeEngine';
 import { ArrowUpDown, Maximize2, X, Pencil, Pin, LayoutTemplate } from 'lucide-react';
 import { 
-  PieChart as RechartsPieChart, Pie, Tooltip as RechartsTooltip, Text 
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
+  Tooltip as RechartsTooltip, Legend, LabelList, LineChart, Line, 
+  ScatterChart, Scatter, ZAxis, PieChart as RechartsPieChart, Pie, Cell, Text 
 } from 'recharts';
 
 /**
