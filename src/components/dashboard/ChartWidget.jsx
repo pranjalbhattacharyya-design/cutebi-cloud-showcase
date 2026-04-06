@@ -44,8 +44,8 @@ const WrappedTick = (props) => {
  * Custom content renderer for Recharts <LabelList />
  */
 const WrappedLabel = (props) => {
-  const { x, y, value, textWrap, fontSize, fill, fontWeight } = props;
-  const haloStyle = { stroke: 'var(--theme-panel-bg)', strokeWidth: 3, paintOrder: 'stroke' };
+  const { x, y, value, textWrap, fontSize, fill, fontWeight, disableHalo } = props;
+  const haloStyle = disableHalo ? {} : { stroke: 'var(--theme-panel-bg)', strokeWidth: 3, paintOrder: 'stroke' };
 
   if (!textWrap || typeof value !== 'string' || value.length < 12) {
     return <text x={x} y={y} dy={-6} fill={fill} fontSize={fontSize} fontWeight={fontWeight} textAnchor="middle" style={haloStyle}>{value}</text>;
@@ -461,7 +461,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                         }
                         return <Cell key={idx} fill={fill} opacity={!isExploreMode && activeFilterVal.length > 0 && !activeFilterVal.includes(String(e.name)) ? 0.3 : 0.8} />;
                      })}
-                     {chart.showDataLabels && <LabelList dataKey="name" position="top" fill="var(--theme-text-main)" fontSize={11} fontWeight="bold" content={(props) => shouldRenderLabel(props.index, scatterData.length) ? <WrappedLabel {...props} textWrap={textWrap} /> : null} />}
+                     {chart.showDataLabels && <LabelList dataKey="name" position="top" fill="var(--theme-text-main)" fontSize={11} fontWeight="bold" content={(props) => shouldRenderLabel(props.index, scatterData.length) ? <WrappedLabel {...props} textWrap={textWrap} disableHalo={false} /> : null} />}
                   </Scatter>
                </ScatterChart>
             </ResponsiveContainer>
@@ -485,7 +485,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
               {legendKeys.map((k, i) => (
                  <Bar key={k} dataKey={k} stackId="a" name={k === 'value' ? (semanticModel.find(m => m.id === chart.measure)?.label || chart.measure || 'Value') : k} fill={tColors[i % tColors.length]} onClick={(d) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, d.name);}} className={isExploreMode ? "" : "cursor-pointer transition-all duration-300"}>
                    {data.map((e, idx) => <Cell key={idx} opacity={!isExploreMode && activeFilterVal.length > 0 && !activeFilterVal.includes(String(e.name)) ? 0.3 : 1} />)}
-                   {chart.showDataLabels && <LabelList dataKey={k} position="insideTop" fill="#fff" fontSize={10} fontWeight="bold" formatter={(v) => formatMeasVal(v, chart.measure)} content={(props) => shouldRenderLabel(props.index, data.length) ? <WrappedLabel {...props} textWrap={textWrap} /> : null} />}
+                   {chart.showDataLabels && <LabelList dataKey={k} position="insideTop" fill="#fff" fontSize={10} fontWeight="bold" formatter={(v) => formatMeasVal(v, chart.measure)} content={(props) => shouldRenderLabel(props.index, data.length) ? <WrappedLabel {...props} textWrap={textWrap} disableHalo={true} /> : null} />}
                  </Bar>
               ))}
             </BarChart>
@@ -506,7 +506,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
               {chart.legend && <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', color: 'var(--theme-text-main)' }} />}
                {legendKeys.map((k, i) => (
                  <Line key={k} type="monotone" name={k === 'value' ? (semanticModel.find(m => m.id === chart.measure)?.label || chart.measure || 'Value') : k} dataKey={k} stroke={tColors[i % tColors.length]} strokeWidth={3} dot={{ r: 4, fill: tColors[i % tColors.length], strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6, onClick: (e, p) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, p.payload.name); } }} className={isExploreMode ? "" : "cursor-pointer"}>
-                   {chart.showDataLabels && <LabelList dataKey={k} position="top" fill={tColors[i % tColors.length]} fontSize={11} fontWeight="bold" formatter={(v) => formatMeasVal(v, chart.measure)} content={(props) => shouldRenderLabel(props.index, data.length) ? <WrappedLabel {...props} textWrap={textWrap} /> : null} />}
+                   {chart.showDataLabels && <LabelList dataKey={k} position="top" fill={tColors[i % tColors.length]} fontSize={11} fontWeight="bold" formatter={(v) => formatMeasVal(v, chart.measure)} content={(props) => shouldRenderLabel(props.index, data.length) ? <WrappedLabel {...props} textWrap={textWrap} disableHalo={false} /> : null} />}
                  </Line>
               ))}
             </LineChart>
