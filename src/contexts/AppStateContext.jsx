@@ -55,11 +55,19 @@ export const AppStateProvider = ({ children }) => {
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('cutebi_theme') || 'cute';
   });
+  const [fontScale, setFontScale] = useState(() => {
+    return parseFloat(localStorage.getItem('cutebi_font_scale')) || 1.0;
+  });
+  const [textWrap, setTextWrap] = useState(() => {
+    return localStorage.getItem('cutebi_text_wrap') === 'true';
+  });
 
   useEffect(() => {
     localStorage.setItem('cutebi_theme', theme);
-    applyTheme(theme);
-  }, [theme]);
+    localStorage.setItem('cutebi_font_scale', fontScale);
+    localStorage.setItem('cutebi_text_wrap', textWrap);
+    applyTheme(theme, { fontScale, textWrap });
+  }, [theme, fontScale, textWrap]);
 
   useEffect(() => {
     window.dispatchEvent(new CustomEvent('cutebi-debug', { 
@@ -629,7 +637,8 @@ export const AppStateProvider = ({ children }) => {
     // Search & Filter
     dictSearch, setDictSearch, dictFilterCategory, setDictFilterCategory, measureSearch, setMeasureSearch,
     // UI
-    theme, setTheme, isUploading, setIsUploading, chatInput, setChatInput, isThinking, setIsThinking,
+    theme, setTheme, fontScale, setFontScale, textWrap, setTextWrap,
+    isUploading, setIsUploading, chatInput, setChatInput, isThinking, setIsThinking,
     showSemanticModeler, setShowSemanticModeler, showRelModal, setShowRelModal, dragActive, setDragActive,
     toastMessage, setToastMessage, showSaveModal, setShowSaveModal, reportNameInput, setReportNameInput,
     reportToDelete, setReportToDelete, showBuilder, setShowBuilder, showMagicBar, setShowMagicBar,

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Palette, Check, ChevronDown } from 'lucide-react';
 import { useAppState } from '../../contexts/AppStateContext';
 import { THEMES } from '../../utils/themeEngine';
+import TypographySettings from './TypographySettings';
 
 export default function ThemeSelector({ className = '' }) {
   const { theme, setTheme } = useAppState();
@@ -33,7 +34,7 @@ export default function ThemeSelector({ className = '' }) {
         <div className="absolute right-0 mt-2 w-56 bg-slate-900 border border-white/10 rounded-2xl shadow-2xl z-[100] py-2 overflow-hidden animate-in fade-in zoom-in duration-200">
           <div className="px-4 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-white/5 mb-1">
             Visual Workspace Theme
-          </div>
+          <div className="border-t border-white/5 p-2"><TypographySettings /></div></div>
           <div className="max-h-64 overflow-y-auto">
             {Object.entries(THEMES).map(([id, t]) => (
               <button
@@ -49,12 +50,12 @@ export default function ThemeSelector({ className = '' }) {
                 <div className="flex items-center gap-3">
                   <div className="w-3 h-3 rounded-full border border-white/20" style={{ backgroundColor: t['--theme-accent'] || t.colors[0] }} />
                   {t.name}
-                </div>
+                <div className="border-t border-white/5 p-2"><TypographySettings /></div></div>
                 {theme === id && <Check size={14} />}
               </button>
             ))}
-          </div>
-        </div>
+          <div className="border-t border-white/5 p-2"><TypographySettings /></div></div>
+        <div className="border-t border-white/5 p-2"><TypographySettings /></div></div>
       )}
     </div>
   );

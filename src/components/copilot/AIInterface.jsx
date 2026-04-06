@@ -110,6 +110,7 @@ function DataSnippetAccordion({ rows, headers, total }) {
 // AI Message Bubble
 // ---------------------------------------------------------------------------
 function AIMessage({ msg, handleGenerateInfographic, handleDeepDiveExecute, handleTrendExecute }) {
+  const { fontScale } = useAppState();
   const [copied, setCopied] = useState(false);
   const copyToClipboard = async (text) => {
     try {
@@ -134,7 +135,7 @@ function AIMessage({ msg, handleGenerateInfographic, handleDeepDiveExecute, hand
               <p className="text-xs font-bold t-text-muted mb-2">{msg.text}</p>
               {msg.infographicData && (
                 <>
-                  <InfographicCanvas ref={canvasRef} data={msg.infographicData} />
+                  <InfographicCanvas ref={canvasRef} data={msg.infographicData} fontScale={fontScale} />
                   <button
                     onClick={() => canvasRef.current?.download()}
                     className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold t-accent-bg transition-all hover:opacity-90"

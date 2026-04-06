@@ -1,6 +1,12 @@
+:root {
+  --theme-font-scale-base: 1.00;
+  --theme-font-scale-kpi: 1.00;
+}
+
 @import "tailwindcss";@layer base {
   body {
     @apply antialiased overflow-hidden;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
   }
 }
 
@@ -17,17 +23,34 @@
 .t-app { 
   background: var(--theme-app-bg) !important; 
   color: var(--theme-text-main) !important; 
-  font-family: var(--theme-font) !important; 
+  font-family: 'Inter', var(--theme-font) !important;
+  font-size: calc(14px * var(--theme-font-scale-base));
 }
 .t-app * { 
-  font-family: var(--theme-font); 
+  font-family: inherit; 
 }
 .t-panel { 
   background: var(--theme-panel-bg) !important; 
   border: 1px solid var(--theme-border); 
   border-radius: var(--theme-radius-panel) !important; 
-  box-shadow: var(--theme-shadow) !important; 
+  box-shadow: var(--theme-shadow) !important;
+  font-variant-numeric: tabular-nums;
 }
+.t-pill {
+  border-radius: var(--radius-pill) !important;
+}
+
+/* Bifurcated Scaling & Numeric Alignment */
+.t-kpi-value {
+  font-size: calc(32px * var(--theme-font-scale-kpi)) !important;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+table, .t-pivot-cell {
+  font-variant-numeric: tabular-nums;
+}
+
 .t-text-main { color: var(--theme-text-main) !important; }
 .t-text-muted { color: var(--theme-text-muted) !important; }
 .t-border { border-color: var(--theme-border) !important; }

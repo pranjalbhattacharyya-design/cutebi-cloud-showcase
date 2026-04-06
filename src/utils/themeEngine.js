@@ -174,16 +174,55 @@ export const THEMES = {
     '--theme-radius-button': '0.25rem',
     '--theme-shadow': '0 2px 4px rgba(0,0,0,0.1)',
     colors: ['#e31837', '#333333', '#666666', '#999999', '#cccccc', '#ffffff']
+  },
+  vihaan: {
+    name: 'Vihaan Enterprise',
+    '--theme-app-bg': '#F0F4F8',
+    '--theme-panel-bg': '#FFFFFF',
+    '--theme-text-main': '#111827',
+    '--theme-text-muted': '#4B5563',
+    '--theme-border': '#E2E8F0',
+    '--theme-accent': '#304571',
+    '--theme-accent-bg': '#304571',
+    '--theme-accent-text': '#FFFFFF',
+    '--theme-font': "'Inter', system-ui, sans-serif",
+    '--theme-radius-panel': '0.5rem',
+    '--theme-radius-button': '9999px',
+    '--theme-shadow': '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
+    colors: ['#76C8D5', '#304571', '#94A3B8', '#CBD5E1', '#E2E8F0', '#111827']
   }
 };
 
-export const applyTheme = (themeName) => {
+// Global Geometry Defaults (Applied to all themes during injection)
+const GEOMETRY = {
+  '--radius-container': '0.5rem', // 8px
+  '--radius-pill': '9999px'
+};
+
+export const applyTheme = (themeName, options = {}) => {
   const t = THEMES[themeName];
   if (!t) return;
+  
+  const { fontScale = 1.0, textWrap = false } = options;
   const root = document.documentElement;
-  Object.keys(t).forEach(k => {
+
+  // 1. Apply Theme Variables + Geometry Tokens
+  const fullTheme = { ...GEOMETRY, ...t };
+  Object.keys(fullTheme).forEach(k => {
     if (k.startsWith('--')) {
-      root.style.setProperty(k, t[k]);
+      root.style.setProperty(k, fullTheme[k]);
     }
   });
+
+  // 2. Apply Dynamic Scaling & Wrapping
+  root.style.setProperty('--theme-font-scale-base', fontScale.toFixed(2));
+  // Capped scale for KPIs to prevent layout break (max 1.1x)
+  const kpiScale = Math.min(fontScale, 1.1).toFixed(2);
+  root.style.setProperty('--theme-font-scale-kpi', kpiScale);
+  
+  // Logical state for wrap
+  root.style.setProperty('--theme-text-wrap', textWrap ? 'normal' : 'nowrap');
+  
+  // Set the theme class on body for specific styling overrides
+  root.className = `theme-${themeName}`;
 };

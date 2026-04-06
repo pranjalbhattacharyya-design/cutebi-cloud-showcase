@@ -4,16 +4,65 @@ import { useChartData } from '../../hooks/useChartData';
 import { THEMES } from '../../utils/themeEngine';
 import { ArrowUpDown, Maximize2, X, Pencil, Pin, LayoutTemplate } from 'lucide-react';
 import { 
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, Cell, LabelList, 
-  LineChart, Line, ScatterChart, Scatter, ZAxis, 
-  PieChart as RechartsPieChart, Pie, Tooltip as RechartsTooltip 
+  PieChart as RechartsPieChart, Pie, Tooltip as RechartsTooltip, Text 
 } from 'recharts';
+
+/**
+ * Enterprise-Grade SVG Multi-line Wrapping
+ * Uses Recharts <Text /> but ensures it drops logic into <tspan> based on context
+ */
+const WrappedTick = (props) => {
+  const { x, y, payload, textWrap, fontSize, fill, textAnchor = 'middle' } = props;
+  const val = payload.value;
+  
+  if (!textWrap || typeof val !== 'string' || val.length < 12) {
+    return (
+      <text x={x} y={y} dy={16} fill={fill} fontSize={fontSize} textAnchor={textAnchor} className="recharts-text recharts-cartesian-axis-tick-value">
+        {val}
+      </text>
+    );
+  }
+
+  // Split logic: split by spaces, ensuring each tspan line is roughly balanced
+  const words = val.split(' ');
+  const mid = Math.ceil(words.length / 2);
+  const line1 = words.slice(0, mid).join(' ');
+  const line2 = words.slice(mid).join(' ');
+
+  return (
+    <text x={x} y={y} dy={12} fill={fill} fontSize={fontSize} textAnchor={textAnchor}>
+      <tspan x={x} dy="0.3em">{line1}</tspan>
+      <tspan x={x} dy="1.1em">{line2}</tspan>
+    </text>
+  );
+};
+
+/**
+ * Enterprise-Grade SVG Multi-line Labeling
+ * Custom content renderer for Recharts <LabelList />
+ */
+const WrappedLabel = (props) => {
+  const { x, y, value, textWrap, fontSize, fill, fontWeight } = props;
+  if (!textWrap || typeof value !== 'string' || value.length < 12) {
+    return <text x={x} y={y} dy={-6} fill={fill} fontSize={fontSize} fontWeight={fontWeight} textAnchor="middle">{value}</text>;
+  }
+  const words = value.split(' ');
+  const mid = Math.ceil(words.length / 2);
+  const line1 = words.slice(0, mid).join(' ');
+  const line2 = words.slice(mid).join(' ');
+  return (
+    <text x={x} y={y} dy={-10} fill={fill} fontSize={fontSize} fontWeight={fontWeight} textAnchor="middle">
+      <tspan x={x} dy="0">{line1}</tspan>
+      <tspan x={x} dy="1.1em">{line2}</tspan>
+    </text>
+  );
+};
 
 const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilter, handlePinChart, isViewer = false }) => {
   const {
       semanticModels, theme, activePageId, setDashboards, 
       setBuilderForm, initBuilderForm, setShowBuilder,
-      globalFilters, joinGroupIds
+      globalFilters, joinGroupIds, fontScale, textWrap
   } = useAppState();
   
   const { getAggregatedData, getPivotData, getTableData, getScatterData, datesReady } = useChartData();
@@ -143,6 +192,8 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
 
   const semanticModel = semanticModels[chart.datasetId] || [];
   const tColors = THEMES[theme].colors;
+  const fScale = fontScale || 1.0;
+  const tWrap = textWrap || false;
 
   const formatMeasVal = React.useCallback((val, measureId) => {
       if (val === undefined || val === null) return '';
@@ -244,7 +295,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                 <thead className="t-text-muted text-[10px] uppercase tracking-wider border-b t-border sticky top-0 bg-[var(--theme-panel-bg)] z-10 shadow-sm">
                    <tr>
                       {headers.map((h, i) => (
-                          <th key={i} className="px-3 py-2 font-bold whitespace-nowrap">{h}</th>
+                          <th key={i} className="px-3 py-2 font-bold" style={{ whiteSpace: tWrap ? "normal" : "nowrap" }}>{h}</th>
                       ))}
                    </tr>
                 </thead>
@@ -313,7 +364,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                   const parts = ck.split(' | ');
                   const val = parts[levelIndex] || '';
                   return (
-                      <th key={`${ck}-${levelIndex}`} colSpan={span} className="px-3 py-1.5 font-bold t-text-main t-border border-b border-r text-center bg-black/5 text-[10px]">
+                      <th key={`${ck}-${levelIndex}`} colSpan={span} className="px-3 py-1.5 font-bold t-text-main t-border border-b border-r text-center bg-black/5 text-[10px]" style={{ whiteSpace: tWrap ? 'normal' : 'nowrap' }}>
                           {levelIndex < (chart.pivotCols || []).length ? formatDimVal(val, chart.pivotCols[levelIndex]) : val}
                       </th>
                   );
@@ -383,7 +434,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
             <ResponsiveContainer width="100%" height="100%">
                <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--theme-border)" />
-                  <XAxis type="number" dataKey="x" name={semanticModel.find(m => m.id === chart.xMeasure)?.label || 'X'} tick={{fill: 'var(--theme-text-muted)', fontSize: 10}} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.xMeasure)} />
+                  <XAxis type="number" dataKey="x" name={semanticModel.find(m => m.id === chart.xMeasure)?.label || 'X'} tick={<WrappedTick textWrap={tWrap} fontSize={10} fill="var(--theme-text-muted)" />} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.xMeasure)} />
                   <YAxis type="number" dataKey="y" name={semanticModel.find(m => m.id === chart.yMeasure)?.label || 'Y'} tick={{fill: 'var(--theme-text-muted)', fontSize: 10}} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.yMeasure)} />
                   {chart.sizeMeasure && <ZAxis type="number" dataKey="size" range={[60, 400]} name={semanticModel.find(m => m.id === chart.sizeMeasure)?.label || 'Size'} />}
                   <RechartsTooltip cursor={{strokeDasharray: '3 3'}} content={CustomScatterTooltip} />
@@ -397,7 +448,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                         }
                         return <Cell key={idx} fill={fill} opacity={!isExploreMode && activeFilterVal.length > 0 && !activeFilterVal.includes(String(e.name)) ? 0.3 : 0.8} />;
                      })}
-                     {chart.showDataLabels && <LabelList dataKey="name" position="top" fill="var(--theme-text-main)" fontSize={11} fontWeight="bold" />}
+                     {chart.showDataLabels && <LabelList dataKey="name" position="top" fill="var(--theme-text-main)" fontSize={11} fontWeight="bold" content={<WrappedLabel textWrap={textWrap} />} />}
                   </Scatter>
                </ScatterChart>
             </ResponsiveContainer>
@@ -412,16 +463,16 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
      return (
         <ResponsiveContainer width="100%" height="100%">
           {chart.type === 'bar' ? (
-            <BarChart data={data} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+            <BarChart data={data} margin={{ top: 10, right: 10, left: -25, bottom: 20 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--theme-border)" />
-              <XAxis dataKey="name" tick={{fill: 'var(--theme-text-muted)', fontSize: 10}} axisLine={false} tickLine={false} tickFormatter={(v) => formatDimVal(v, chart.dimension)} />
+              <XAxis dataKey="name" tick={<WrappedTick textWrap={tWrap} fontSize={10} fill="var(--theme-text-muted)" />} axisLine={false} tickLine={false} tickFormatter={(v) => formatDimVal(v, chart.dimension)} />
               <YAxis tick={{fill: 'var(--theme-text-muted)', fontSize: 10}} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.measure)} />
               <RechartsTooltip cursor={{fill: 'var(--theme-border)', opacity: 0.5}} contentStyle={{ borderRadius: 'var(--theme-radius-panel)', border: 'none', boxShadow: 'var(--theme-shadow)', background: 'var(--theme-panel-bg)', color: 'var(--theme-text-main)' }} labelFormatter={(v) => formatDimVal(v, chart.dimension)} formatter={(val, name) => [formatMeasVal(val, chart.measure), chart.legend ? name : (semanticModel.find(m => m.id === chart.measure)?.label || chart.measure || 'Value')]} />
               {chart.legend && <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', color: 'var(--theme-text-main)' }} />}
               {legendKeys.map((k, i) => (
                  <Bar key={k} dataKey={k} stackId="a" name={k === 'value' ? (semanticModel.find(m => m.id === chart.measure)?.label || chart.measure || 'Value') : k} fill={tColors[i % tColors.length]} onClick={(d) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, d.name);}} className={isExploreMode ? "" : "cursor-pointer transition-all duration-300"}>
                    {data.map((e, idx) => <Cell key={idx} opacity={!isExploreMode && activeFilterVal.length > 0 && !activeFilterVal.includes(String(e.name)) ? 0.3 : 1} />)}
-                   {chart.showDataLabels && <LabelList dataKey={k} position="insideTop" fill="#fff" fontSize={10} fontWeight="bold" formatter={(v) => formatMeasVal(v, chart.measure)} />}
+                   {chart.showDataLabels && <LabelList dataKey={k} position="insideTop" fill="#fff" fontSize={10} fontWeight="bold" formatter={(v) => formatMeasVal(v, chart.measure)} content={<WrappedLabel textWrap={textWrap} />} />}
                  </Bar>
               ))}
             </BarChart>
@@ -434,15 +485,15 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
               <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', color: 'var(--theme-text-main)' }} />
             </RechartsPieChart>
           ) : (
-            <LineChart data={data} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+            <LineChart data={data} margin={{ top: 10, right: 10, left: -25, bottom: 20 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--theme-border)" />
-              <XAxis dataKey="name" tick={{fill: 'var(--theme-text-muted)', fontSize: 10}} axisLine={false} tickLine={false} tickFormatter={(v) => formatDimVal(v, chart.dimension)} />
+              <XAxis dataKey="name" tick={<WrappedTick textWrap={tWrap} fontSize={10} fill="var(--theme-text-muted)" />} axisLine={false} tickLine={false} tickFormatter={(v) => formatDimVal(v, chart.dimension)} />
               <YAxis tick={{fill: 'var(--theme-text-muted)', fontSize: 10}} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.measure)} />
               <RechartsTooltip contentStyle={{ borderRadius: 'var(--theme-radius-panel)', border: 'none', boxShadow: 'var(--theme-shadow)', background: 'var(--theme-panel-bg)', color: 'var(--theme-text-main)' }} labelFormatter={(v) => formatDimVal(v, chart.dimension)} formatter={(val, name) => [formatMeasVal(val, chart.measure), chart.legend ? name : (semanticModel.find(m => m.id === chart.measure)?.label || chart.measure || 'Value')]} />
               {chart.legend && <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', color: 'var(--theme-text-main)' }} />}
                {legendKeys.map((k, i) => (
                  <Line key={k} type="monotone" name={k === 'value' ? (semanticModel.find(m => m.id === chart.measure)?.label || chart.measure || 'Value') : k} dataKey={k} stroke={tColors[i % tColors.length]} strokeWidth={3} dot={{ r: 4, fill: tColors[i % tColors.length], strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6, onClick: (e, p) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, p.payload.name); } }} className={isExploreMode ? "" : "cursor-pointer"}>
-                   {chart.showDataLabels && <LabelList dataKey={k} position="top" fill={tColors[i % tColors.length]} fontSize={11} fontWeight="bold" formatter={(v) => formatMeasVal(v, chart.measure)} />}
+                   {chart.showDataLabels && <LabelList dataKey={k} position="top" fill={tColors[i % tColors.length]} fontSize={11} fontWeight="bold" formatter={(v) => formatMeasVal(v, chart.measure)} content={<WrappedLabel textWrap={textWrap} />} />}
                  </Line>
               ))}
             </LineChart>
@@ -455,7 +506,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
       return (
          <div key={chart.id} className={`${isExploreMode ? 'bg-black/5 w-full mt-2' : 't-panel'} shadow-sm border t-border flex flex-col hover:shadow-md transition-all duration-300 ${!isExploreMode && chart.size === 'full' ? 'md:col-span-2' : 'md:col-span-1'} overflow-hidden`} style={{ borderRadius: 'var(--theme-radius-panel)' }}>
             <div className="flex justify-between items-start p-4 mb-0 bg-black/5 border-b t-border shrink-0">
-               <h4 className="font-bold t-text-main text-sm">{chart.title}</h4>
+               <h4 className="font-bold t-text-main text-sm" style={{ whiteSpace: tWrap ? "normal" : "nowrap" }}>{chart.title}</h4>
                <div className="flex gap-2 t-text-muted">
                   {!isExploreMode && !isViewer && (
                      <>
@@ -476,7 +527,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
   return (
     <div key={chart.id} className={`${isExploreMode ? 'bg-black/5 w-full mt-2' : 't-panel'} p-3 shadow-sm border flex flex-col hover:shadow-md transition-all duration-300 ${!isExploreMode && chart.size === 'full' ? 'md:col-span-2' : 'md:col-span-1'}`} style={{ borderRadius: 'var(--theme-radius-panel)' }}>
       <div className="flex justify-between items-start mb-2 shrink-0">
-        <h4 className="font-bold t-text-main text-xs">{chart.title}</h4>
+        <h4 className="font-bold t-text-main text-xs" style={{ whiteSpace: tWrap ? "normal" : "nowrap" }}>{chart.title}</h4>
         <div className="flex gap-1.5 t-text-muted">
           {isExploreMode ? (
               <button onClick={() => handlePinChart(chart)} className="hover:t-accent" title="Pin to Dashboard"><Pin size={16}/></button>
