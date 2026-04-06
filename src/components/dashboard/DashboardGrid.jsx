@@ -175,7 +175,7 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
                   </button>
                 )}
                 {activeDataset && (
-                  <div className="flex-1 bg-black/5 p-1.5 border t-border flex items-center gap-2" style={{ borderRadius: 'var(--theme-radius-button)' }}>
+                  <div className="flex-1 bg-white p-1.5 border t-border flex items-center gap-2" style={{ borderRadius: 'var(--theme-radius-button)' }}>
                     {!isViewer && (
                       <div className="flex gap-1 items-center bg-black/10 p-0.5 ml-0.5" style={{ borderRadius: 'var(--theme-radius-button)' }}>
                         <button onClick={() => {setAiMode('build'); setIsExploreOpen(false);}} className={`px-3 py-1 text-[10px] font-bold transition-all ${aiMode==='build'?'t-accent-bg text-white shadow-sm':'t-text-muted hover:t-text-main'}`} style={{ borderRadius: 'var(--theme-radius-button)' }}>Build</button>
@@ -206,7 +206,7 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
               )}
               </div>
             )}
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-black/5 p-2 rounded-xl border t-border">
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-2 rounded-xl border t-border">
                 <div className="flex items-center gap-4">
                     <button onClick={() => setShowSlicerPane(!showSlicerPane)} className="flex items-center gap-2 t-text-main font-bold text-xs group">
                       <Filter size={12} className="t-accent"/>
@@ -277,7 +277,7 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
                   )}
                 </div>
             </div>
-            <div className={`flex flex-col gap-2 bg-black/5 p-2 pr-3 rounded-xl border t-border -mt-1 ${showSlicerPane ? '' : 'hidden'}`}>
+            <div className={`flex flex-col gap-2 bg-white p-2 pr-3 rounded-xl border t-border -mt-1 ${showSlicerPane ? '' : 'hidden'}`}>
                     <div className="flex justify-between items-center px-1 mb-1">
                         <span className="text-[10px] font-bold t-text-muted uppercase tracking-widest">Active Filters</span>
                         <button onClick={clearFilters} className="text-[10px] t-text-muted hover:t-text-main font-bold underline whitespace-nowrap">Clear All</button>
