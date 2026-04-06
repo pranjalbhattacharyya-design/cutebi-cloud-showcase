@@ -417,7 +417,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                  <thead className="t-panel sticky top-0 z-10">
                     {headerRows}
                  </thead>
-                 <tbody>
+                 <tbody className="bg-[var(--theme-panel-bg)]">
                     {rowKeys.map(rk => {
                        const rkVals = rk.split(' | ');
                        return (
