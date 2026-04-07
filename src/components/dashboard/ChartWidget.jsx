@@ -143,6 +143,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
   const [matrixRawRow, setMatrixRawRow] = React.useState(null);
   const [matrixLoading, setMatrixLoading] = React.useState(false);
   const [matrixColLabels, setMatrixColLabels] = React.useState({}); // {colId: editedLabel}
+  const [matrixRowHeader, setMatrixRowHeader] = React.useState('Measure'); // editable first-column label
   const [expandedCategories, setExpandedCategories] = React.useState({}); // {category: true/false}
 
   const needsTimeIntelligence = React.useMemo(() => {
@@ -734,24 +735,29 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
           </div>
         </div>
 
-        {/* Scrollable table body */}
-        <div className="overflow-auto flex-1 transition-all duration-300" style={{ maxHeight: isTall ? '560px' : '260px' }}>
+        {/* Scrollable table body — explicit height enables toggle */}
+        <div className="overflow-y-auto transition-all duration-300" style={{ height: isTall ? '520px' : '260px' }}>
           {matrixLoading ? (
             <div className="flex items-center justify-center h-20 t-text-muted text-xs">Loading matrix data…</div>
           ) : (
             <table className="w-full text-xs border-collapse" style={{ fontFamily: 'inherit' }}>
               <thead className="sticky top-0 z-10">
-                <tr style={{ background: 'var(--theme-panel-bg)', borderBottom: '2px solid var(--theme-border)' }}>
-                  {/* Single combined column header */}
-                  <th className="text-left px-3 py-2 font-black t-text-muted uppercase tracking-wider min-w-[180px]" style={{ fontSize: '10px', letterSpacing: '0.08em' }}>
-                    Measure
+                <tr style={{ background: 'rgba(0,0,0,0.035)', borderBottom: '2px solid var(--theme-border)' }}>
+                  {/* First column — editable row header label */}
+                  <th className="text-left px-3 py-2 font-black t-text-muted uppercase tracking-wider min-w-[180px]" style={{ fontSize: '10px', letterSpacing: '0.08em', background: 'rgba(0,0,0,0.035)' }}>
+                    <span
+                      contentEditable
+                      suppressContentEditableWarning
+                      onBlur={e => setMatrixRowHeader(e.currentTarget.textContent.trim() || 'Measure')}
+                      className="outline-none cursor-text hover:underline decoration-dotted"
+                    >{matrixRowHeader}</span>
                   </th>
                   {allCols.map(col => {
                     const h = col.type === 'scope' ? buildHeader(col) : null;
                     const baseLabel = col.type === 'variance' ? (matrixColLabels[col.id] ?? col.label) : h?.baseLabel;
                     const dateRange = h?.dateRange;
                     return (
-                      <th key={col.id} className="text-right px-3 py-2 font-black t-text-muted uppercase tracking-wider min-w-[100px]" style={{ fontSize: '10px', letterSpacing: '0.08em' }}>
+                      <th key={col.id} className="text-right px-3 py-2 font-black t-text-muted uppercase tracking-wider min-w-[100px]" style={{ fontSize: '10px', letterSpacing: '0.08em', background: 'rgba(0,0,0,0.035)' }}>
                         <div className="flex flex-col items-end gap-px">
                           <span
                             contentEditable

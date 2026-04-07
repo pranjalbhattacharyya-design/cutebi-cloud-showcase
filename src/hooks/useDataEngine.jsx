@@ -693,13 +693,22 @@ export const useDataEngine = () => {
         selectParts.push(`${resolvedExpr} AS \`m_${safeMeasId}_${safeColId}\``);
       });
 
-      // Dynamic date bounds (if a date field is configured via time intelligence or any filter uses a date dim)
-      const dateDimId = col.timeConfig?.enabled ? col.timeConfig?.dateDimensionId : '';
+      // Date bounds: always add MIN/MAX date for every scope column so headers show the date range.
+      // Prefer the time-intelligence date dim if configured, otherwise fall back to the first
+      // date-format field found in the semantic model for the join group.
+      const dateDimId = col.timeConfig?.enabled && col.timeConfig?.dateDimensionId
+        ? col.timeConfig.dateDimensionId
+        : (() => {
+            for (const dsId of activeJoinGroup) {
+              const dateFld = (semanticModels[dsId] || []).find(f => f.format === 'date' || f.type === 'date');
+              if (dateFld) return dateFld.id;
+            }
+            return null;
+          })();
       if (dateDimId) {
         const dc = `SAFE_CAST(\`${sourceTable}\`.\`${dateDimId}\` AS DATE)`;
-        const safeColId2 = col.id.replace(/[^a-zA-Z0-9_]/g, '_');
-        selectParts.push(`MIN(CASE WHEN (${condition}) THEN ${dc} END) AS \`start_${safeColId2}\``);
-        selectParts.push(`MAX(CASE WHEN (${condition}) THEN ${dc} END) AS \`end_${safeColId2}\``);
+        selectParts.push(`MIN(CASE WHEN (${condition}) THEN ${dc} END) AS \`start_${safeColId}\``);
+        selectParts.push(`MAX(CASE WHEN (${condition}) THEN ${dc} END) AS \`end_${safeColId}\``);
       }
     });
 
