@@ -106,8 +106,8 @@ export default function DebugPanel() {
       setLogs(prev => [e.detail, ...prev].slice(0, 100));
       setShowPanel(true);
     };
-    window.addEventListener('cutebi-debug', handleDebug);
-    return () => window.removeEventListener('cutebi-debug', handleDebug);
+    window.addEventListener('mvantage-debug', handleDebug);
+    return () => window.removeEventListener('mvantage-debug', handleDebug);
   }, []);
 
   if (!showPanel) return null;
@@ -183,7 +183,7 @@ export default function DebugPanel() {
                  <Database size={10} /> FORCE LOAD MOCK DATA
                </button>
             </div>
-            <span className="text-[10px] font-bold text-gray-300">CUTEBI V1.0 DEBUG</span>
+            <span className="text-[10px] font-bold text-gray-300">M-VANTAGE V1.0 DEBUG</span>
           </div>
         </div>
       )}

@@ -27,7 +27,7 @@ const InfographicCanvas = forwardRef(function InfographicCanvas({ data, fontScal
       const canvas = canvasRef.current;
       if (!canvas) return;
       const link = document.createElement('a');
-      link.download = `cutebi-insight-${Date.now()}.png`;
+      link.download = `mvantage-insight-${Date.now()}.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
     },
@@ -228,7 +228,7 @@ function drawInfographic(canvas, data, H, fontScale) {
   ctx.textAlign = 'right';
   const now = new Date();
   ctx.fillText(
-    `CuteBI AI Executive Insight · ${now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`,
+    `M-Vantage AI Executive Insight · ${now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`,
     W - 32, H - 20
   );
 }

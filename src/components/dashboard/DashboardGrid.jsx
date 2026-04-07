@@ -37,7 +37,7 @@ const DashboardSlicer = React.memo(({ slicer, globalFilters, setGlobalFilterArra
         let isMounted = true;
         const fetchOptions = async () => {
             const t_slicer = Date.now();
-            window.dispatchEvent(new CustomEvent('cutebi-debug', { 
+            window.dispatchEvent(new CustomEvent('mvantage-debug', { 
                detail: { type: 'info', category: 'Lineage', message: `[${t_slicer}] Slicer "${slicer.title}" Fetching options. Source: ${dsId}` } 
             }));
             setIsLoading(true);
@@ -45,7 +45,7 @@ const DashboardSlicer = React.memo(({ slicer, globalFilters, setGlobalFilterArra
                 const values = await getUniqueValuesForDim(dsId, oFId);
                 if (isMounted) {
                     setOptions(values.map(v => ({ value: String(v), label: String(v) })));
-                    window.dispatchEvent(new CustomEvent('cutebi-debug', { 
+                    window.dispatchEvent(new CustomEvent('mvantage-debug', { 
                        detail: { type: 'success', category: 'Lineage', message: `[${Date.now()}] Slicer "${slicer.title}" ready! Options retrieved: ${values.length}` } 
                     }));
                 }

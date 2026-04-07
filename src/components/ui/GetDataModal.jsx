@@ -5,7 +5,7 @@ import { apiClient } from '../../services/api';
 /**
  * GetDataModal — BigQuery table browser.
  * Opens instead of the old file-upload dialog.
- * Lists tables from `cutebi_gold` and registers them as CuteBI datasets.
+ * Lists tables from `mvantage_gold` and registers them as M-Vantage datasets.
  */
 export default function GetDataModal({ isOpen, onClose, onDatasetAdded }) {
   const [tables, setTables]         = useState([]);
@@ -66,7 +66,7 @@ export default function GetDataModal({ isOpen, onClose, onDatasetAdded }) {
             </div>
             <div>
               <h2 className="text-base font-black t-text-main tracking-tight">Get Data</h2>
-              <p className="text-[11px] t-text-muted font-medium">Browse BigQuery · cutebi_gold</p>
+              <p className="text-[11px] t-text-muted font-medium">Browse BigQuery · mvantage_gold</p>
             </div>
           </div>
           <button
@@ -161,7 +161,7 @@ export default function GetDataModal({ isOpen, onClose, onDatasetAdded }) {
         {/* Footer */}
         <div className="px-6 py-3 border-t t-border shrink-0 flex items-center justify-between">
           <p className="text-[11px] t-text-muted">
-            {tables.length} table{tables.length !== 1 ? 's' : ''} in <span className="font-mono font-bold">cutebi_gold</span>
+            {tables.length} table{tables.length !== 1 ? 's' : ''} in <span className="font-mono font-bold">mvantage_gold</span>
           </p>
           <button
             onClick={onClose}

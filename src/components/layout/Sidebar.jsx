@@ -95,7 +95,7 @@ export default function Sidebar({
             <Sparkles size={20} />
           </div>
           <h1 className="text-xl font-extrabold t-text-main">
-            CuteBI
+            M-Vantage
           </h1>
         </div>
         <button onClick={() => setShowSidebar(false)} className="t-text-muted hover:t-accent transition-colors">

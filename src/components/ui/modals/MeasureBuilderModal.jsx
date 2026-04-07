@@ -39,7 +39,7 @@ export default function MeasureBuilderModal({ getUniqueValuesForDim }) {
         const targetDsId = field?.originDatasetId || activeDatasetId;
         
         console.log(`[MeasureBuilder] Fetching values for ${dimId} from dataset ${targetDsId}`);
-        window.dispatchEvent(new CustomEvent('cutebi-debug', { 
+        window.dispatchEvent(new CustomEvent('mvantage-debug', {  
             detail: { type: 'info', category: 'Builder', message: `Fetching filter values for: ${dimId}`, details: { dimId, targetDsId } } 
         }));
 
