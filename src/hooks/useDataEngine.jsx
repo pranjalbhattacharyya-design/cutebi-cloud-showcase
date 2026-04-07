@@ -672,9 +672,20 @@ export const useDataEngine = () => {
 
     try {
       const results = await queryDuckDB(sql);
-      return results?.[0] || null; // Single grand-total flat row
+      const row = results?.[0] || null;
+      window.dispatchEvent(new CustomEvent('mvantage-debug', {
+        detail: { type: 'success', category: 'Matrix', message: 'KPI Matrix raw result', details: {
+          resultsLength: results?.length,
+          firstRowKeys: row ? Object.keys(row) : null,
+          firstRow: row
+        }}
+      }));
+      return row;
     } catch (err) {
       console.error('[getMatrixData] Query failed:', err);
+      window.dispatchEvent(new CustomEvent('mvantage-debug', {
+        detail: { type: 'error', category: 'Matrix', message: `Query error: ${err.message}` }
+      }));
       return null;
     }
   }, [activeDatasetId, datasets, semanticModels, globalFilters, getJoinGroup, generateUnifiedCTE]);
