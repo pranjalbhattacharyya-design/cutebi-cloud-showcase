@@ -72,12 +72,12 @@ export const apiClient = {
 
   // ── BigQuery "Get Data" flow ──────────────────────────────────────────────
 
-  /** List all tables available in the cutebi_gold BQ dataset */
+  /** List all tables available in the mvantage_gold BQ dataset */
   async getBqTables() {
     return this.get('/bq/tables');
   },
 
-  /** Register a BQ table as a CuteBI dataset (persists to Postgres) */
+  /** Register a BQ table as a M-Vantage dataset (persists to Postgres) */
   async registerBqTable(bqTable, displayName) {
     return this.post('/bq/register', { bq_table: bqTable, display_name: displayName });
   },

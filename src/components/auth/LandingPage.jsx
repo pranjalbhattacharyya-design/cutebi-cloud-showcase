@@ -34,7 +34,7 @@ export default function LandingPage() {
           </div>
           <div>
             <h1 className="text-5xl font-black tracking-tighter t-text-main opacity-90">
-              CuteBI <span className="t-accent">Platinum</span>
+              M-Vantage <span className="t-accent">Platinum</span>
             </h1>
             <div className="h-1 w-full t-accent-bg mt-2 rounded-full opacity-30" />
           </div>
@@ -105,7 +105,7 @@ export default function LandingPage() {
               : 'bg-black/5 t-text-muted cursor-not-allowed'
           }`}
         >
-          Welcome to CuteBI
+          Welcome to M-Vantage
           <ArrowRight size={20} className={`${selected ? 'group-hover:translate-x-1' : ''} transition-transform`} />
         </button>
 

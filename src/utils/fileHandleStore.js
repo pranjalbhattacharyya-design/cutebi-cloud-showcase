@@ -4,7 +4,7 @@
  * auto-reload data files across browser sessions (File System Access API).
  */
 
-const DB_NAME    = 'cutebi_file_handles';
+const DB_NAME    = 'mvantage_file_handles';
 const STORE_NAME = 'handles';
 const DB_VERSION = 1;
 

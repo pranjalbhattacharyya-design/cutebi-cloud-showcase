@@ -31,7 +31,7 @@ async function flushQueryQueue() {
     try {
         const sqlArray = currentQueue.map(q => q.sql);
         
-        window.dispatchEvent(new CustomEvent('cutebi-debug', { 
+        window.dispatchEvent(new CustomEvent('mvantage-debug', { 
             detail: { type: 'info', category: 'Engine', message: `Bundling ${sqlArray.length} queries into single network request...` } 
         }));
 
@@ -48,14 +48,14 @@ async function flushQueryQueue() {
             q.resolve(dataArray[i] || []);
         });
 
-        window.dispatchEvent(new CustomEvent('cutebi-debug', { 
+        window.dispatchEvent(new CustomEvent('mvantage-debug', { 
             detail: { type: 'success', category: 'Engine', message: `Batch results received: ${dataArray.length}` } 
         }));
 
 
     } catch (e) {
         console.error("Batch Query API Error:", e);
-        window.dispatchEvent(new CustomEvent('cutebi-debug', { 
+        window.dispatchEvent(new CustomEvent('mvantage-debug', { 
             detail: { type: 'error', category: 'Engine', message: `Batch Error: ${e.message}` } 
         }));
         currentQueue.forEach(q => q.reject(e));

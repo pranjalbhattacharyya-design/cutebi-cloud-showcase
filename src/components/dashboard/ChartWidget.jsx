@@ -172,7 +172,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
       setLoading(true);
       try {
         let res = null;
-        window.dispatchEvent(new CustomEvent('cutebi-debug', { 
+        window.dispatchEvent(new CustomEvent('mvantage-debug', { 
             detail: { 
                 type: 'info', 
                 category: 'Chart', 
@@ -196,7 +196,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
         }
         
         const count = Array.isArray(res) ? res.length : (res?.data?.length || res?.rows?.length || (res?.matrix ? Object.keys(res.matrix).length : 0));
-        window.dispatchEvent(new CustomEvent('cutebi-debug', { detail: { type: 'success', category: 'Chart', message: `[${Date.now()}] Query finished for ${chart.title}: items=${count}` } }));
+        window.dispatchEvent(new CustomEvent('mvantage-debug', { detail: { type: 'success', category: 'Chart', message: `[${Date.now()}] Query finished for ${chart.title}: items=${count}` } }));
         
         // Sanitize chart metric values to guarantee Recharts receives pure numbers for plotting
         const sanitizeArr = (arr) => {
@@ -234,7 +234,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
         setError(null);
         setLoading(false);
       } catch (e) {
-        window.dispatchEvent(new CustomEvent('cutebi-debug', { detail: { type: 'error', category: 'Chart', message: `SQL Exception: ${e.message}` } }));
+        window.dispatchEvent(new CustomEvent('mvantage-debug', { detail: { type: 'error', category: 'Chart', message: `SQL Exception: ${e.message}` } }));
         console.error("Fetch Data Error:", e);
         setError(e.message);
         setLoading(false);

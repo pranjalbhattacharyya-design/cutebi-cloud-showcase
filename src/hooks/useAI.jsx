@@ -96,7 +96,7 @@ Return JSON format EXACTLY matching this schema:
       const clean = text.replace(/```json/gi, '').replace(/```/g, '').trim();
       const aiData = JSON.parse(clean);
       
-      window.dispatchEvent(new CustomEvent('cutebi-debug', { 
+      window.dispatchEvent(new CustomEvent('mvantage-debug', { 
          detail: { type: 'info', category: 'Auto-Fill', message: `Parsed JSON from Gemini API:`, details: aiData } 
       }));
       
@@ -319,7 +319,7 @@ Return JSON format EXACTLY matching this schema:
     setHierarchyPending(null);
 
     // Log to debug panel
-    window.dispatchEvent(new CustomEvent('cutebi-debug', {
+    window.dispatchEvent(new CustomEvent('mvantage-debug', {
       detail: { type: 'info', category: 'Deep Dive', message: `Hierarchy resolved: ${macro_dim} → ${meso_dim} → ${micro_dim}`, details: hierarchy }
     }));
 
@@ -432,7 +432,7 @@ Return JSON format EXACTLY matching this schema:
                 
                 if (thinkingMatch) {
                    const reasoning = thinkingMatch[1].trim();
-                   window.dispatchEvent(new CustomEvent('cutebi-debug', { 
+                   window.dispatchEvent(new CustomEvent('mvantage-debug', { 
                        detail: { type: 'info', category: 'AI Trace', message: 'Deductive Reasoning', details: { reasoning } } 
                    }));
                 }

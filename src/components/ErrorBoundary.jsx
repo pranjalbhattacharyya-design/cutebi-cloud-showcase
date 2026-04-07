@@ -12,7 +12,7 @@ export class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error("CuteBI Render Error:", error, errorInfo);
+    console.error("M-Vantage Render Error:", error, errorInfo);
   }
 
   render() {

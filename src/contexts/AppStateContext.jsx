@@ -22,19 +22,19 @@ export const AppStateProvider = ({ children }) => {
   const [slicers, setSlicers] = useState([]);
   const [hiddenDatasetIds, setHiddenDatasetIds] = useState([]);  // Persistence & Library State
   const [workspaces, setWorkspaces] = useState(() => {
-    const cached = localStorage.getItem('cutebi_ws_cache');
+    const cached = localStorage.getItem('mvantage_ws_cache');
     return cached ? JSON.parse(cached) : [{ id: 'w_default', name: 'My Workspace', description: 'Your personal workspace' }];
   });
-  const [currentWorkspaceId, setCurrentWorkspaceId] = useState(() => localStorage.getItem('cutebi_last_ws') || 'w_default');
+  const [currentWorkspaceId, setCurrentWorkspaceId] = useState(() => localStorage.getItem('mvantage_last_ws') || 'w_default');
   
   const [folders, setFolders] = useState(() => {
-    const cached = localStorage.getItem('cutebi_folder_cache');
+    const cached = localStorage.getItem('mvantage_folder_cache');
     return cached ? JSON.parse(cached) : [];
   });
-  const [currentFolderId, setCurrentFolderId] = useState(() => localStorage.getItem('cutebi_last_folder') || null);
+  const [currentFolderId, setCurrentFolderId] = useState(() => localStorage.getItem('mvantage_last_folder') || null);
   
   const [savedReports, setSavedReports] = useState(() => {
-    const cached = localStorage.getItem('cutebi_reports_cache');
+    const cached = localStorage.getItem('mvantage_reports_cache');
     return cached ? JSON.parse(cached) : [];
   });
   
@@ -42,35 +42,35 @@ export const AppStateProvider = ({ children }) => {
 
   // Sync session to localStorage
   useEffect(() => {
-    localStorage.setItem('cutebi_last_ws', currentWorkspaceId);
-    localStorage.setItem('cutebi_last_folder', currentFolderId || '');
-    localStorage.setItem('cutebi_ws_cache', JSON.stringify(workspaces));
-    localStorage.setItem('cutebi_folder_cache', JSON.stringify(folders));
-    localStorage.setItem('cutebi_reports_cache', JSON.stringify(savedReports));
+    localStorage.setItem('mvantage_last_ws', currentWorkspaceId);
+    localStorage.setItem('mvantage_last_folder', currentFolderId || '');
+    localStorage.setItem('mvantage_ws_cache', JSON.stringify(workspaces));
+    localStorage.setItem('mvantage_folder_cache', JSON.stringify(folders));
+    localStorage.setItem('mvantage_reports_cache', JSON.stringify(savedReports));
   }, [currentWorkspaceId, currentFolderId, workspaces, folders, savedReports]);
 
   const [showPortal, setShowPortal] = useState(true);
   
   // Theme State with Persistence
   const [theme, setTheme] = useState(() => {
-    return localStorage.getItem('cutebi_theme') || 'cute';
+    return localStorage.getItem('mvantage_theme') || 'vihaan';
   });
   const [fontScale, setFontScale] = useState(() => {
-    return parseFloat(localStorage.getItem('cutebi_font_scale')) || 1.0;
+    return parseFloat(localStorage.getItem('mvantage_font_scale')) || 1.0;
   });
   const [textWrap, setTextWrap] = useState(() => {
-    return localStorage.getItem('cutebi_text_wrap') === 'true';
+    return localStorage.getItem('mvantage_text_wrap') === 'true';
   });
 
   useEffect(() => {
-    localStorage.setItem('cutebi_theme', theme);
-    localStorage.setItem('cutebi_font_scale', fontScale);
-    localStorage.setItem('cutebi_text_wrap', textWrap);
+    localStorage.setItem('mvantage_theme', theme);
+    localStorage.setItem('mvantage_font_scale', fontScale);
+    localStorage.setItem('mvantage_text_wrap', textWrap);
     applyTheme(theme, { fontScale, textWrap });
   }, [theme, fontScale, textWrap]);
 
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent('cutebi-debug', { 
+    window.dispatchEvent(new CustomEvent('mvantage-debug', { 
         detail: { 
             type: 'info', 
             category: 'Restore', 
@@ -174,7 +174,7 @@ export const AppStateProvider = ({ children }) => {
     warmupAbortRef.current = false;
 
     const fetchMaxDates = async () => {
-      window.dispatchEvent(new CustomEvent('cutebi-debug', {
+      window.dispatchEvent(new CustomEvent('mvantage-debug', {
         detail: { type: 'info', category: 'Backend', message: `[${Date.now()}] Engine Warmup Started: Scanning datasets for Time Intelligence...` }
       }));
 
@@ -235,7 +235,7 @@ export const AppStateProvider = ({ children }) => {
 
         setMaxDatesCache(newCache);
         setDatesReady(true);
-        window.dispatchEvent(new CustomEvent('cutebi-debug', {
+        window.dispatchEvent(new CustomEvent('mvantage-debug', {
           detail: {
             type: 'success', category: 'Backend',
             message: `[${Date.now()}] Engine Warm and Ready! Dates cached: ${Object.keys(newCache).length}`,

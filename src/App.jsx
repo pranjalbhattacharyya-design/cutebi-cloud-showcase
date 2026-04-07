@@ -191,7 +191,7 @@ function AppContent() {
       const reportId = report.id || report.data?.id;
       const reportName = report.name || report.data?.name || "Untitled Report";
 
-      window.dispatchEvent(new CustomEvent('cutebi-debug', { 
+      window.dispatchEvent(new CustomEvent('mvantage-debug', { 
          detail: { type: 'info', category: 'Restore', message: `[${Date.now()}] Restoring "${reportName}"...` } 
       }));
 
@@ -345,11 +345,11 @@ function AppContent() {
       let files;
       try {
         files = await preprocessFilesForUpload(rawFiles, (msg) => {
-          window.dispatchEvent(new CustomEvent('cutebi-debug', { detail: { type: 'info', category: 'Upload', message: msg } }));
+          window.dispatchEvent(new CustomEvent('mvantage-debug', { detail: { type: 'info', category: 'Upload', message: msg } }));
           showToast(msg);
         });
       } catch (convErr) {
-        window.dispatchEvent(new CustomEvent('cutebi-debug', { detail: { type: 'error', category: 'Upload', message: `Excel conversion failed: ${convErr.message}` } }));
+        window.dispatchEvent(new CustomEvent('mvantage-debug', { detail: { type: 'error', category: 'Upload', message: `Excel conversion failed: ${convErr.message}` } }));
         showToast(`❌ ${convErr.message}`);
         setIsUploading(false);
         setIsMutating(false);
@@ -364,12 +364,12 @@ function AppContent() {
 
       for (const file of files) {
         const originalName = originalNameMap.get(file.name) || file.name;
-        window.dispatchEvent(new CustomEvent('cutebi-debug', { detail: { type: 'info', category: 'Upload', message: `Platinum Ingestion: ${originalName}` } }));
+        window.dispatchEvent(new CustomEvent('mvantage-debug', { detail: { type: 'info', category: 'Upload', message: `Platinum Ingestion: ${originalName}` } }));
         
         try {
           // Direct upload: browser → Supabase (no Vercel relay, no 10s timeout)
           const backendDs = await cloudUploadFile(file, originalName, (msg) => {
-            window.dispatchEvent(new CustomEvent('cutebi-debug', { detail: { type: 'info', category: 'Upload', message: msg } }));
+            window.dispatchEvent(new CustomEvent('mvantage-debug', { detail: { type: 'info', category: 'Upload', message: msg } }));
           });
           
           const dsId = backendDs.id;
@@ -403,7 +403,7 @@ function AppContent() {
           }).catch(err => console.warn('[Upload] Workspace-dataset registration failed (non-fatal):', err));
 
         } catch (err) {
-          window.dispatchEvent(new CustomEvent('cutebi-debug', { detail: { type: 'error', category: 'Upload', message: `Error processing ${originalName}: ${err.message}` } }));
+          window.dispatchEvent(new CustomEvent('mvantage-debug', { detail: { type: 'error', category: 'Upload', message: `Error processing ${originalName}: ${err.message}` } }));
           showToast(`Error uploading ${originalName}: ${err.message}`);
         }
       }
@@ -497,19 +497,19 @@ function AppContent() {
     const existingReport = savedReports.find(r => r.name.toLowerCase() === reportNameInput.trim().toLowerCase());
     if (isSaveAs && existingReport) {
        showToast("A report with this name already exists. Please choose a different name.");
-       window.dispatchEvent(new CustomEvent('cutebi-debug', { detail: { type: 'warning', category: 'Save', message: `Save-as blocked: name "${reportNameInput}" already exists.` } }));
+       window.dispatchEvent(new CustomEvent('mvantage-debug', { detail: { type: 'warning', category: 'Save', message: `Save-as blocked: name "${reportNameInput}" already exists.` } }));
        return;
     }
     if (!isSaveAs && existingReport && existingReport.id !== currentTemplateId) {
        showToast("A report with this name already exists. Please choose a different name.");
-       window.dispatchEvent(new CustomEvent('cutebi-debug', { detail: { type: 'warning', category: 'Save', message: `Overwrite blocked: name "${reportNameInput}" belongs to another report.` } }));
+       window.dispatchEvent(new CustomEvent('mvantage-debug', { detail: { type: 'warning', category: 'Save', message: `Overwrite blocked: name "${reportNameInput}" belongs to another report.` } }));
        return;
     }
     const docId = (!isSaveAs && currentTemplateId) ? currentTemplateId : `report_${Date.now()}`;
     setIsSaving(true);
     setIsMutating(true);
     
-    window.dispatchEvent(new CustomEvent('cutebi-debug', { 
+    window.dispatchEvent(new CustomEvent('mvantage-debug', { 
         detail: { type: 'info', category: 'Save', message: `Attempting to save report "${reportNameInput}" [ID: ${docId}]` } 
     }));
     const cleanDashboards = {};
@@ -567,11 +567,11 @@ function AppContent() {
       setCurrentTemplateId(docId);
       setShowSaveModal(false);
       showToast(isSaveAs ? "New report saved! ✨" : "Report updated! ✨");
-      window.dispatchEvent(new CustomEvent('cutebi-debug', { detail: { type: 'success', category: 'Save', message: `Report saved successfully: ${docId}` } }));
+      window.dispatchEvent(new CustomEvent('mvantage-debug', { detail: { type: 'success', category: 'Save', message: `Report saved successfully: ${docId}` } }));
     } catch (e) {
       console.error("Save failed:", e);
       showToast("Failed to save report.");
-      window.dispatchEvent(new CustomEvent('cutebi-debug', { 
+      window.dispatchEvent(new CustomEvent('mvantage-debug', { 
           detail: { type: 'error', category: 'Save', message: `Save API Exception: ${e.message}`, details: e.stack } 
       }));
     } finally {
@@ -605,12 +605,12 @@ function AppContent() {
     const handleRestore = (e) => handleAutoLoadTemplate(e.detail);
     const handleImport = (e) => importLibraryDataset(e.detail);
 
-    window.addEventListener('cutebi-restore-report', handleRestore);
-    window.addEventListener('cutebi-import-dataset', handleImport);
+    window.addEventListener('mvantage-restore-report', handleRestore);
+    window.addEventListener('mvantage-import-dataset', handleImport);
 
     return () => {
-      window.removeEventListener('cutebi-restore-report', handleRestore);
-      window.removeEventListener('cutebi-import-dataset', handleImport);
+      window.removeEventListener('mvantage-restore-report', handleRestore);
+      window.removeEventListener('mvantage-import-dataset', handleImport);
     };
   }, [handleAutoLoadTemplate, importLibraryDataset]);
 
@@ -652,7 +652,7 @@ function AppContent() {
                     <div className="t-accent-bg p-1.5 rounded-lg shadow-md group-hover:scale-110 transition-all">
                       <LayoutGrid size={14} className="text-white" />
                     </div>
-                    <span className="text-sm font-black tracking-tighter t-text-main">CuteBI <span className="t-accent">Platinum</span></span>
+                    <span className="text-sm font-black tracking-tighter t-text-main">M-Vantage <span className="t-accent">Platinum</span></span>
                   </div>
                   <div className="h-4 w-px bg-black/10 mx-2" />
                   <span className="text-[10px] font-bold t-text-muted uppercase tracking-widest">
@@ -663,7 +663,7 @@ function AppContent() {
                   {!isExploreOpen && (
                     <button 
                       onClick={() => {
-                        window.dispatchEvent(new CustomEvent('cutebi-debug', { detail: { type: 'info', category: 'Copilot', message: 'Restoring AI Side Panel...' } }));
+                        window.dispatchEvent(new CustomEvent('mvantage-debug', { detail: { type: 'info', category: 'Copilot', message: 'Restoring AI Side Panel...' } }));
                         setIsExploreOpen(true);
                         setAiMode('explore'); // Force explore for Viewers
                       }}
@@ -740,7 +740,7 @@ function AppContent() {
                       <div className="absolute -top-6 -left-6 bg-yellow-100 text-yellow-600 p-4 rounded-full shadow-sm animate-bounce"><Sparkles size={32} /></div>
                       <CloudDownload size={64} className="mx-auto t-text-muted mb-6" />
                       <h2 className="text-3xl font-extrabold t-text-main mb-4">Connect your BigQuery data</h2>
-                      <p className="t-text-muted mb-8 font-medium">Browse your cutebi_gold tables and add them to your report in one click. ✨</p>
+                      <p className="t-text-muted mb-8 font-medium">Browse your mvantage_gold tables and add them to your report in one click. ✨</p>
                       <div className="flex flex-wrap justify-center gap-4">
                         <button
                           onClick={() => setShowGetDataModal(true)}

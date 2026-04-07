@@ -61,7 +61,7 @@ export default function Portal() {
     
     // Diagnostic Trace for Visibility
     if (inWorkspace && inFolder && matchesSearch) {
-        window.dispatchEvent(new CustomEvent('cutebi-debug', { 
+        window.dispatchEvent(new CustomEvent('mvantage-debug', { 
             detail: { 
                 type: 'info', 
                 category: 'Portal', 
@@ -221,7 +221,7 @@ export default function Portal() {
     setCurrentFolderId(report.folderId || null);
 
     // We'll dispatch a custom event or set state that App.jsx listens to
-    window.dispatchEvent(new CustomEvent('cutebi-restore-report', { detail: report }));
+    window.dispatchEvent(new CustomEvent('mvantage-restore-report', { detail: report }));
     setShowPortal(false);
   };
 
@@ -315,7 +315,7 @@ export default function Portal() {
             <div className="t-accent-bg p-2 rounded-xl shadow-lg shadow-[var(--theme-accent)]/10 group-hover:scale-110 transition-all duration-500">
               <LayoutGrid size={20} className="text-white" />
             </div>
-            <span className="text-xl font-black tracking-tighter t-text-main">CuteBI <span className="t-accent font-medium">Portal</span></span>
+            <span className="text-xl font-black tracking-tighter t-text-main">M-Vantage <span className="t-accent font-medium">Portal</span></span>
           </div>
           
           <nav className="flex items-center h-full ml-4">
@@ -750,7 +750,7 @@ export default function Portal() {
         dataset={activePreviewDataset}
         isAlreadyImported={datasets.some(d => d.id === activePreviewDataset?.id)}
         onImport={(ds) => {
-            window.dispatchEvent(new CustomEvent('cutebi-import-dataset', { detail: ds }));
+            window.dispatchEvent(new CustomEvent('mvantage-import-dataset', { detail: ds }));
             setActivePreviewDataset(null);
             setShowPortal(false);
         }}

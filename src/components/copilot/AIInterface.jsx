@@ -437,7 +437,7 @@ export default function AIInterface({ handleAskAI: handleAskAIFromApp, handleCon
         {exploreHistory.length === 0 && !isThinking && !aiError && !pendingAIAction && (
           <div className="text-center mt-10 opacity-70">
             <Sparkles size={32} className="mx-auto mb-3 t-accent" />
-            <p className="text-sm font-bold t-text-main">Welcome to CuteBI Copilot</p>
+            <p className="text-sm font-bold t-text-main">Welcome to M-Vantage Copilot</p>
             <p className="text-xs mt-2 leading-relaxed t-text-muted bg-black/5 p-3 rounded-lg border t-border">
               {aiMode === 'explore'
                 ? analysisPath === 'fast'

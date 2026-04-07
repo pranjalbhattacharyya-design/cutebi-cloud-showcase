@@ -183,7 +183,7 @@ export const useDataEngine = () => {
     
     // --- Unified Model Debug Trace: Log the exact join path to the debug panel ---
     if (joinStrings.length > 0) {
-        window.dispatchEvent(new CustomEvent('cutebi-debug', { 
+        window.dispatchEvent(new CustomEvent('mvantage-debug', { 
             detail: { 
                 type: 'success', 
                 category: 'Join Trace', 
@@ -225,7 +225,7 @@ export const useDataEngine = () => {
     const sourceTable = isMasterView ? "ds_unified" : (activeDs?.tableName || datasetId);
     const ctePrefix = isMasterView ? generateUnifiedCTE(datasetId) : "";
 
-    window.dispatchEvent(new CustomEvent('cutebi-debug', { 
+    window.dispatchEvent(new CustomEvent('mvantage-debug', { 
       detail: { 
         type: 'info', 
         category: 'Engine', 
@@ -430,7 +430,7 @@ export const useDataEngine = () => {
     const limitClause = limit ? ` LIMIT ${limit}` : "";
     const sql = `${ctePrefix}SELECT ${selectClause.join(', ')} FROM \`${sourceTable}\`${whereClause}${groupByClause}${limitClause}`;
     
-    window.dispatchEvent(new CustomEvent('cutebi-debug', { 
+    window.dispatchEvent(new CustomEvent('mvantage-debug', { 
        detail: { type: 'success', category: 'Engine', message: 'SQL Generated Successfully', details: { sql } } 
     }));
     
