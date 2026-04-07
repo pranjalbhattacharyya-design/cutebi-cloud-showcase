@@ -671,8 +671,8 @@ export const useDataEngine = () => {
     }));
 
     try {
-      const result = await apiClient.post('/query', { sql });
-      return result?.[0] || null; // Single flat row
+      const results = await queryDuckDB(sql);
+      return results?.[0] || null; // Single grand-total flat row
     } catch (err) {
       console.error('[getMatrixData] Query failed:', err);
       return null;

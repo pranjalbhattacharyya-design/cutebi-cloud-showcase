@@ -627,7 +627,6 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
   // =============================== KPI MATRIX RENDERER ===============================
   if (chart.type === 'matrix') {
     const scopeCols = (chart.matrixColumns || []).filter(c => c.type === 'scope');
-    const varianceCols = (chart.matrixColumns || []).filter(c => c.type === 'variance');
     const allCols = chart.matrixColumns || [];
 
     // Format date as dd-Mon-yy
@@ -638,7 +637,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
       return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
     };
 
-    // Build column headers with dynamic dates
+    // Build column header with dynamic dates
     const buildHeader = (col) => {
       const baseLabel = matrixColLabels[col.id] ?? col.label;
       const safeId = col.id.replace(/[^a-zA-Z0-9_]/g, '_');
@@ -646,18 +645,18 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
       const endRaw = matrixRawRow?.[`end_${safeId}`];
       const startStr = fmtDate(startRaw);
       const endStr = fmtDate(endRaw);
-      const dateRange = (startStr && endStr) ? ` (${startStr} to ${endStr})` : '';
-      return { baseLabel, dateRange, full: baseLabel + dateRange };
+      const dateRange = (startStr && endStr) ? `(${startStr} to ${endStr})` : '';
+      return { baseLabel, dateRange };
     };
 
-    // Collect all measure field metadata for grouping by category
+    // Collect measure metadata (category grouping from semantic model)
     const allSemanticFields = Object.values(semanticModels).flat();
     const measureMeta = (chart.matrixMeasures || []).map(mId => {
       const f = allSemanticFields.find(x => x.id === mId);
       return { id: mId, label: f?.label || mId, category: f?.category || 'Uncategorized', format: f?.format || 'auto' };
     });
 
-    // Get value for a measure+scopeCol from the flat row
+    // Get value from flat row
     const getValue = (measId, colId) => {
       const safeM = measId.replace(/[^a-zA-Z0-9_]/g, '_');
       const safeC = colId.replace(/[^a-zA-Z0-9_]/g, '_');
@@ -665,7 +664,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
       return raw != null ? Number(raw) : null;
     };
 
-    // Compute variance between two scope column values
+    // Compute variance
     const computeVariance = (varCol, measId) => {
       const colA = scopeCols.find(c => c.id === varCol.colAId);
       const colB = scopeCols.find(c => c.id === varCol.colBId);
@@ -677,10 +676,10 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
       return a - b;
     };
 
-    // Format number value
+    // Format number
     const fmtVal = (v, format, isPercent) => {
       if (v == null || isNaN(v)) return '—';
-      if (isPercent) return v.toFixed(2) + '%';
+      if (isPercent) return (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
       if (format === 'percentage') return (v * 100).toFixed(1) + '%';
       if (Math.abs(v) >= 1e7) return (v / 1e7).toFixed(2) + 'Cr';
       if (Math.abs(v) >= 1e5) return (v / 1e5).toFixed(2) + 'L';
@@ -695,13 +694,6 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
       grouped[m.category].push(m);
     });
 
-    // All column definitions for header row
-    const headerCols = allCols.map(col => {
-      if (col.type === 'variance') return { ...col, headerText: matrixColLabels[col.id] ?? col.label, isVariance: true };
-      const h = buildHeader(col);
-      return { ...col, headerText: h.full, baseLabel: h.baseLabel, isVariance: false };
-    });
-
     // Save inline edited label
     const saveInlineLabel = (colId, newLabel) => {
       setMatrixColLabels(prev => ({ ...prev, [colId]: newLabel }));
@@ -714,16 +706,26 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
       }));
     };
 
+    // Open builder for edit
+    const handleEdit = () => {
+      setBuilderForm({ ...initBuilderForm, ...chart });
+      setShowBuilder(true);
+    };
+
+    const isTall = chart.verticalSize === 'tall';
+
     return (
       <div key={chart.id} className={`${isExploreMode ? 'bg-black/5 w-full mt-2' : 't-panel'} shadow-sm border t-border flex flex-col hover:shadow-md transition-all duration-300 ${
         !isExploreMode ? (chart.size === 'full' ? 'md:col-span-6' : (chart.size === 'third' ? 'md:col-span-2' : 'md:col-span-3')) : ''
       } overflow-hidden`} style={{ borderRadius: 'var(--theme-radius-panel)' }}>
-        {/* Header bar */}
+
+        {/* Header bar — matches legacy style */}
         <div className="flex justify-between items-center px-4 py-3 border-b t-border shrink-0">
-          <h4 className="t-text-main font-bold text-base">{chart.title}</h4>
-          <div className="flex gap-1.5 t-text-muted">
+          <h4 className="t-text-main font-bold text-sm">{chart.title}</h4>
+          <div className="flex gap-1.5 t-text-muted items-center">
             {!isExploreMode && !isViewer && (
               <>
+                <button onClick={handleEdit} className="hover:opacity-70" title="Edit Visual"><Pencil size={13}/></button>
                 <button onClick={() => setDashboards(p => ({...p, [activePageId]: (p[activePageId]||[]).map(c => c.id===chart.id?{...c,verticalSize:c.verticalSize==='tall'?'normal':'tall'}:c)}))} className="hover:opacity-70" title="Toggle Height"><ArrowUpDown size={14}/></button>
                 <button onClick={() => setDashboards(p => ({...p, [activePageId]: (p[activePageId]||[]).map(c => c.id===chart.id?{...c,size:(!c.size||c.size==='half')?'third':(c.size==='third'?'full':'half')}:c)}))} className="hover:opacity-70" title="Toggle Width"><Maximize2 size={14}/></button>
                 <button onClick={() => setDashboards(p => ({...p, [activePageId]: (p[activePageId]||[]).filter(c => c.id!==chart.id)}))} className="hover:opacity-70" title="Remove"><X size={14}/></button>
@@ -732,62 +734,63 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-auto" style={{ maxHeight: chart.verticalSize === 'tall' ? '520px' : '280px' }}>
+        {/* Scrollable table body */}
+        <div className="overflow-auto flex-1 transition-all duration-300" style={{ maxHeight: isTall ? '560px' : '260px' }}>
           {matrixLoading ? (
-            <div className="flex items-center justify-center h-24 t-text-muted text-sm">Loading matrix data…</div>
+            <div className="flex items-center justify-center h-20 t-text-muted text-xs">Loading matrix data…</div>
           ) : (
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr className="border-b t-border bg-[var(--theme-panel-bg)]">
-                  <th className="text-left px-4 py-2 text-xs font-black t-text-muted uppercase tracking-wider min-w-[140px]">Category</th>
-                  <th className="text-left px-3 py-2 text-xs font-black t-text-muted uppercase tracking-wider min-w-[140px]">Measure</th>
-                  {headerCols.map(col => (
-                    <th key={col.id} className="text-right px-4 py-2 text-xs font-black t-text-muted uppercase tracking-wider min-w-[110px]">
-                      {col.isVariance ? (
-                        <span
-                          contentEditable
-                          suppressContentEditableWarning
-                          onBlur={e => saveInlineLabel(col.id, e.currentTarget.textContent.trim())}
-                          className="outline-none cursor-text hover:underline decoration-dotted"
-                        >{col.headerText}</span>
-                      ) : (
-                        <span className="flex flex-col items-end gap-0.5">
+            <table className="w-full text-xs border-collapse" style={{ fontFamily: 'inherit' }}>
+              <thead className="sticky top-0 z-10">
+                <tr style={{ background: 'var(--theme-panel-bg)', borderBottom: '2px solid var(--theme-border)' }}>
+                  {/* Single combined column header */}
+                  <th className="text-left px-3 py-2 font-black t-text-muted uppercase tracking-wider min-w-[180px]" style={{ fontSize: '10px', letterSpacing: '0.08em' }}>
+                    Measure
+                  </th>
+                  {allCols.map(col => {
+                    const h = col.type === 'scope' ? buildHeader(col) : null;
+                    const baseLabel = col.type === 'variance' ? (matrixColLabels[col.id] ?? col.label) : h?.baseLabel;
+                    const dateRange = h?.dateRange;
+                    return (
+                      <th key={col.id} className="text-right px-3 py-2 font-black t-text-muted uppercase tracking-wider min-w-[100px]" style={{ fontSize: '10px', letterSpacing: '0.08em' }}>
+                        <div className="flex flex-col items-end gap-px">
                           <span
                             contentEditable
                             suppressContentEditableWarning
                             onBlur={e => saveInlineLabel(col.id, e.currentTarget.textContent.trim())}
-                            className="outline-none cursor-text hover:underline decoration-dotted font-black"
-                          >{col.baseLabel}</span>
-                          {buildHeader(col).dateRange && <span className="text-[9px] font-normal opacity-60 normal-case">{buildHeader(col).dateRange}</span>}
-                        </span>
-                      )}
-                    </th>
-                  ))}
+                            className="outline-none cursor-text hover:underline decoration-dotted"
+                          >{baseLabel}</span>
+                          {dateRange && <span className="font-normal normal-case opacity-60" style={{ fontSize: '9px' }}>{dateRange}</span>}
+                        </div>
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
                 {Object.entries(grouped).map(([cat, measures]) => {
                   const isExpanded = expandedCategories[cat] !== false;
-                  // Category rollup per column
+                  // Category SUM rollup per scope column; avg % for variance
                   const catRollup = allCols.map(col => {
                     if (col.type === 'variance') {
-                      const vals = measures.map(m => computeVariance(col, m.id)).filter(v => v!=null);
-                      return vals.length > 0 ? vals.reduce((a,b) => a+b, 0) / vals.length : null; // avg for %
+                      const vals = measures.map(m => computeVariance(col, m.id)).filter(v => v != null);
+                      return vals.length > 0 ? vals.reduce((a,b) => a+b, 0) / vals.length : null;
                     }
                     return measures.reduce((sum, m) => sum + (getValue(m.id, col.id) || 0), 0);
                   });
 
                   return (
                     <React.Fragment key={cat}>
-                      {/* Category rollup row */}
+                      {/* Category header row — muted navy style */}
                       <tr
-                        className="bg-[var(--theme-accent)]/5 border-b t-border cursor-pointer hover:bg-[var(--theme-accent)]/10 transition-colors"
+                        className="cursor-pointer select-none transition-colors"
+                        style={{ background: 'var(--theme-accent, #3b5bdb)10', borderBottom: '1px solid var(--theme-border)' }}
                         onClick={() => setExpandedCategories(prev => ({ ...prev, [cat]: !prev[cat] }))}
                       >
-                        <td colSpan={2} className="px-4 py-2.5 font-black text-xs t-text-main">
+                        <td className="px-3 py-2 font-black t-text-main" style={{ fontSize: '11px', background: 'rgba(0,0,0,0.04)' }}>
                           <span className="flex items-center gap-1.5">
-                            {isExpanded ? <ChevronDown size={12} className="t-accent"/> : <ChevronRight size={12} className="t-accent"/>}
+                            {isExpanded
+                              ? <ChevronDown size={11} style={{ color: 'var(--theme-accent)' }}/>
+                              : <ChevronRight size={11} style={{ color: 'var(--theme-accent)' }}/>}
                             {cat} —
                           </span>
                         </td>
@@ -796,23 +799,36 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                           const isVar = col?.type === 'variance';
                           const isNeg = val != null && val < 0;
                           return (
-                            <td key={ci} className={`text-right px-4 py-2.5 font-black text-xs ${ isNeg ? 'text-red-500' : 'text-green-600' }`}>
+                            <td key={ci} className="text-right px-3 py-2 font-black tabular-nums" style={{
+                              fontSize: '11px',
+                              background: 'rgba(0,0,0,0.04)',
+                              color: isVar ? (isNeg ? '#e03131' : '#2f9e44') : 'var(--theme-text-main)'
+                            }}>
                               {fmtVal(val, 'number', isVar && col?.varianceMode === '%')}
                             </td>
                           );
                         })}
                       </tr>
                       {/* Child measure rows */}
-                      {isExpanded && measures.map(m => (
-                        <tr key={m.id} className="border-b t-border hover:bg-black/5 transition-colors">
-                          <td className="px-4 py-2 t-text-muted text-xs"></td>
-                          <td className="px-3 py-2 text-xs font-semibold t-text-main">{m.label}</td>
+                      {isExpanded && measures.map((m, mi) => (
+                        <tr key={m.id} style={{
+                          borderBottom: '1px solid var(--theme-border)',
+                          background: mi % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.015)'
+                        }}
+                        className="hover:bg-black/5 transition-colors">
+                          <td className="px-3 py-1.5 t-text-main font-medium" style={{ paddingLeft: '28px', fontSize: '11px' }}>
+                            {m.label}
+                          </td>
                           {allCols.map(col => {
                             const isVar = col.type === 'variance';
                             const val = isVar ? computeVariance(col, m.id) : getValue(m.id, col.id);
                             const isNeg = val != null && val < 0;
                             return (
-                              <td key={col.id} className={`text-right px-4 py-2 text-xs tabular-nums ${ isVar ? (isNeg ? 'text-red-500 font-semibold' : 'text-green-600 font-semibold') : 't-text-main' }`}>
+                              <td key={col.id} className="text-right px-3 py-1.5 tabular-nums" style={{
+                                fontSize: '11px',
+                                color: isVar ? (val == null ? 'var(--theme-text-muted)' : isNeg ? '#e03131' : '#2f9e44') : 'var(--theme-text-main)',
+                                fontWeight: isVar ? 600 : 400
+                              }}>
                                 {fmtVal(val, m.format, isVar && col?.varianceMode === '%')}
                               </td>
                             );
@@ -829,6 +845,11 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
       </div>
     );
   }
+
+
+
+
+
 
   if (chart.type === 'infographic') {
       return (
