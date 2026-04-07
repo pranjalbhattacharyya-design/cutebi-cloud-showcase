@@ -590,14 +590,14 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
 
   if (chart.type === 'infographic') {
       return (
-         <div key={chart.id} className={`${isExploreMode ? 'bg-black/5 w-full mt-2' : 't-panel'} shadow-sm border t-border flex flex-col hover:shadow-md transition-all duration-300 ${!isExploreMode && chart.size === 'full' ? 'md:col-span-2' : 'md:col-span-1'} overflow-hidden`} style={{ borderRadius: 'var(--theme-radius-panel)' }}>
+         <div key={chart.id} className={`${isExploreMode ? 'bg-black/5 w-full mt-2' : 't-panel'} shadow-sm border t-border flex flex-col hover:shadow-md transition-all duration-300 ${!isExploreMode ? (chart.size === 'full' ? 'md:col-span-6' : (chart.size === 'third' ? 'md:col-span-2' : 'md:col-span-3')) : ''} overflow-hidden`} style={{ borderRadius: 'var(--theme-radius-panel)' }}>
             <div className="flex justify-between items-start p-4 mb-0 bg-black/5 border-b t-border shrink-0">
                <h4 className="t-text-main" style={{ fontSize: '1.1rem', fontWeight: 600, whiteSpace: tWrap ? "normal" : "nowrap", color: 'var(--theme-text-main)' }}>{chart.title}</h4>
                <div className="flex gap-2 t-text-muted">
                   {!isExploreMode && !isViewer && (
                      <>
                        <button onClick={() => setDashboards(p => ({...p, [activePageId]: (p[activePageId] || []).map(c => c.id === chart.id ? { ...c, verticalSize: c.verticalSize === 'tall' ? 'normal' : 'tall' } : c)}))} className="hover:opacity-70" title="Toggle Height"><ArrowUpDown size={14} /></button>
-                       <button onClick={() => setDashboards(p => ({...p, [activePageId]: (p[activePageId] || []).map(c => c.id === chart.id ? { ...c, size: c.size === 'full' ? 'half' : 'full' } : c)}))} className="hover:opacity-70" title="Toggle Width"><Maximize2 size={14} /></button>
+                       <button onClick={() => setDashboards(p => ({...p, [activePageId]: (p[activePageId] || []).map(c => c.id === chart.id ? { ...c, size: (!c.size || c.size === 'half') ? 'third' : (c.size === 'third' ? 'full' : 'half') } : c)}))} className="hover:opacity-70" title="Toggle Width"><Maximize2 size={14} /></button>
                        <button onClick={() => setDashboards(p => ({...p, [activePageId]: (p[activePageId] || []).filter(c => c.id !== chart.id)}))} className="hover:opacity-70" title="Remove Visual"><X size={16} /></button>
                      </>
                   )}
@@ -611,7 +611,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
   }
 
   return (
-    <div key={chart.id} className={`${isExploreMode ? 'bg-black/5 w-full mt-2' : 't-panel'} p-3 shadow-sm border flex flex-col hover:shadow-md transition-all duration-300 ${!isExploreMode && chart.size === 'full' ? 'md:col-span-2' : 'md:col-span-1'}`} style={{ borderRadius: 'var(--theme-radius-panel)' }}>
+    <div key={chart.id} className={`${isExploreMode ? 'bg-black/5 w-full mt-2' : 't-panel'} p-3 shadow-sm border flex flex-col hover:shadow-md transition-all duration-300 ${!isExploreMode ? (chart.size === 'full' ? 'md:col-span-6' : (chart.size === 'third' ? 'md:col-span-2' : 'md:col-span-3')) : ''}`} style={{ borderRadius: 'var(--theme-radius-panel)' }}>
       <div className="flex justify-between items-start mb-2 shrink-0">
         <h4 className="t-text-main" style={{ fontSize: '1.1rem', fontWeight: 600, whiteSpace: tWrap ? "normal" : "nowrap", color: 'var(--theme-text-main)' }}>{chart.title}</h4>
         <div className="flex gap-1.5 t-text-muted">
@@ -656,7 +656,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                     setShowBuilder(true);
                 }} className="hover:opacity-70" title="Edit Visual"><Pencil size={14}/></button>}
                 {!isViewer && <button onClick={() => setDashboards(p => ({...p, [activePageId]: (p[activePageId] || []).map(c => c.id === chart.id ? { ...c, verticalSize: c.verticalSize === 'tall' ? 'normal' : 'tall' } : c)}))} className="hover:opacity-70" title="Toggle Height"><ArrowUpDown size={14} /></button>}
-                {!isViewer && <button onClick={() => setDashboards(p => ({...p, [activePageId]: (p[activePageId] || []).map(c => c.id === chart.id ? { ...c, size: c.size === 'full' ? 'half' : 'full' } : c)}))} className="hover:opacity-70" title="Toggle Width"><Maximize2 size={14} /></button>}
+                {!isViewer && <button onClick={() => setDashboards(p => ({...p, [activePageId]: (p[activePageId] || []).map(c => c.id === chart.id ? { ...c, size: (!c.size || c.size === 'half') ? 'third' : (c.size === 'third' ? 'full' : 'half') } : c)}))} className="hover:opacity-70" title="Toggle Width"><Maximize2 size={14} /></button>}
                 {!isViewer && <button onClick={() => setDashboards(p => ({...p, [activePageId]: (p[activePageId] || []).filter(c => c.id !== chart.id)}))} className="hover:opacity-70" title="Remove Visual"><X size={16} /></button>}
               </>
           )}

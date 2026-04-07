@@ -194,12 +194,22 @@ export default function ChartBuilderModal() {
             </div>
         )}
 
-        <div className="flex gap-4 mt-6 pt-4 border-t t-border">
-           <label className="flex items-center gap-2 text-sm font-bold t-text-main cursor-pointer">
-              <input type="checkbox" checked={builderForm.size === 'full'} onChange={e => setBuilderForm({...builderForm, size: e.target.checked ? 'full' : 'half'})} className="w-4 h-4 accent-[var(--theme-accent)]" />
-              Full Width
-           </label>
-           <label className="flex items-center gap-2 text-sm font-bold t-text-main cursor-pointer">
+        <div className="flex gap-6 mt-6 pt-4 border-t t-border items-center">
+           <div className="flex flex-col gap-1.5">
+               <label className="text-xs font-bold t-text-muted uppercase tracking-wide">Chart Width</label>
+               <select 
+                   value={builderForm.size || 'half'} 
+                   onChange={e => setBuilderForm({...builderForm, size: e.target.value})}
+                   className="t-panel border t-border px-3 py-1.5 text-sm font-bold focus:outline-none"
+                   style={{ borderRadius: 'var(--theme-radius-button)' }}
+               >
+                   <option value="third">Third Width</option>
+                   <option value="half">Half Width</option>
+                   <option value="full">Full Width</option>
+               </select>
+           </div>
+           
+           <label className="flex items-center gap-2 text-sm font-bold t-text-main cursor-pointer mt-5">
               <input type="checkbox" checked={builderForm.showDataLabels} onChange={e => setBuilderForm({...builderForm, showDataLabels: e.target.checked})} className="w-4 h-4 accent-[var(--theme-accent)]" />
               Show Data Labels
            </label>

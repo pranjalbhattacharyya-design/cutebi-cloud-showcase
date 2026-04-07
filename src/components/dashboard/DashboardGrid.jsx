@@ -317,7 +317,7 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
               <p className="text-sm">Type a question in the magic bar above or click Add Visual to create your first cute chart.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
               {activeCharts.map(chart => (
                   <ChartWidget 
                       key={chart.id} 
