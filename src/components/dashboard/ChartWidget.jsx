@@ -742,9 +742,9 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
           ) : (
             <table className="w-full text-xs border-collapse" style={{ fontFamily: 'inherit' }}>
               <thead className="sticky top-0 z-10">
-                <tr style={{ background: 'rgba(0,0,0,0.035)', borderBottom: '2px solid var(--theme-border)' }}>
+                <tr style={{ background: 'var(--theme-header-bg)', borderBottom: '2px solid var(--theme-border)' }}>
                   {/* First column — editable row header label */}
-                  <th className="text-left px-3 py-2 font-black t-text-muted uppercase tracking-wider min-w-[180px]" style={{ fontSize: '10px', letterSpacing: '0.08em', background: 'rgba(0,0,0,0.035)' }}>
+                  <th className="text-left px-3 py-2 font-black t-text-muted" style={{ fontSize: '10px', background: 'var(--theme-header-bg)' }}>
                     <span
                       contentEditable
                       suppressContentEditableWarning
@@ -757,7 +757,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                     const baseLabel = col.type === 'variance' ? (matrixColLabels[col.id] ?? col.label) : h?.baseLabel;
                     const dateRange = h?.dateRange;
                     return (
-                      <th key={col.id} className="text-right px-3 py-2 font-black t-text-muted uppercase tracking-wider min-w-[100px]" style={{ fontSize: '10px', letterSpacing: '0.08em', background: 'rgba(0,0,0,0.035)' }}>
+                      <th key={col.id} className="text-right px-3 py-2 font-black t-text-muted min-w-[100px]" style={{ fontSize: '10px', background: 'var(--theme-header-bg)' }}>
                         <div className="flex flex-col items-end gap-px">
                           <span
                             contentEditable
