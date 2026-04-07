@@ -414,22 +414,22 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
        
         return (
           <div className="overflow-auto h-full w-full t-border border bg-black/5" style={{ borderRadius: 'calc(var(--theme-radius-panel) / 2)' }}>
-             <table className="w-full text-left text-xs border-collapse">
-                <thead className="t-text-main text-[11px] uppercase tracking-wider border-b t-border sticky top-0 z-10 shadow-sm font-bold" style={{ background: 'var(--theme-header-bg)' }}>
+             <table className="w-full text-left text-xs border-collapse" style={{ fontFamily: 'inherit' }}>
+                <thead className="t-text-main text-[12px] sticky top-0 z-10 shadow-sm font-bold" style={{ background: 'var(--theme-header-bg)' }}>
                    <tr>
                       {headers.map((h, i) => (
-                          <th key={i} className="px-3 py-3 border-r t-border last:border-r-0" style={{ whiteSpace: tWrap ? "normal" : "nowrap" }}>{h}</th>
+                          <th key={i} className="px-3 py-3" style={{ whiteSpace: tWrap ? "normal" : "nowrap", border: '1px solid rgba(0,0,0,0.05)' }}>{h}</th>
                       ))}
                    </tr>
                 </thead>
-                <tbody className="divide-y t-border bg-[var(--theme-panel-bg)]">
+                <tbody className="bg-[var(--theme-panel-bg)]">
                    {rows.map((r, i) => (
                       <tr key={i} className="hover:bg-black/5 transition-colors">
                           {headerIds.map((id, j) => {
                               const isMeasure = (chart.tableMeasures || []).includes(id);
                               const val = r[id];
                               return (
-                                  <td key={j} className={`px-3 py-2 align-top ${isMeasure ? 'font-medium t-text-main text-right' : 't-text-muted'}`}>
+                                  <td key={j} className={`px-3 py-2 align-top ${isMeasure ? 'font-medium t-text-main text-right' : 't-text-muted'}`} style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
                                       {isMeasure ? formatMeasVal(val, id) : formatDimVal(val, id)}
                                   </td>
                               );
@@ -477,7 +477,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
         const headerRows = Array.from({ length: headerDepth }).map((_, levelIndex) => (
            <tr key={`hrow-${levelIndex}`} style={{ background: 'var(--theme-header-bg)' }}>
               {levelIndex === 0 && (chart.pivotRows || []).map((r, i) => (
-                 <th key={`rh-${i}`} rowSpan={headerDepth} className="px-3 py-2.5 font-bold t-text-main t-border border-b border-r align-bottom text-[11px] uppercase tracking-wider">
+                 <th key={`rh-${i}`} rowSpan={headerDepth} className="px-3 py-2.5 font-bold t-text-main align-bottom text-[12px]" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
                     {semanticModel.find(m => m.id === r)?.label || r}
                  </th>
               ))}
@@ -487,7 +487,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                   const parts = ck.split(' | ');
                   const val = parts[levelIndex] || '';
                   return (
-                      <th key={`${ck}-${levelIndex}`} colSpan={span} className="px-3 py-2.5 font-bold t-text-main t-border border-b border-r text-center text-[11px] uppercase tracking-wider" style={{ whiteSpace: tWrap ? 'normal' : 'nowrap' }}>
+                      <th key={`${ck}-${levelIndex}`} colSpan={span} className="px-3 py-2.5 font-bold t-text-main text-center text-[12px]" style={{ whiteSpace: tWrap ? 'normal' : 'nowrap', border: '1px solid rgba(0,0,0,0.05)' }}>
                           {levelIndex < (chart.pivotCols || []).length ? formatDimVal(val, chart.pivotCols[levelIndex]) : val}
                       </th>
                   );
@@ -501,13 +501,13 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                  <thead className="t-panel sticky top-0 z-10">
                     {headerRows}
                  </thead>
-                 <tbody className="bg-[var(--theme-panel-bg)]">
+                  <tbody className="bg-[var(--theme-panel-bg)]">
                     {rowKeys.map(rk => {
                        const rkVals = rk.split(' | ');
                        return (
-                          <tr key={rk} className="t-border border-b hover:bg-black/5 transition-colors text-xs">
+                          <tr key={rk} className="hover:bg-black/5 transition-colors text-xs">
                              {rkVals.map((rv, idx) => (
-                                 <td key={idx} className="px-3 py-1.5 font-bold t-text-main t-border border-r whitespace-nowrap">{formatDimVal(rv, chart.pivotRows[idx])}</td>
+                                 <td key={idx} className="px-3 py-1.5 font-bold t-text-main whitespace-nowrap" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>{formatDimVal(rv, chart.pivotRows[idx])}</td>
                              ))}
                              {colKeys.map(ck => {
                                  const val = matrix[rk]?.[ck];
@@ -515,7 +515,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                                  const parts = ck.split(' | ');
                                  const mId = chart.pivotMeasures.length > 1 ? parts[parts.length - 1] : chart.pivotMeasures[0];
                                  return (
-                                     <td key={ck} className="px-3 py-1.5 t-text-muted text-right t-border border-r">
+                                     <td key={ck} className="px-3 py-1.5 t-text-muted text-right" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
                                          {val !== undefined && val !== null ? formatMeasVal(val, mId) : '-'}
                                      </td>
                                  );
