@@ -22,19 +22,19 @@ export const AppStateProvider = ({ children }) => {
   const [slicers, setSlicers] = useState([]);
   const [hiddenDatasetIds, setHiddenDatasetIds] = useState([]);  // Persistence & Library State
   const [workspaces, setWorkspaces] = useState(() => {
-    const cached = localStorage.getItem('mvantage_ws_cache');
+    const cached = localStorage.getItem('mvantage_ws_cache') || localStorage.getItem('cutebi_ws_cache');
     return cached ? JSON.parse(cached) : [{ id: 'w_default', name: 'My Workspace', description: 'Your personal workspace' }];
   });
-  const [currentWorkspaceId, setCurrentWorkspaceId] = useState(() => localStorage.getItem('mvantage_last_ws') || 'w_default');
+  const [currentWorkspaceId, setCurrentWorkspaceId] = useState(() => localStorage.getItem('mvantage_last_ws') || localStorage.getItem('cutebi_last_ws') || 'w_default');
   
   const [folders, setFolders] = useState(() => {
-    const cached = localStorage.getItem('mvantage_folder_cache');
+    const cached = localStorage.getItem('mvantage_folder_cache') || localStorage.getItem('cutebi_folder_cache');
     return cached ? JSON.parse(cached) : [];
   });
-  const [currentFolderId, setCurrentFolderId] = useState(() => localStorage.getItem('mvantage_last_folder') || null);
+  const [currentFolderId, setCurrentFolderId] = useState(() => localStorage.getItem('mvantage_last_folder') || localStorage.getItem('cutebi_last_folder') || null);
   
   const [savedReports, setSavedReports] = useState(() => {
-    const cached = localStorage.getItem('mvantage_reports_cache');
+    const cached = localStorage.getItem('mvantage_reports_cache') || localStorage.getItem('cutebi_reports_cache');
     return cached ? JSON.parse(cached) : [];
   });
   
