@@ -495,7 +495,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 0 }}>
                   <CartesianGrid vertical={false} stroke="var(--theme-border)" />
                   <XAxis type="number" dataKey="x" name={semanticModel.find(m => m.id === chart.xMeasure)?.label || 'X'} tick={<WrappedTick textWrap={tWrap} fontSize={10} fill="var(--theme-text-muted)" />} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.xMeasure, true)} />
-                  <YAxis type="number" dataKey="y" name={semanticModel.find(m => m.id === chart.yMeasure)?.label || 'Y'} tick={{fill: 'var(--theme-text-muted)', fontSize: 10}} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.yMeasure, true)} />
+                  <YAxis type="number" dataKey="y" name={semanticModel.find(m => m.id === chart.yMeasure)?.label || 'Y'} tick={{fill: 'var(--theme-text-muted)', fontSize: 10}} width={65} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.yMeasure, true)} />
                   {chart.sizeMeasure && <ZAxis type="number" dataKey="size" range={[60, 400]} name={semanticModel.find(m => m.id === chart.sizeMeasure)?.label || 'Size'} />}
                   <RechartsTooltip cursor={{strokeDasharray: '3 3'}} content={CustomScatterTooltip} />
                   <Scatter name="Bubbles" data={scatterData} onClick={(d) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, d.name);}} className={isExploreMode ? "" : "cursor-pointer transition-all duration-300"}>
@@ -508,7 +508,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                         }
                         return <Cell key={idx} fill={fill} opacity={!isExploreMode && activeFilterVal.length > 0 && !activeFilterVal.includes(String(e.name)) ? 0.3 : 0.8} />;
                      })}
-                     {chart.showDataLabels && <LabelList dataKey="name" position="top" fill="var(--theme-text-main)" fontSize={11} fontWeight="bold" content={(props) => getIntelligentLabelVisibility(props.index, scatterData, 'name') ? <WrappedLabel {...props} textWrap={textWrap} disableHalo={false} /> : null} />}
+                     {chart.showDataLabels && <LabelList dataKey="name" position="top" fill="var(--theme-text-muted)" fontSize={10} fontWeight="normal" content={(props) => getIntelligentLabelVisibility(props.index, scatterData, 'name') ? <WrappedLabel {...props} value={props.value} fill="var(--theme-text-muted)" fontWeight="normal" textWrap={textWrap} disableHalo={true} /> : null} />}
                   </Scatter>
                </ScatterChart>
             </ResponsiveContainer>
@@ -523,16 +523,16 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
      return (
         <ResponsiveContainer width="100%" height="100%">
           {chart.type === 'bar' ? (
-            <BarChart data={data} margin={{ top: 10, right: 10, left: -25, bottom: 20 }}>
+            <BarChart data={data} margin={{ top: 10, right: 20, left: 10, bottom: 20 }}>
               <CartesianGrid vertical={false} stroke="var(--theme-border)" />
               <XAxis dataKey="name" tick={<WrappedTick textWrap={tWrap} fontSize={10} fill="var(--theme-text-muted)" />} axisLine={false} tickLine={false} tickFormatter={(v) => formatDimVal(v, chart.dimension)} />
-              <YAxis tick={{fill: 'var(--theme-text-muted)', fontSize: 10}} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.measure)} />
+              <YAxis tick={{fill: 'var(--theme-text-muted)', fontSize: 10}} width={65} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.measure, true)} />
               <RechartsTooltip cursor={{fill: 'var(--theme-border)', opacity: 0.5}} contentStyle={{ borderRadius: 'var(--theme-radius-panel)', border: 'none', boxShadow: 'var(--theme-shadow)', background: 'var(--theme-panel-bg)', color: 'var(--theme-text-main)' }} labelFormatter={(v) => formatDimVal(v, chart.dimension)} formatter={(val, name) => [formatMeasVal(val, chart.measure), chart.legend ? name : (semanticModel.find(m => m.id === chart.measure)?.label || chart.measure || 'Value')]} />
               {chart.legend && <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', color: 'var(--theme-text-main)' }} />}
               {legendKeys.map((k, i) => (
                  <Bar key={k} dataKey={k} name={k === 'value' ? (semanticModel.find(m => m.id === chart.measure)?.label || chart.measure || 'Value') : k} fill={tColors[i % tColors.length]} onClick={(d) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, d.name);}} className={isExploreMode ? "" : "cursor-pointer transition-all duration-300"}>
                    {data.map((e, idx) => <Cell key={idx} opacity={!isExploreMode && activeFilterVal.length > 0 && !activeFilterVal.includes(String(e.name)) ? 0.3 : 1} />)}
-                   {chart.showDataLabels && <LabelList dataKey={k} position="top" fill="var(--theme-text-muted)" fontSize={10} fontWeight="normal" formatter={(v) => formatMeasVal(v, chart.measure, true)} content={(props) => <WrappedLabel {...props} textWrap={textWrap} disableHalo={true} topLabel={true} />} />}
+                   {chart.showDataLabels && <LabelList dataKey={k} position="top" fill="var(--theme-text-muted)" fontSize={10} fontWeight="normal" formatter={(v) => formatMeasVal(v, chart.measure, true)} content={(props) => <WrappedLabel {...props} value={formatMeasVal(props.value, chart.measure, true)} fill="var(--theme-text-muted)" fontWeight="normal" textWrap={textWrap} disableHalo={true} topLabel={true} />} />}
                  </Bar>
               ))}
             </BarChart>
@@ -545,15 +545,15 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
               <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', color: 'var(--theme-text-main)' }} />
             </RechartsPieChart>
           ) : (
-            <LineChart data={data} margin={{ top: 10, right: 10, left: -25, bottom: 20 }}>
+            <LineChart data={data} margin={{ top: 10, right: 20, left: 10, bottom: 20 }}>
               <CartesianGrid vertical={false} stroke="var(--theme-border)" />
               <XAxis dataKey="name" tick={<WrappedTick textWrap={tWrap} fontSize={10} fill="var(--theme-text-muted)" />} axisLine={false} tickLine={false} tickFormatter={(v) => formatDimVal(v, chart.dimension)} />
-              <YAxis tick={{fill: 'var(--theme-text-muted)', fontSize: 10}} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.measure)} />
+              <YAxis tick={{fill: 'var(--theme-text-muted)', fontSize: 10}} width={65} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.measure, true)} />
               <RechartsTooltip contentStyle={{ borderRadius: 'var(--theme-radius-panel)', border: 'none', boxShadow: 'var(--theme-shadow)', background: 'var(--theme-panel-bg)', color: 'var(--theme-text-main)' }} labelFormatter={(v) => formatDimVal(v, chart.dimension)} formatter={(val, name) => [formatMeasVal(val, chart.measure), chart.legend ? name : (semanticModel.find(m => m.id === chart.measure)?.label || chart.measure || 'Value')]} />
               {chart.legend && <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', color: 'var(--theme-text-main)' }} />}
                {legendKeys.map((k, i) => (
                  <Line key={k} type="linear" name={k === 'value' ? (semanticModel.find(m => m.id === chart.measure)?.label || chart.measure || 'Value') : k} dataKey={k} stroke={tColors[i % tColors.length]} strokeWidth={1.5} dot={{ r: 3, fill: tColors[i % tColors.length], strokeWidth: 0 }} activeDot={{ r: 5, onClick: (e, p) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, p.payload.name); } }} className={isExploreMode ? "" : "cursor-pointer"}>
-                   {chart.showDataLabels && <LabelList dataKey={k} position="top" fill={tColors[i % tColors.length]} fontSize={11} fontWeight="bold" formatter={(v) => formatMeasVal(v, chart.measure, true)} content={(props) => getIntelligentLabelVisibility(props.index, data, k) ? <WrappedLabel {...props} textWrap={textWrap} disableHalo={false} /> : null} />}
+                   {chart.showDataLabels && <LabelList dataKey={k} position="top" fill="var(--theme-text-muted)" fontSize={10} fontWeight="normal" formatter={(v) => formatMeasVal(v, chart.measure, true)} content={(props) => getIntelligentLabelVisibility(props.index, data, k) ? <WrappedLabel {...props} value={formatMeasVal(props.value, chart.measure, true)} fill="var(--theme-text-muted)" fontWeight="normal" textWrap={textWrap} disableHalo={true} /> : null} />}
                  </Line>
               ))}
             </LineChart>
