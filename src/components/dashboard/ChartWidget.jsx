@@ -2,7 +2,7 @@ import React from 'react';
 import { useAppState } from '../../contexts/AppStateContext';
 import { useChartData } from '../../hooks/useChartData';
 import { THEMES } from '../../utils/themeEngine';
-import { ArrowUpDown, Maximize2, X, Pencil, Pin, LayoutTemplate } from 'lucide-react';
+import { ArrowUpDown, Maximize2, X, Pencil, Pin, LayoutTemplate, ChevronRight, ChevronDown } from 'lucide-react';
 import { 
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
   Tooltip as RechartsTooltip, Legend, LabelList, LineChart, Line, 
@@ -133,11 +133,17 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
       globalFilters, joinGroupIds, fontScale, textWrap
   } = useAppState();
   
-  const { getAggregatedData, getPivotData, getTableData, getScatterData, datesReady } = useChartData();
+  const { getAggregatedData, getPivotData, getTableData, getScatterData, getMatrixData, datesReady } = useChartData();
 
   const [chartData, setChartData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(null);
+
+  // --- KPI Matrix state ---
+  const [matrixRawRow, setMatrixRawRow] = React.useState(null);
+  const [matrixLoading, setMatrixLoading] = React.useState(false);
+  const [matrixColLabels, setMatrixColLabels] = React.useState({}); // {colId: editedLabel}
+  const [expandedCategories, setExpandedCategories] = React.useState({}); // {category: true/false}
 
   const needsTimeIntelligence = React.useMemo(() => {
     const allMeasureIds = [
@@ -191,6 +197,10 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
           res = await getPivotData(chart.datasetId, chart.pivotRows || [], chart.pivotCols || [], chart.pivotMeasures || []);
         } else if (chart.type === 'scatter') {
           res = await getScatterData(chart.datasetId, chart.dimension, chart.xMeasure, chart.yMeasure, chart.colorMeasure, chart.sizeMeasure);
+        } else if (chart.type === 'matrix') {
+          // matrix type is handled by its own useEffect below
+          setLoading(false);
+          return;
         } else {
           res = await getAggregatedData(chart.datasetId, chart.dimension, chart.measure, chart.legend);
         }
@@ -244,6 +254,32 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
     fetchData();
     // React 18 strict mode rapid fires effects, so we don't block the state update
   }, [chart, globalFilters, chartDependencyReady, getAggregatedData, getPivotData, getTableData, getScatterData]);
+
+  // --- Dedicated KPI Matrix data fetch effect ---
+  React.useEffect(() => {
+    if (chart.type !== 'matrix' || !datesReady) return;
+    let active = true;
+    setMatrixLoading(true);
+    getMatrixData(chart).then(row => {
+      if (active) {
+        setMatrixRawRow(row);
+        setMatrixLoading(false);
+        // Seed expanded state: all categories open by default
+        const sm = Object.values({} ); // we'll expand inline
+        const cats = new Set((chart.matrixMeasures || []).map(mId => {
+          for (const model of Object.values({})) {
+            const f = model.find(x => x.id === mId);
+            if (f) return f.category || 'Uncategorized';
+          }
+          return 'Uncategorized';
+        }));
+        const init = {};
+        cats.forEach(c => { init[c] = true; });
+        setExpandedCategories(init);
+      }
+    }).catch(e => { console.error('[Matrix] fetch failed', e); if (active) setMatrixLoading(false); });
+    return () => { active = false; };
+  }, [chart, globalFilters, datesReady, getMatrixData]);
 
   const getOriginKey = React.useCallback((datasetId, fieldId) => {
     if (!fieldId) return '';
@@ -587,6 +623,212 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
         </ResponsiveContainer>
      );
   }, [chart, chartData, loading, globalFilters, semanticModel, tColors, getAggregatedData, getPivotData, getTableData, getScatterData, getOriginKey, formatMeasVal, formatDimVal, isExploreMode, toggleGlobalFilter]);
+
+  // =============================== KPI MATRIX RENDERER ===============================
+  if (chart.type === 'matrix') {
+    const scopeCols = (chart.matrixColumns || []).filter(c => c.type === 'scope');
+    const varianceCols = (chart.matrixColumns || []).filter(c => c.type === 'variance');
+    const allCols = chart.matrixColumns || [];
+
+    // Format date as dd-Mon-yy
+    const fmtDate = (d) => {
+      if (!d) return null;
+      const dt = new Date(d);
+      if (isNaN(dt)) return null;
+      return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
+    };
+
+    // Build column headers with dynamic dates
+    const buildHeader = (col) => {
+      const baseLabel = matrixColLabels[col.id] ?? col.label;
+      const safeId = col.id.replace(/[^a-zA-Z0-9_]/g, '_');
+      const startRaw = matrixRawRow?.[`start_${safeId}`];
+      const endRaw = matrixRawRow?.[`end_${safeId}`];
+      const startStr = fmtDate(startRaw);
+      const endStr = fmtDate(endRaw);
+      const dateRange = (startStr && endStr) ? ` (${startStr} to ${endStr})` : '';
+      return { baseLabel, dateRange, full: baseLabel + dateRange };
+    };
+
+    // Collect all measure field metadata for grouping by category
+    const allSemanticFields = Object.values(semanticModels).flat();
+    const measureMeta = (chart.matrixMeasures || []).map(mId => {
+      const f = allSemanticFields.find(x => x.id === mId);
+      return { id: mId, label: f?.label || mId, category: f?.category || 'Uncategorized', format: f?.format || 'auto' };
+    });
+
+    // Get value for a measure+scopeCol from the flat row
+    const getValue = (measId, colId) => {
+      const safeM = measId.replace(/[^a-zA-Z0-9_]/g, '_');
+      const safeC = colId.replace(/[^a-zA-Z0-9_]/g, '_');
+      const raw = matrixRawRow?.[`m_${safeM}_${safeC}`];
+      return raw != null ? Number(raw) : null;
+    };
+
+    // Compute variance between two scope column values
+    const computeVariance = (varCol, measId) => {
+      const colA = scopeCols.find(c => c.id === varCol.colAId);
+      const colB = scopeCols.find(c => c.id === varCol.colBId);
+      if (!colA || !colB) return null;
+      const a = getValue(measId, colA.id);
+      const b = getValue(measId, colB.id);
+      if (a == null || b == null) return null;
+      if (varCol.varianceMode === '%') return b !== 0 ? ((a / b) - 1) * 100 : null;
+      return a - b;
+    };
+
+    // Format number value
+    const fmtVal = (v, format, isPercent) => {
+      if (v == null || isNaN(v)) return '—';
+      if (isPercent) return v.toFixed(2) + '%';
+      if (format === 'percentage') return (v * 100).toFixed(1) + '%';
+      if (Math.abs(v) >= 1e7) return (v / 1e7).toFixed(2) + 'Cr';
+      if (Math.abs(v) >= 1e5) return (v / 1e5).toFixed(2) + 'L';
+      if (Math.abs(v) >= 1e3) return (v / 1e3).toFixed(1) + 'K';
+      return v.toLocaleString('en-IN');
+    };
+
+    // Group measures by category
+    const grouped = {};
+    measureMeta.forEach(m => {
+      if (!grouped[m.category]) grouped[m.category] = [];
+      grouped[m.category].push(m);
+    });
+
+    // All column definitions for header row
+    const headerCols = allCols.map(col => {
+      if (col.type === 'variance') return { ...col, headerText: matrixColLabels[col.id] ?? col.label, isVariance: true };
+      const h = buildHeader(col);
+      return { ...col, headerText: h.full, baseLabel: h.baseLabel, isVariance: false };
+    });
+
+    // Save inline edited label
+    const saveInlineLabel = (colId, newLabel) => {
+      setMatrixColLabels(prev => ({ ...prev, [colId]: newLabel }));
+      setDashboards(prev => ({
+        ...prev,
+        [activePageId]: (prev[activePageId] || []).map(c => c.id === chart.id
+          ? { ...c, matrixColumns: c.matrixColumns.map(mc => mc.id === colId ? { ...mc, label: newLabel } : mc) }
+          : c
+        )
+      }));
+    };
+
+    return (
+      <div key={chart.id} className={`${isExploreMode ? 'bg-black/5 w-full mt-2' : 't-panel'} shadow-sm border t-border flex flex-col hover:shadow-md transition-all duration-300 ${
+        !isExploreMode ? (chart.size === 'full' ? 'md:col-span-6' : (chart.size === 'third' ? 'md:col-span-2' : 'md:col-span-3')) : ''
+      } overflow-hidden`} style={{ borderRadius: 'var(--theme-radius-panel)' }}>
+        {/* Header bar */}
+        <div className="flex justify-between items-center px-4 py-3 border-b t-border shrink-0">
+          <h4 className="t-text-main font-bold text-base">{chart.title}</h4>
+          <div className="flex gap-1.5 t-text-muted">
+            {!isExploreMode && !isViewer && (
+              <>
+                <button onClick={() => setDashboards(p => ({...p, [activePageId]: (p[activePageId]||[]).map(c => c.id===chart.id?{...c,verticalSize:c.verticalSize==='tall'?'normal':'tall'}:c)}))} className="hover:opacity-70" title="Toggle Height"><ArrowUpDown size={14}/></button>
+                <button onClick={() => setDashboards(p => ({...p, [activePageId]: (p[activePageId]||[]).map(c => c.id===chart.id?{...c,size:(!c.size||c.size==='half')?'third':(c.size==='third'?'full':'half')}:c)}))} className="hover:opacity-70" title="Toggle Width"><Maximize2 size={14}/></button>
+                <button onClick={() => setDashboards(p => ({...p, [activePageId]: (p[activePageId]||[]).filter(c => c.id!==chart.id)}))} className="hover:opacity-70" title="Remove"><X size={14}/></button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="overflow-auto" style={{ maxHeight: chart.verticalSize === 'tall' ? '520px' : '280px' }}>
+          {matrixLoading ? (
+            <div className="flex items-center justify-center h-24 t-text-muted text-sm">Loading matrix data…</div>
+          ) : (
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b t-border bg-[var(--theme-panel-bg)]">
+                  <th className="text-left px-4 py-2 text-xs font-black t-text-muted uppercase tracking-wider min-w-[140px]">Category</th>
+                  <th className="text-left px-3 py-2 text-xs font-black t-text-muted uppercase tracking-wider min-w-[140px]">Measure</th>
+                  {headerCols.map(col => (
+                    <th key={col.id} className="text-right px-4 py-2 text-xs font-black t-text-muted uppercase tracking-wider min-w-[110px]">
+                      {col.isVariance ? (
+                        <span
+                          contentEditable
+                          suppressContentEditableWarning
+                          onBlur={e => saveInlineLabel(col.id, e.currentTarget.textContent.trim())}
+                          className="outline-none cursor-text hover:underline decoration-dotted"
+                        >{col.headerText}</span>
+                      ) : (
+                        <span className="flex flex-col items-end gap-0.5">
+                          <span
+                            contentEditable
+                            suppressContentEditableWarning
+                            onBlur={e => saveInlineLabel(col.id, e.currentTarget.textContent.trim())}
+                            className="outline-none cursor-text hover:underline decoration-dotted font-black"
+                          >{col.baseLabel}</span>
+                          {buildHeader(col).dateRange && <span className="text-[9px] font-normal opacity-60 normal-case">{buildHeader(col).dateRange}</span>}
+                        </span>
+                      )}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(grouped).map(([cat, measures]) => {
+                  const isExpanded = expandedCategories[cat] !== false;
+                  // Category rollup per column
+                  const catRollup = allCols.map(col => {
+                    if (col.type === 'variance') {
+                      const vals = measures.map(m => computeVariance(col, m.id)).filter(v => v!=null);
+                      return vals.length > 0 ? vals.reduce((a,b) => a+b, 0) / vals.length : null; // avg for %
+                    }
+                    return measures.reduce((sum, m) => sum + (getValue(m.id, col.id) || 0), 0);
+                  });
+
+                  return (
+                    <React.Fragment key={cat}>
+                      {/* Category rollup row */}
+                      <tr
+                        className="bg-[var(--theme-accent)]/5 border-b t-border cursor-pointer hover:bg-[var(--theme-accent)]/10 transition-colors"
+                        onClick={() => setExpandedCategories(prev => ({ ...prev, [cat]: !prev[cat] }))}
+                      >
+                        <td colSpan={2} className="px-4 py-2.5 font-black text-xs t-text-main">
+                          <span className="flex items-center gap-1.5">
+                            {isExpanded ? <ChevronDown size={12} className="t-accent"/> : <ChevronRight size={12} className="t-accent"/>}
+                            {cat} —
+                          </span>
+                        </td>
+                        {catRollup.map((val, ci) => {
+                          const col = allCols[ci];
+                          const isVar = col?.type === 'variance';
+                          const isNeg = val != null && val < 0;
+                          return (
+                            <td key={ci} className={`text-right px-4 py-2.5 font-black text-xs ${ isNeg ? 'text-red-500' : 'text-green-600' }`}>
+                              {fmtVal(val, 'number', isVar && col?.varianceMode === '%')}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                      {/* Child measure rows */}
+                      {isExpanded && measures.map(m => (
+                        <tr key={m.id} className="border-b t-border hover:bg-black/5 transition-colors">
+                          <td className="px-4 py-2 t-text-muted text-xs"></td>
+                          <td className="px-3 py-2 text-xs font-semibold t-text-main">{m.label}</td>
+                          {allCols.map(col => {
+                            const isVar = col.type === 'variance';
+                            const val = isVar ? computeVariance(col, m.id) : getValue(m.id, col.id);
+                            const isNeg = val != null && val < 0;
+                            return (
+                              <td key={col.id} className={`text-right px-4 py-2 text-xs tabular-nums ${ isVar ? (isNeg ? 'text-red-500 font-semibold' : 'text-green-600 font-semibold') : 't-text-main' }`}>
+                                {fmtVal(val, m.format, isVar && col?.varianceMode === '%')}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   if (chart.type === 'infographic') {
       return (

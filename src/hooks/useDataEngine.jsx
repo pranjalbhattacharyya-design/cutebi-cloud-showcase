@@ -564,6 +564,121 @@ export const useDataEngine = () => {
     initDuckDB().catch(e => console.error("DuckDB Init failed:", e));
   }, []);
 
+
+  // --- KPI Matrix Data Fetcher ---
+  const getMatrixData = useCallback(async (chart) => {
+    const { matrixMeasures = [], matrixColumns = [], datasetId } = chart;
+    const scopeCols = matrixColumns.filter(c => c.type === 'scope');
+    if (!datasetId || matrixMeasures.length === 0 || scopeCols.length === 0) return null;
+
+    const activeJoinGroup = getJoinGroup(activeDatasetId);
+    const isMasterView = activeJoinGroup.includes(datasetId);
+    const activeDs = datasets.find(d => d.id === datasetId);
+    const sourceTable = isMasterView ? 'ds_unified' : (activeDs?.tableName || datasetId);
+    const ctePrefix = isMasterView ? generateUnifiedCTE(datasetId) : '';
+
+    // Build outer WHERE from global slicers
+    const slicerParts = [];
+    Object.entries(globalFilters).forEach(([originKey, vals]) => {
+      if (!vals || vals.length === 0) return;
+      const [oDsId, oFId] = originKey.split('::');
+      const colName = oFId ?? oDsId;
+      const colIdent = isMasterView ? `\`${colName}\`` : `\`${sourceTable}\`.\`${colName}\``;
+      const valList = vals.map(v => `'${String(v).replace(/'/g, "''")}' `).join(', ');
+      slicerParts.push(`CAST(${colIdent} AS STRING) IN (${valList})`);
+    });
+    const whereClause = slicerParts.length > 0 ? ` WHERE ${slicerParts.join(' AND ')}` : '';
+
+    // Helper: build CASE WHEN condition string for one scope column
+    const buildScopeCondition = (col) => {
+      const parts = [];
+
+      // Filter context
+      (col.filters || []).forEach(filt => {
+        if (!filt.dimensionId || filt.value === '') return;
+        const col_ref = `\`${sourceTable}\`.\`${filt.dimensionId}\``;
+        const val = String(filt.value).replace(/'/g, "''");
+        if (filt.operator === '=') parts.push(`CAST(${col_ref} AS STRING) = '${val}'`);
+        else if (filt.operator === '!=') parts.push(`CAST(${col_ref} AS STRING) <> '${val}'`);
+        else if (filt.operator === 'contains') parts.push(`LOWER(CAST(${col_ref} AS STRING)) LIKE LOWER('%${val}%')`);
+        else if (filt.operator === 'IN') {
+          const items = val.split(',').map(v => `'${v.trim().replace(/'/g,"''")}'`).join(',');
+          parts.push(`CAST(${col_ref} AS STRING) IN (${items})`);
+        }
+      });
+      const filterLogic = col.filterLogic || 'AND';
+
+      // Time intelligence
+      if (col.timeConfig?.enabled && col.timeConfig?.dateDimensionId) {
+        const dateCol = `SAFE_CAST(\`${sourceTable}\`.\`${col.timeConfig.dateDimensionId}\` AS DATE)`;
+        const _now = new Date();
+        const todayStr = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}-${String(_now.getDate()).padStart(2,'0')}`;
+        const staticRef = `CAST('${todayStr}' AS DATE)`;
+        const fyRow = `(CASE WHEN EXTRACT(MONTH FROM ${dateCol}) >= 4 THEN EXTRACT(YEAR FROM ${dateCol}) + 1 ELSE EXTRACT(YEAR FROM ${dateCol}) END)`;
+        const fyRef = `(CASE WHEN EXTRACT(MONTH FROM ${staticRef}) >= 4 THEN EXTRACT(YEAR FROM ${staticRef}) + 1 ELSE EXTRACT(YEAR FROM ${staticRef}) END)`;
+        const mo = `EXTRACT(MONTH FROM ${dateCol})`;
+        const moRef = `EXTRACT(MONTH FROM ${staticRef})`;
+        switch (col.timeConfig.period) {
+          case 'YTD':   parts.push(`(${fyRow} = ${fyRef} AND ${dateCol} <= ${staticRef})`); break;
+          case 'LYYTD': parts.push(`(${fyRow} = ${fyRef} - 1 AND ${dateCol} <= ${staticRef} - INTERVAL 1 YEAR)`); break;
+          case 'MTD':   parts.push(`(${fyRow} = ${fyRef} AND ${mo} = ${moRef} AND ${dateCol} <= ${staticRef})`); break;
+          case 'LY':    parts.push(`(${fyRow} = ${fyRef} - 1)`); break;
+          default: break;
+        }
+      }
+
+      return parts.length > 0 ? parts.join(` ${filterLogic} `) : 'TRUE';
+    };
+
+    // For each measure × scope column, generate CASE WHEN aggregate + date bounds
+    const selectParts = [];
+    scopeCols.forEach(col => {
+      const condition = buildScopeCondition(col);
+      const safeColId = col.id.replace(/[^a-zA-Z0-9_]/g, '_');
+
+      matrixMeasures.forEach(measId => {
+        const safeMeasId = measId.replace(/[^a-zA-Z0-9_]/g, '_');
+        const measField = (() => {
+          for (const dsId of activeJoinGroup) {
+            const f = semanticModels[dsId]?.find(x => x.id === measId);
+            if (f) return f;
+          }
+          return null;
+        })();
+        const rawCol = measField ? `\`${sourceTable}\`.\`${measField.id}\`` : `\`${sourceTable}\`.\`${measId}\``;
+        const agg = measField?.aggType === 'countDistinct' ? 'COUNT(DISTINCT' : (measField?.aggType === 'count' ? 'COUNT(' : 'SUM(');
+        selectParts.push(
+          `${agg}CASE WHEN (${condition}) THEN ${rawCol} ELSE NULL END) AS \`m_${safeMeasId}_${safeColId}\``
+        );
+      });
+
+      // Dynamic date bounds (if a date field is configured via time intelligence or any filter uses a date dim)
+      const dateDimId = col.timeConfig?.enabled ? col.timeConfig?.dateDimensionId : '';
+      if (dateDimId) {
+        const dc = `SAFE_CAST(\`${sourceTable}\`.\`${dateDimId}\` AS DATE)`;
+        const safeColId2 = col.id.replace(/[^a-zA-Z0-9_]/g, '_');
+        selectParts.push(`MIN(CASE WHEN (${condition}) THEN ${dc} END) AS \`start_${safeColId2}\``);
+        selectParts.push(`MAX(CASE WHEN (${condition}) THEN ${dc} END) AS \`end_${safeColId2}\``);
+      }
+    });
+
+    if (selectParts.length === 0) return null;
+
+    const sql = `${ctePrefix}SELECT ${selectParts.join(', ')} FROM \`${sourceTable}\`${whereClause}`;
+
+    window.dispatchEvent(new CustomEvent('mvantage-debug', {
+      detail: { type: 'info', category: 'Matrix', message: 'KPI Matrix SQL Generated', details: { sql } }
+    }));
+
+    try {
+      const result = await apiClient.post('/query', { sql });
+      return result?.[0] || null; // Single flat row
+    } catch (err) {
+      console.error('[getMatrixData] Query failed:', err);
+      return null;
+    }
+  }, [activeDatasetId, datasets, semanticModels, globalFilters, getJoinGroup, generateUnifiedCTE]);
+
   return {
     datasets,
     semanticModels,
@@ -580,6 +695,7 @@ export const useDataEngine = () => {
     getPivotData,
     getTableData,
     getScatterData,
+    getMatrixData,
     executeExploreQuery: async (dsId, dims, meass, filts, limit) => await queryDuckDB(generateSQL(dsId, dims, meass, filts, limit)),
     generateUnifiedCTE,
     datesReady

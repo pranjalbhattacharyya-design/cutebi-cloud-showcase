@@ -141,7 +141,10 @@ export const AppStateProvider = ({ children }) => {
      id: null, title: '', type: 'bar', dimension: '', measure: '', legend: '', size: 'half', verticalSize: 'normal',
      pivotRows: [], pivotCols: [], pivotMeasures: [],
      tableDimensions: [], tableMeasures: [],
-     xMeasure: '', yMeasure: '', colorMeasure: '', sizeMeasure: '', showDataLabels: false
+     xMeasure: '', yMeasure: '', colorMeasure: '', sizeMeasure: '', showDataLabels: false,
+     // KPI Matrix fields
+     matrixMeasures: [],
+     matrixColumns: [] // [{ id, label, type: 'scope'|'variance', filters, filterLogic, timeConfig } | { id, label, type: 'variance', colAId, colBId, varianceMode: '#'|'%' }]
   };
   const [builderForm, setBuilderForm] = useState(initBuilderForm);
   const [relForm, setRelForm] = useState({ fromColumn: '', toDatasetId: '', toColumn: '', direction: 'left' });

@@ -1,8 +1,182 @@
 import React from 'react';
-import { LayoutTemplate, X, Check } from 'lucide-react';
+import { LayoutTemplate, X, Check, Plus, Trash2, BarChart3, CalendarClock, Filter as FilterIcon } from 'lucide-react';
 import { useAppState } from '../../../contexts/AppStateContext';
 import { useDataEngine } from '../../../hooks/useDataEngine';
 import MultiSelect from '../MultiSelect';
+
+// ─── Helper: single filter row for scope columns ──────────────────────────────
+function MatrixFilterRow({ filter, idx, onChange, onRemove, dimensions }) {
+  return (
+    <div className="flex gap-2 items-center">
+      <select
+        className="flex-1 bg-transparent t-border border px-2 py-1 text-xs t-text-main outline-none"
+        style={{ borderRadius: 'var(--theme-radius-button)' }}
+        value={filter.dimensionId}
+        onChange={e => onChange(idx, 'dimensionId', e.target.value)}
+      >
+        <option value="">Select field...</option>
+        {dimensions.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+      </select>
+      <select
+        className="w-20 bg-transparent t-border border px-1 py-1 text-xs t-text-main outline-none"
+        style={{ borderRadius: 'var(--theme-radius-button)' }}
+        value={filter.operator}
+        onChange={e => onChange(idx, 'operator', e.target.value)}
+      >
+        <option value="=">=</option>
+        <option value="!=">≠</option>
+        <option value="contains">contains</option>
+        <option value="IN">IN</option>
+      </select>
+      <input
+        className="flex-1 bg-transparent t-border border px-2 py-1 text-xs t-text-main outline-none"
+        style={{ borderRadius: 'var(--theme-radius-button)' }}
+        placeholder="value"
+        value={filter.value || ''}
+        onChange={e => onChange(idx, 'value', e.target.value)}
+      />
+      <button onClick={() => onRemove(idx)} className="p-1 text-red-400 hover:text-red-600"><Trash2 size={12}/></button>
+    </div>
+  );
+}
+
+// ─── Helper: scope column card ─────────────────────────────────────────────────
+function ScopeColumnCard({ col, idx, onChange, onRemove, dimensions, allDims }) {
+  const [expanded, setExpanded] = React.useState(true);
+  const update = (key, val) => onChange(idx, { ...col, [key]: val });
+  const addFilter = () => update('filters', [...(col.filters||[]), { dimensionId: '', operator: '=', value: '' }]);
+  const updateFilter = (fi, key, val) => update('filters', col.filters.map((f,i) => i===fi ? {...f,[key]:val} : f));
+  const removeFilter = (fi) => update('filters', col.filters.filter((_,i) => i!==fi));
+
+  return (
+    <div className="border t-border rounded-lg overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-2 bg-black/5 cursor-pointer" onClick={() => setExpanded(e => !e)}>
+        <div className="flex items-center gap-2">
+          <FilterIcon size={12} className="t-accent"/>
+          <input
+            className="bg-transparent font-bold text-xs t-text-main outline-none w-36"
+            value={col.label}
+            onChange={e => { e.stopPropagation(); update('label', e.target.value); }}
+            onClick={e => e.stopPropagation()}
+            placeholder="Column label..."
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[9px] uppercase font-black bg-[var(--theme-accent)]/10 text-[var(--theme-accent)] px-2 py-0.5 rounded-full">Scope</span>
+          <button onClick={e => { e.stopPropagation(); onRemove(idx); }} className="text-red-400 hover:text-red-600"><X size={12}/></button>
+        </div>
+      </div>
+      {expanded && (
+        <div className="px-3 py-3 flex flex-col gap-3">
+          {/* Filters */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[9px] font-black t-text-muted uppercase tracking-wider">Filter Context</span>
+              <button onClick={addFilter} className="text-[9px] t-accent font-bold flex items-center gap-1"><Plus size={10}/> Add Filter</button>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {(col.filters||[]).map((f,fi) => (
+                <MatrixFilterRow key={fi} filter={f} idx={fi} onChange={updateFilter} onRemove={removeFilter} dimensions={dimensions}/>
+              ))}
+              {(col.filters||[]).length === 0 && <span className="text-[10px] t-text-muted italic">No filters — applies to entire dataset</span>}
+            </div>
+            {(col.filters||[]).length > 1 && (
+              <div className="mt-1.5 flex items-center gap-2">
+                <span className="text-[9px] t-text-muted">Logic:</span>
+                {['AND','OR'].map(op => (
+                  <button key={op} onClick={() => update('filterLogic', op)}
+                    className={`text-[9px] font-black px-2 py-0.5 border rounded ${col.filterLogic===op ? 't-accent-bg text-white border-transparent' : 't-border t-text-muted'}`}>{op}</button>
+                ))}
+              </div>
+            )}
+          </div>
+          {/* Time Intelligence */}
+          <div className="border-t t-border pt-2">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[9px] font-black t-text-muted uppercase tracking-wider flex items-center gap-1"><CalendarClock size={10}/> Time Intelligence</span>
+              <input type="checkbox" checked={col.timeConfig?.enabled||false}
+                onChange={e => update('timeConfig', { ...(col.timeConfig||{}), enabled: e.target.checked, dateDimensionId: col.timeConfig?.dateDimensionId||'', period: col.timeConfig?.period||'MTD' })}
+                className="w-3 h-3 accent-[var(--theme-accent)]"
+              />
+            </div>
+            {col.timeConfig?.enabled && (
+              <div className="flex gap-2">
+                <select className="flex-1 bg-transparent t-border border px-2 py-1 text-xs t-text-main outline-none" style={{ borderRadius: 'var(--theme-radius-button)' }}
+                  value={col.timeConfig?.dateDimensionId||''} onChange={e => update('timeConfig', { ...col.timeConfig, dateDimensionId: e.target.value })}>
+                  <option value="">Date column...</option>
+                  {allDims.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                </select>
+                <select className="w-28 bg-transparent t-border border px-2 py-1 text-xs font-bold t-text-main outline-none" style={{ borderRadius: 'var(--theme-radius-button)' }}
+                  value={col.timeConfig?.period||'MTD'} onChange={e => update('timeConfig', { ...col.timeConfig, period: e.target.value })}>
+                  <option value="MTD">MTD</option>
+                  <option value="YTD">YTD</option>
+                  <option value="LYYTD">LY-YTD</option>
+                  <option value="LY">Last Year</option>
+                  <option value="DYTD">Dynamic YTD</option>
+                </select>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Helper: variance column card ─────────────────────────────────────────────
+function VarianceColumnCard({ col, idx, onChange, onRemove, scopeCols }) {
+  const update = (key, val) => onChange(idx, { ...col, [key]: val });
+  return (
+    <div className="border t-border rounded-lg overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-2 bg-black/5">
+        <div className="flex items-center gap-2">
+          <BarChart3 size={12} className="text-purple-500"/>
+          <input
+            className="bg-transparent font-bold text-xs t-text-main outline-none w-36"
+            value={col.label}
+            onChange={e => update('label', e.target.value)}
+            placeholder="Variance label..."
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[9px] uppercase font-black bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full">Variance</span>
+          <button onClick={() => onRemove(idx)} className="text-red-400 hover:text-red-600"><X size={12}/></button>
+        </div>
+      </div>
+      <div className="px-3 py-3 flex flex-col gap-2">
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[9px] t-text-muted uppercase font-black mb-1 block">Column A</label>
+            <select className="w-full bg-transparent t-border border px-2 py-1 text-xs t-text-main outline-none" style={{ borderRadius: 'var(--theme-radius-button)' }}
+              value={col.colAId||''} onChange={e => update('colAId', e.target.value)}>
+              <option value="">Select column...</option>
+              {scopeCols.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[9px] t-text-muted uppercase font-black mb-1 block">Column B</label>
+            <select className="w-full bg-transparent t-border border px-2 py-1 text-xs t-text-main outline-none" style={{ borderRadius: 'var(--theme-radius-button)' }}
+              value={col.colBId||''} onChange={e => update('colBId', e.target.value)}>
+              <option value="">Select column...</option>
+              {scopeCols.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 mt-1">
+          <span className="text-[9px] font-black t-text-muted uppercase">Variance Type:</span>
+          {['#','%'].map(mode => (
+            <button key={mode} onClick={() => update('varianceMode', mode)}
+              className={`text-xs font-black px-3 py-1 border rounded transition-all ${
+                col.varianceMode === mode ? 't-accent-bg text-white border-transparent' : 't-border t-text-muted hover:t-text-main'
+              }`} style={{ borderRadius: 'var(--theme-radius-button)' }}>
+              {mode === '#' ? '# Absolute' : '% Change'}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function ChartBuilderModal() {
   const {
@@ -72,6 +246,7 @@ export default function ChartBuilderModal() {
                  <option value="pie">Pie Chart</option>
                  <option value="scatter">Scatter Plot</option>
                  <option value="pivot">Pivot Table</option>
+                 <option value="matrix">KPI Matrix</option>
               </select>
            </div>
         </div>
@@ -100,7 +275,7 @@ export default function ChartBuilderModal() {
            </div>
         )}
 
-        {builderForm.type !== 'pivot' && builderForm.type !== 'scatter' && builderForm.type !== 'table' && (
+        {builderForm.type !== 'pivot' && builderForm.type !== 'scatter' && builderForm.type !== 'table' && builderForm.type !== 'matrix' && (
            <div className="grid grid-cols-2 gap-6 mb-6">
               <div>
                  <label className="text-[10px] font-black t-text-muted uppercase tracking-widest mb-2 block">X-Axis (Dimension)</label>
@@ -194,6 +369,74 @@ export default function ChartBuilderModal() {
             </div>
         )}
 
+        {/* ── KPI Matrix Builder ─────────────────────────────────────────── */}
+        {builderForm.type === 'matrix' && (() => {
+          const matrixCols = builderForm.matrixColumns || [];
+          const scopeCols = matrixCols.filter(c => c.type === 'scope');
+          const updateCol = (idx, updated) => setBuilderForm(prev => ({ ...prev, matrixColumns: prev.matrixColumns.map((c,i) => i===idx ? updated : c) }));
+          const removeCol = (idx) => setBuilderForm(prev => ({ ...prev, matrixColumns: prev.matrixColumns.filter((_,i) => i!==idx) }));
+          const addScope = () => setBuilderForm(prev => ({
+            ...prev,
+            matrixColumns: [...(prev.matrixColumns||[]), {
+              id: `col_${Date.now()}`, label: `Column ${(prev.matrixColumns||[]).length + 1}`,
+              type: 'scope', filters: [], filterLogic: 'AND',
+              timeConfig: { enabled: false, dateDimensionId: '', period: 'MTD' }
+            }]
+          }));
+          const addVariance = () => setBuilderForm(prev => ({
+            ...prev,
+            matrixColumns: [...(prev.matrixColumns||[]), {
+              id: `var_${Date.now()}`, label: 'Variance', type: 'variance',
+              colAId: '', colBId: '', varianceMode: '%'
+            }]
+          }));
+
+          return (
+            <div className="mb-6">
+              {/* Base Measures */}
+              <div className="mb-5">
+                <label className="text-[10px] font-black t-text-muted uppercase tracking-widest mb-2 block">Base Measures (Rows)</label>
+                <MultiSelect
+                  placeholder="Select measures to display as rows..."
+                  options={measures}
+                  value={builderForm.matrixMeasures || []}
+                  onChange={vals => setBuilderForm(prev => ({...prev, matrixMeasures: vals}))}
+                />
+                <p className="text-[10px] t-text-muted mt-1.5 italic">Measures will be grouped by their Category from the Data Dictionary.</p>
+              </div>
+
+              {/* Column Builder */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-[10px] font-black t-text-muted uppercase tracking-widest">Visual Columns (Contexts)</label>
+                  <div className="flex gap-2">
+                    <button onClick={addScope} className="flex items-center gap-1 t-button px-2 py-1 text-[10px] font-bold"
+                      style={{ borderRadius: 'var(--theme-radius-button)' }}>
+                      <Plus size={10}/> Scope Column
+                    </button>
+                    <button onClick={addVariance} className="flex items-center gap-1 bg-purple-100 text-purple-700 border border-purple-200 px-2 py-1 text-[10px] font-bold"
+                      style={{ borderRadius: 'var(--theme-radius-button)' }}>
+                      <Plus size={10}/> Variance Column
+                    </button>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-3">
+                  {matrixCols.map((col, idx) => (
+                    col.type === 'scope'
+                      ? <ScopeColumnCard key={col.id} col={col} idx={idx} onChange={updateCol} onRemove={removeCol} dimensions={dimensions} allDims={[...dimensions, ...measures.filter(m => m.label?.toLowerCase().includes('date'))]}/>
+                      : <VarianceColumnCard key={col.id} col={col} idx={idx} onChange={updateCol} onRemove={removeCol} scopeCols={scopeCols}/>
+                  ))}
+                  {matrixCols.length === 0 && (
+                    <div className="text-center py-6 t-text-muted text-xs border-2 border-dashed t-border rounded-lg">
+                      Add Scope Columns to define what time period or filter context each column represents.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         <div className="flex gap-6 mt-6 pt-4 border-t t-border items-center">
            <div className="flex flex-col gap-1.5">
                <label className="text-xs font-bold t-text-muted uppercase tracking-wide">Chart Width</label>
@@ -222,6 +465,8 @@ export default function ChartBuilderModal() {
             if (builderForm.type === 'pivot' && (builderForm.pivotRows.length === 0 || builderForm.pivotMeasures.length === 0)) return showToast('Pivot needs at least 1 Row and 1 Measure');
             if (builderForm.type === 'scatter' && (!builderForm.dimension || !builderForm.xMeasure || !builderForm.yMeasure)) return showToast('Scatter needs Detail, X-Axis, and Y-Axis');
             if (['bar', 'line', 'pie'].includes(builderForm.type) && (!builderForm.dimension || !builderForm.measure)) return showToast('Please select Dimension and Measure');
+            if (builderForm.type === 'matrix' && (builderForm.matrixMeasures||[]).length === 0) return showToast('KPI Matrix needs at least 1 measure');
+            if (builderForm.type === 'matrix' && (builderForm.matrixColumns||[]).filter(c=>c.type==='scope').length === 0) return showToast('KPI Matrix needs at least 1 Scope Column');
 
             // Gather all required fields to find the correct joined dataset
             const originsToCheck = [
