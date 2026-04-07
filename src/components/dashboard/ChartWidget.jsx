@@ -74,7 +74,7 @@ const WrappedLabel = (props) => {
  * Only render for First, Last, Local Max, and Local Min if points > 6
  */
 const getIntelligentLabelVisibility = (index, data, dataKey) => {
-  if (!data || data.length <= 6) return true;
+  if (!data || data.length <= 12) return true;
   if (index === 0 || index === data.length - 1) return true;
   
   const val = data[index][dataKey];
@@ -83,8 +83,12 @@ const getIntelligentLabelVisibility = (index, data, dataKey) => {
   
   const max = Math.max(...allVals);
   const min = Math.min(...allVals);
+  if (val === max || val === min) return true;
   
-  return val === max || val === min;
+  const step = Math.ceil(data.length / 8);
+  if (index % step === 0) return true;
+  
+  return false;
 };
 
 /**
@@ -233,7 +237,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
   const fScale = fontScale || 1.0;
   const tWrap = textWrap || false;
 
-  const formatMeasVal = React.useCallback((val, measureId) => {
+  const formatMeasVal = React.useCallback((val, measureId, compact = false) => {
       if (val === undefined || val === null) return '';
       
       let meas = null;
@@ -244,17 +248,34 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
       const fmt = meas?.format || 'auto';
       
       let cleanVal = (val && typeof val === 'object' && val.length !== undefined) ? String(val[0]) : String(val);
-      // Remove wrapping quotes and escaped quotes from stringified objects/primitives
       cleanVal = cleanVal.replace(/^["']|["']$/g, '').replace(/\\"/g, '"').replace(/"/g, '');
       
       const numVal = Number(cleanVal.replace(/[^0-9.-]/g, ''));
       
+      const formatCompactIndian = (num) => {
+          if (isNaN(num)) return 0;
+          const abs = Math.abs(num);
+          const sign = num < 0 ? '-' : '';
+          if (abs < 1000) return new Intl.NumberFormat('en-IN').format(num);
+          if (abs < 100000) return sign + (abs / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+          if (abs < 10000000) return sign + (abs / 100000).toFixed(1).replace(/\.0$/, '') + 'L';
+          if (abs < 1000000000) return sign + (abs / 10000000).toFixed(1).replace(/\.0$/, '') + 'Cr';
+          return sign + (abs / 1000000000).toFixed(1).replace(/\.0$/, '') + 'Ar';
+      };
+
       const indianFmt = new Intl.NumberFormat('en-IN');
-      if (fmt === 'currency') return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(isNaN(numVal) ? 0 : numVal).replace('INR', '₹');
-      if (fmt === 'percentage') return `${((isNaN(numVal) ? 0 : numVal) * 100).toFixed(1)}%`;
-      if (fmt === 'number') return indianFmt.format(isNaN(numVal) ? 0 : numVal);
+      const baseNum = isNaN(numVal) ? 0 : numVal;
       
-      if (!isNaN(numVal) && cleanVal.trim() !== '') return indianFmt.format(numVal);
+      let finalStr = '';
+      if (fmt === 'percentage') {
+         finalStr = `${(baseNum * 100).toFixed(1)}%`;
+      } else if (fmt === 'currency') {
+         finalStr = compact ? '₹' + formatCompactIndian(baseNum) : new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(baseNum).replace('INR', '₹');
+      } else {
+         finalStr = compact ? formatCompactIndian(baseNum) : indianFmt.format(baseNum);
+      }
+      
+      if (!isNaN(numVal) && cleanVal.trim() !== '') return finalStr;
       return typeof val === 'object' && !val.toString ? JSON.stringify(val) : cleanVal;
   }, [semanticModels]);
 
@@ -471,10 +492,10 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
 
          return (
             <ResponsiveContainer width="100%" height="100%">
-               <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+               <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 0 }}>
                   <CartesianGrid vertical={false} stroke="var(--theme-border)" />
-                  <XAxis type="number" dataKey="x" name={semanticModel.find(m => m.id === chart.xMeasure)?.label || 'X'} tick={<WrappedTick textWrap={tWrap} fontSize={10} fill="var(--theme-text-muted)" />} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.xMeasure)} />
-                  <YAxis type="number" dataKey="y" name={semanticModel.find(m => m.id === chart.yMeasure)?.label || 'Y'} tick={{fill: 'var(--theme-text-muted)', fontSize: 10}} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.yMeasure)} />
+                  <XAxis type="number" dataKey="x" name={semanticModel.find(m => m.id === chart.xMeasure)?.label || 'X'} tick={<WrappedTick textWrap={tWrap} fontSize={10} fill="var(--theme-text-muted)" />} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.xMeasure, true)} />
+                  <YAxis type="number" dataKey="y" name={semanticModel.find(m => m.id === chart.yMeasure)?.label || 'Y'} tick={{fill: 'var(--theme-text-muted)', fontSize: 10}} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.yMeasure, true)} />
                   {chart.sizeMeasure && <ZAxis type="number" dataKey="size" range={[60, 400]} name={semanticModel.find(m => m.id === chart.sizeMeasure)?.label || 'Size'} />}
                   <RechartsTooltip cursor={{strokeDasharray: '3 3'}} content={CustomScatterTooltip} />
                   <Scatter name="Bubbles" data={scatterData} onClick={(d) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, d.name);}} className={isExploreMode ? "" : "cursor-pointer transition-all duration-300"}>
@@ -511,14 +532,14 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
               {legendKeys.map((k, i) => (
                  <Bar key={k} dataKey={k} name={k === 'value' ? (semanticModel.find(m => m.id === chart.measure)?.label || chart.measure || 'Value') : k} fill={tColors[i % tColors.length]} onClick={(d) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, d.name);}} className={isExploreMode ? "" : "cursor-pointer transition-all duration-300"}>
                    {data.map((e, idx) => <Cell key={idx} opacity={!isExploreMode && activeFilterVal.length > 0 && !activeFilterVal.includes(String(e.name)) ? 0.3 : 1} />)}
-                   {chart.showDataLabels && <LabelList dataKey={k} position="top" fill="var(--theme-text-muted)" fontSize={10} fontWeight="normal" formatter={(v) => formatMeasVal(v, chart.measure)} content={(props) => <WrappedLabel {...props} textWrap={textWrap} disableHalo={true} topLabel={true} />} />}
+                   {chart.showDataLabels && <LabelList dataKey={k} position="top" fill="var(--theme-text-muted)" fontSize={10} fontWeight="normal" formatter={(v) => formatMeasVal(v, chart.measure, true)} content={(props) => <WrappedLabel {...props} textWrap={textWrap} disableHalo={true} topLabel={true} />} />}
                  </Bar>
               ))}
             </BarChart>
           ) : chart.type === 'pie' ? (
             <RechartsPieChart>
               <RechartsTooltip contentStyle={{ borderRadius: 'var(--theme-radius-panel)', border: 'none', boxShadow: 'var(--theme-shadow)', background: 'var(--theme-panel-bg)', color: 'var(--theme-text-main)' }} formatter={(v, n) => [formatMeasVal(v, chart.measure), formatDimVal(n, chart.dimension)]} />
-              <Pie data={data} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" onClick={(d) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, d.name);}} className={isExploreMode ? "" : "cursor-pointer"} label={chart.showDataLabels ? ({ name, percent }) => `${formatDimVal(name, chart.dimension)} ${(percent * 100).toFixed(0)}%` : false} labelLine={false}>
+              <Pie data={data} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" onClick={(d) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, d.name);}} className={isExploreMode ? "" : "cursor-pointer"} label={chart.showDataLabels ? ({ name, percent, value }) => `${formatDimVal(name, chart.dimension)}: ${formatMeasVal(value, chart.measure, true)} (${(percent * 100).toFixed(0)}%)` : false} labelLine={false}>
                 {data.map((e, i) => <Cell key={i} fill={tColors[i % tColors.length]} opacity={!isExploreMode && activeFilterVal.length > 0 && !activeFilterVal.includes(String(e.name)) ? 0.3 : 1} style={{ outline: 'none' }} />)}
               </Pie>
               <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', color: 'var(--theme-text-main)' }} />
@@ -532,7 +553,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
               {chart.legend && <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', color: 'var(--theme-text-main)' }} />}
                {legendKeys.map((k, i) => (
                  <Line key={k} type="linear" name={k === 'value' ? (semanticModel.find(m => m.id === chart.measure)?.label || chart.measure || 'Value') : k} dataKey={k} stroke={tColors[i % tColors.length]} strokeWidth={1.5} dot={{ r: 3, fill: tColors[i % tColors.length], strokeWidth: 0 }} activeDot={{ r: 5, onClick: (e, p) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, p.payload.name); } }} className={isExploreMode ? "" : "cursor-pointer"}>
-                   {chart.showDataLabels && <LabelList dataKey={k} position="top" fill={tColors[i % tColors.length]} fontSize={11} fontWeight="bold" formatter={(v) => formatMeasVal(v, chart.measure)} content={(props) => getIntelligentLabelVisibility(props.index, data, k) ? <WrappedLabel {...props} textWrap={textWrap} disableHalo={false} /> : null} />}
+                   {chart.showDataLabels && <LabelList dataKey={k} position="top" fill={tColors[i % tColors.length]} fontSize={11} fontWeight="bold" formatter={(v) => formatMeasVal(v, chart.measure, true)} content={(props) => getIntelligentLabelVisibility(props.index, data, k) ? <WrappedLabel {...props} textWrap={textWrap} disableHalo={false} /> : null} />}
                  </Line>
               ))}
             </LineChart>
