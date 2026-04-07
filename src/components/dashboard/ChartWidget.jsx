@@ -52,7 +52,7 @@ const WrappedLabel = (props) => {
   const lx = isBBox ? x + width / 2 : x;
   const ly = isBBox ? (topLabel ? y : y + height / 2) : y;
   const baseline = (isBBox && !topLabel) ? 'middle' : 'auto';
-  const dy = topLabel ? -8 : (isBBox ? 0 : (textWrap && typeof value === 'string' && value.length >= 12 ? -10 : -6));
+  const dy = topLabel ? -8 : (isBBox ? 0 : (textWrap && typeof value === 'string' && value.length >= 12 ? -10 : -14));
 
   if (!textWrap || typeof value !== 'string' || value.length < 12) {
     return <text x={lx} y={ly} dy={dy} fill={fill} fontSize={fontSize} fontWeight={fontWeight} textAnchor="middle" dominantBaseline={baseline} style={haloStyle}>{value}</text>;
@@ -74,10 +74,36 @@ const WrappedLabel = (props) => {
  * Only render for First, Last, Local Max, and Local Min if points > 6
  */
 const getIntelligentLabelVisibility = (index, data, dataKey) => {
-  if (!data || data.length <= 12) return true;
+  if (!data || data.length === 0) return true;
+  const val = data[index][dataKey];
+  if (typeof val !== 'number') return false;
+
+  const allMetricKeys = Object.keys(data[index]).filter(k => k !== 'name' && typeof data[index][k] === 'number');
+  if (allMetricKeys.length > 1) {
+      let globalMax = -Infinity;
+      let globalMin = Infinity;
+      for (let d of data) {
+          for (let k of allMetricKeys) {
+              if (d[k] > globalMax) globalMax = d[k];
+              if (d[k] < globalMin) globalMin = d[k];
+          }
+      }
+      const range = globalMax - globalMin || 1;
+      const collisionThreshold = range * 0.08;
+
+      for (let k of allMetricKeys) {
+          if (k !== dataKey) {
+              const otherVal = data[index][k];
+              if (Math.abs(val - otherVal) < collisionThreshold) {
+                  if (val < otherVal || (val === otherVal && dataKey < k)) return false;
+              }
+          }
+      }
+  }
+
+  if (data.length <= 12) return true;
   if (index === 0 || index === data.length - 1) return true;
   
-  const val = data[index][dataKey];
   const allVals = data.map(d => d[dataKey]).filter(v => typeof v === 'number');
   if (allVals.length === 0) return true;
   
