@@ -630,26 +630,67 @@ export const useDataEngine = () => {
       return parts.length > 0 ? parts.join(` ${filterLogic} `) : 'TRUE';
     };
 
-    // For each measure × scope column, generate CASE WHEN aggregate + date bounds
+    // Helper: resolve a measure to its SQL expression with optional extra filter conditions
+    // Mirrors the resolveMeasureSQL logic from generateSQL to handle calculated measures.
+    const buildMeasureExpr = (measId, extraConditions = []) => {
+      let f = null;
+      for (const dsId of activeJoinGroup) {
+        f = semanticModels[dsId]?.find(x => x.id === measId);
+        if (f) break;
+      }
+      if (!f) return `SUM(\`${sourceTable}\`.\`${measId}\`)`;
+
+      const allConds = [...extraConditions];
+
+      // Collect the measure's own filter context
+      if (f.filters && f.filters.length > 0) {
+        const fp = f.filters.map(filt => {
+          if (!filt.dimensionId) return 'TRUE';
+          const col_ref = `\`${sourceTable}\`.\`${filt.dimensionId}\``;
+          const val = String(filt.value ?? '').replace(/'/g, "''");
+          if (filt.operator === '=') return `CAST(${col_ref} AS STRING) = '${val}'`;
+          if (filt.operator === '!=') return `CAST(${col_ref} AS STRING) <> '${val}'`;
+          if (filt.operator === 'contains') return `LOWER(CAST(${col_ref} AS STRING)) LIKE LOWER('%${val}%')`;
+          if (filt.operator === 'IN') {
+            const items = (Array.isArray(filt.value) ? filt.value : String(filt.value).split(','))
+              .map(v => `'${String(v).trim().replace(/'/g, "''")}' `).join(', ');
+            return `CAST(${col_ref} AS STRING) IN (${items})`;
+          }
+          return 'TRUE';
+        });
+        allConds.push(`(${fp.join(` ${f.filterLogic || 'AND'} `)})`);
+      }
+
+      if (!f.isCalculated) {
+        const col_ref = `\`${sourceTable}\`.\`${f.id}\``;
+        const agg = f.aggType === 'countDistinct' ? 'COUNT(DISTINCT ' : (f.aggType === 'count' ? 'COUNT(' : `${(f.aggType || 'SUM').toUpperCase()}(`);
+        if (allConds.length > 0) return `${agg}CASE WHEN ${allConds.join(' AND ')} THEN ${col_ref} ELSE NULL END)`;
+        return `${agg}${col_ref})`;
+      } else {
+        // Calculated measure: expand the expression with conditions threaded in recursively
+        if (!f.expression) return 'NULL';
+        let evalStr = f.expression;
+        const matches = evalStr.match(/\[(.*?)\]/g) || [];
+        for (const match of matches) {
+          const innerId = match.slice(1, -1);
+          const innerSQL = buildMeasureExpr(innerId, allConds);
+          evalStr = evalStr.replace(match, `COALESCE(CAST((${innerSQL}) AS FLOAT64), 0)`);
+        }
+        return `(${evalStr})`;
+      }
+    };
+
+    // For each measure × scope column, generate aggregate expression + date bounds
     const selectParts = [];
     scopeCols.forEach(col => {
       const condition = buildScopeCondition(col);
       const safeColId = col.id.replace(/[^a-zA-Z0-9_]/g, '_');
+      const conditionParts = condition === 'TRUE' ? [] : [condition];
 
       matrixMeasures.forEach(measId => {
         const safeMeasId = measId.replace(/[^a-zA-Z0-9_]/g, '_');
-        const measField = (() => {
-          for (const dsId of activeJoinGroup) {
-            const f = semanticModels[dsId]?.find(x => x.id === measId);
-            if (f) return f;
-          }
-          return null;
-        })();
-        const rawCol = measField ? `\`${sourceTable}\`.\`${measField.id}\`` : `\`${sourceTable}\`.\`${measId}\``;
-        const agg = measField?.aggType === 'countDistinct' ? 'COUNT(DISTINCT' : (measField?.aggType === 'count' ? 'COUNT(' : 'SUM(');
-        selectParts.push(
-          `${agg}CASE WHEN (${condition}) THEN ${rawCol} ELSE NULL END) AS \`m_${safeMeasId}_${safeColId}\``
-        );
+        const resolvedExpr = buildMeasureExpr(measId, conditionParts);
+        selectParts.push(`${resolvedExpr} AS \`m_${safeMeasId}_${safeColId}\``);
       });
 
       // Dynamic date bounds (if a date field is configured via time intelligence or any filter uses a date dim)
