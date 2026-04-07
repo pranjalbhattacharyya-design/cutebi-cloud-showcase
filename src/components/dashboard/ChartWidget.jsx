@@ -146,6 +146,27 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
   const [matrixRowHeader, setMatrixRowHeader] = React.useState('Measure'); // editable first-column label
   const [expandedCategories, setExpandedCategories] = React.useState({}); // {category: true/false}
 
+  const toggleHeight = (e) => {
+    e.stopPropagation();
+    setDashboards(p => ({
+      ...p,
+      [activePageId]: (p[activePageId] || []).map(c => {
+        if (c.id === chart.id) {
+          const nextSize = c.verticalSize === 'tall' ? 'xl' : (c.verticalSize === 'xl' ? 'normal' : 'tall');
+          return { ...c, verticalSize: nextSize };
+        }
+        return c;
+      })
+    }));
+  };
+
+  const getWidgetHeight = () => {
+    if (isExploreMode) return '200px';
+    if (chart.verticalSize === 'xl') return '600px';
+    if (chart.verticalSize === 'tall') return '400px';
+    return '200px'; // normal
+  };
+
   const needsTimeIntelligence = React.useMemo(() => {
     const allMeasureIds = [
       chart.measure,
@@ -712,28 +733,6 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
       setBuilderForm({ ...initBuilderForm, ...chart });
       setShowBuilder(true);
     };
-
-    const toggleHeight = (e) => {
-      e.stopPropagation();
-      setDashboards(p => ({
-        ...p,
-        [activePageId]: (p[activePageId] || []).map(c => {
-          if (c.id === chart.id) {
-            const nextSize = c.verticalSize === 'tall' ? 'xl' : (c.verticalSize === 'xl' ? 'normal' : 'tall');
-            return { ...c, verticalSize: nextSize };
-          }
-          return c;
-        })
-      }));
-    };
-
-    const getWidgetHeight = () => {
-      if (isExploreMode) return '200px';
-      if (chart.verticalSize === 'xl') return '600px';
-      if (chart.verticalSize === 'tall') return '400px';
-      return '200px'; // normal
-    };
-
     return (
       <div key={chart.id} className={`${isExploreMode ? 'bg-black/5 w-full mt-2' : 't-panel'} shadow-sm border t-border flex flex-col hover:shadow-md transition-all duration-300 ${
         !isExploreMode ? (chart.size === 'full' ? 'md:col-span-6' : (chart.size === 'third' ? 'md:col-span-2' : 'md:col-span-3')) : ''
