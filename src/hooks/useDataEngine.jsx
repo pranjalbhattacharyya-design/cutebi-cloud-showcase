@@ -671,11 +671,22 @@ export const useDataEngine = () => {
     }));
 
     try {
-      const results = await queryDuckDB(sql);
-      const row = results?.[0] || null;
+      // Direct (non-batched) call so BigQuery errors are surfaced in debug panel
+      const response = await apiClient.post('/query', { sql });
+
+      if (response?.error) {
+        window.dispatchEvent(new CustomEvent('mvantage-debug', {
+          detail: { type: 'error', category: 'Matrix', message: `BigQuery error: ${response.error}`, details: { transformedSql: response.sql } }
+        }));
+        return null;
+      }
+
+      const rows = response?.data || [];
+      const row = rows[0] || null;
       window.dispatchEvent(new CustomEvent('mvantage-debug', {
         detail: { type: 'success', category: 'Matrix', message: 'KPI Matrix raw result', details: {
-          resultsLength: results?.length,
+          engine: response?.engine,
+          resultsLength: rows.length,
           firstRowKeys: row ? Object.keys(row) : null,
           firstRow: row
         }}
@@ -684,7 +695,7 @@ export const useDataEngine = () => {
     } catch (err) {
       console.error('[getMatrixData] Query failed:', err);
       window.dispatchEvent(new CustomEvent('mvantage-debug', {
-        detail: { type: 'error', category: 'Matrix', message: `Query error: ${err.message}` }
+        detail: { type: 'error', category: 'Matrix', message: `Query exception: ${err.message}` }
       }));
       return null;
     }
