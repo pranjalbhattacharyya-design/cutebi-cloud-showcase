@@ -5,7 +5,8 @@ import { useDataEngine } from '../../../hooks/useDataEngine';
 import MultiSelect from '../MultiSelect';
 
 // ─── Helper: single filter row for scope columns ──────────────────────────────
-function MatrixFilterRow({ filter, idx, onChange, onRemove, dimensions }) {
+function MatrixFilterRow({ filter, idx, onChange, onRemove, dimensions, dimValuesCache }) {
+  const uid = React.useId();
   return (
     <div className="flex gap-2 items-center">
       <select
@@ -28,24 +29,46 @@ function MatrixFilterRow({ filter, idx, onChange, onRemove, dimensions }) {
         <option value="contains">contains</option>
         <option value="IN">IN</option>
       </select>
-      <input
-        className="flex-1 bg-transparent t-border border px-2 py-1 text-xs t-text-main outline-none"
-        style={{ borderRadius: 'var(--theme-radius-button)' }}
-        placeholder="value"
-        value={filter.value || ''}
-        onChange={e => onChange(idx, 'value', e.target.value)}
-      />
+      {filter.operator === 'IN' ? (
+        <div className="flex-1">
+          <MultiSelect
+            placeholder="Values"
+            options={(dimValuesCache[filter.dimensionId] || []).map(v => ({ value: String(v), label: String(v) }))}
+            value={Array.isArray(filter.value) ? filter.value : []}
+            onChange={vals => onChange(idx, 'value', vals)}
+          />
+        </div>
+      ) : (
+        <div className="flex-1 relative">
+          <input
+            list={`dl-matrix-${uid}-${idx}`}
+            className="w-full bg-transparent t-border border px-2 py-1 text-xs t-text-main outline-none"
+            style={{ borderRadius: 'var(--theme-radius-button)' }}
+            placeholder="value"
+            value={Array.isArray(filter.value) ? '' : (filter.value || '')}
+            onChange={e => onChange(idx, 'value', e.target.value)}
+          />
+          <datalist id={`dl-matrix-${uid}-${idx}`}>
+            {(dimValuesCache[filter.dimensionId] || []).map(opt => <option key={opt} value={opt}/>)}
+          </datalist>
+        </div>
+      )}
       <button onClick={() => onRemove(idx)} className="p-1 text-red-400 hover:text-red-600"><Trash2 size={12}/></button>
     </div>
   );
 }
 
 // ─── Helper: scope column card ─────────────────────────────────────────────────
-function ScopeColumnCard({ col, idx, onChange, onRemove, dimensions, allDims }) {
+function ScopeColumnCard({ col, idx, onChange, onRemove, dimensions, dateDims, dimValuesCache }) {
   const [expanded, setExpanded] = React.useState(true);
   const update = (key, val) => onChange(idx, { ...col, [key]: val });
   const addFilter = () => update('filters', [...(col.filters||[]), { dimensionId: '', operator: '=', value: '' }]);
-  const updateFilter = (fi, key, val) => update('filters', col.filters.map((f,i) => i===fi ? {...f,[key]:val} : f));
+  const updateFilter = (fi, key, val) => {
+    const updated = col.filters.map((f,i) => i===fi ? {...f,[key]:val} : f);
+    // Reset value when dimension changes
+    if (key === 'dimensionId') update('filters', updated.map((f,i) => i===fi ? {...f, value: ['IN'].includes(f.operator) ? [] : ''} : f));
+    else update('filters', updated);
+  };
   const removeFilter = (fi) => update('filters', col.filters.filter((_,i) => i!==fi));
 
   return (
@@ -76,7 +99,7 @@ function ScopeColumnCard({ col, idx, onChange, onRemove, dimensions, allDims }) 
             </div>
             <div className="flex flex-col gap-1.5">
               {(col.filters||[]).map((f,fi) => (
-                <MatrixFilterRow key={fi} filter={f} idx={fi} onChange={updateFilter} onRemove={removeFilter} dimensions={dimensions}/>
+                <MatrixFilterRow key={fi} filter={f} idx={fi} onChange={updateFilter} onRemove={removeFilter} dimensions={dimensions} dimValuesCache={dimValuesCache}/>
               ))}
               {(col.filters||[]).length === 0 && <span className="text-[10px] t-text-muted italic">No filters — applies to entire dataset</span>}
             </div>
@@ -104,8 +127,9 @@ function ScopeColumnCard({ col, idx, onChange, onRemove, dimensions, allDims }) 
                 <select className="flex-1 bg-transparent t-border border px-2 py-1 text-xs t-text-main outline-none" style={{ borderRadius: 'var(--theme-radius-button)' }}
                   value={col.timeConfig?.dateDimensionId||''} onChange={e => update('timeConfig', { ...col.timeConfig, dateDimensionId: e.target.value })}>
                   <option value="">Date column...</option>
-                  {allDims.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                  {dateDims.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
                 </select>
+                {dateDims.length === 0 && <span className="text-[10px] text-red-500 ml-1">No date columns in Dictionary!</span>}
                 <select className="w-28 bg-transparent t-border border px-2 py-1 text-xs font-bold t-text-main outline-none" style={{ borderRadius: 'var(--theme-radius-button)' }}
                   value={col.timeConfig?.period||'MTD'} onChange={e => update('timeConfig', { ...col.timeConfig, period: e.target.value })}>
                   <option value="MTD">MTD</option>
@@ -189,11 +213,45 @@ export default function ChartBuilderModal() {
     mergedSemanticModel, isUnified, joinGroupIds
   } = useAppState();
 
-  const { globalSemanticFields } = useDataEngine();
+  const { globalSemanticFields, getUniqueValuesForDim } = useDataEngine();
 
-  // Optimization: Memoize filtered fields so we don't recalculate on every keystroke
+  // Memoize filtered fields
   const dimensions = React.useMemo(() => globalSemanticFields.filter(f => f.type === 'dimension' && !f.isHidden), [globalSemanticFields]);
   const measures = React.useMemo(() => globalSemanticFields.filter(f => f.type === 'measure' && !f.isHidden), [globalSemanticFields]);
+  // Only fields marked as format==='date' in the semantic dictionary go into the date dropdown
+  const dateDims = React.useMemo(() => globalSemanticFields.filter(f => f.format === 'date' && !f.isHidden), [globalSemanticFields]);
+
+  // Distinct values cache for matrix filter rows (same pattern as MeasureBuilderModal)
+  const [dimValuesCache, setDimValuesCache] = React.useState({});
+  const fetchingDims = React.useRef(new Set());
+
+  // Collect all dimensionId values currently used across all scope column filters
+  const activeDimIds = React.useMemo(() => {
+    const ids = new Set();
+    (builderForm.matrixColumns || []).forEach(col => {
+      if (col.type === 'scope') (col.filters || []).forEach(f => { if (f.dimensionId) ids.add(f.dimensionId); });
+    });
+    return Array.from(ids);
+  }, [builderForm.matrixColumns]);
+
+  // Auto-fetch distinct values for any newly selected dimension
+  React.useEffect(() => {
+    const toFetch = activeDimIds.filter(id => !dimValuesCache[id] && !fetchingDims.current.has(id));
+    if (toFetch.length === 0) return;
+    toFetch.forEach(async (dimId) => {
+      fetchingDims.current.add(dimId);
+      const field = (mergedSemanticModel || []).find(m => m.id === dimId);
+      const targetDsId = field?.originDatasetId || activeDatasetId;
+      try {
+        const values = await getUniqueValuesForDim(targetDsId, dimId);
+        setDimValuesCache(prev => ({ ...prev, [dimId]: values || [] }));
+      } catch (err) {
+        console.error('[MatrixBuilder] Failed to fetch values for', dimId, err);
+      } finally {
+        fetchingDims.current.delete(dimId);
+      }
+    });
+  }, [activeDimIds, activeDatasetId, getUniqueValuesForDim, mergedSemanticModel, dimValuesCache]);
 
   // Optimization: Use local state for title to ensure typing is silky smooth
   const [localTitle, setLocalTitle] = React.useState(builderForm.title || '');
@@ -423,7 +481,7 @@ export default function ChartBuilderModal() {
                 <div className="flex flex-col gap-3">
                   {matrixCols.map((col, idx) => (
                     col.type === 'scope'
-                      ? <ScopeColumnCard key={col.id} col={col} idx={idx} onChange={updateCol} onRemove={removeCol} dimensions={dimensions} allDims={[...dimensions, ...measures.filter(m => m.label?.toLowerCase().includes('date'))]}/>
+                      ? <ScopeColumnCard key={col.id} col={col} idx={idx} onChange={updateCol} onRemove={removeCol} dimensions={dimensions} dateDims={dateDims} dimValuesCache={dimValuesCache}/>
                       : <VarianceColumnCard key={col.id} col={col} idx={idx} onChange={updateCol} onRemove={removeCol} scopeCols={scopeCols}/>
                   ))}
                   {matrixCols.length === 0 && (
