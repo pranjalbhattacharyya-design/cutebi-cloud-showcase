@@ -742,9 +742,9 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
           ) : (
             <table className="w-full text-xs border-collapse" style={{ fontFamily: 'inherit' }}>
               <thead className="sticky top-0 z-10">
-                <tr style={{ background: 'var(--theme-header-bg)', borderBottom: '2px solid var(--theme-border)' }}>
+                <tr style={{ background: 'var(--theme-header-bg)' }}>
                   {/* First column — editable row header label */}
-                  <th className="text-left px-3 py-2 font-black t-text-muted" style={{ fontSize: '10px', background: 'var(--theme-header-bg)' }}>
+                  <th className="text-left px-3 py-2 font-black t-text-muted" style={{ fontSize: '12px', background: 'var(--theme-header-bg)', border: '1px solid rgba(0,0,0,0.05)' }}>
                     <span
                       contentEditable
                       suppressContentEditableWarning
@@ -757,7 +757,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                     const baseLabel = col.type === 'variance' ? (matrixColLabels[col.id] ?? col.label) : h?.baseLabel;
                     const dateRange = h?.dateRange;
                     return (
-                      <th key={col.id} className="text-right px-3 py-2 font-black t-text-muted min-w-[100px]" style={{ fontSize: '10px', background: 'var(--theme-header-bg)' }}>
+                      <th key={col.id} className="text-right px-3 py-2 font-black t-text-muted" style={{ fontSize: '12px', background: 'var(--theme-header-bg)', border: '1px solid rgba(0,0,0,0.05)' }}>
                         <div className="flex flex-col items-end gap-px">
                           <span
                             contentEditable
@@ -786,13 +786,12 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
 
                   return (
                     <React.Fragment key={cat}>
-                      {/* Category header row — muted navy style */}
+                      {/* Category header row — plain white background, faint cell borders */}
                       <tr
-                        className="cursor-pointer select-none transition-colors"
-                        style={{ background: 'var(--theme-accent, #3b5bdb)10', borderBottom: '1px solid var(--theme-border)' }}
+                        className="cursor-pointer select-none transition-colors hover:bg-black/5"
                         onClick={() => setExpandedCategories(prev => ({ ...prev, [cat]: !prev[cat] }))}
                       >
-                        <td className="px-3 py-2 font-black t-text-main" style={{ fontSize: '11px', background: 'rgba(0,0,0,0.04)' }}>
+                        <td className="px-3 py-2 font-black t-text-main" style={{ fontSize: '11px', border: '1px solid rgba(0,0,0,0.05)' }}>
                           <span className="flex items-center gap-1.5">
                             {isExpanded
                               ? <ChevronDown size={11} style={{ color: 'var(--theme-accent)' }}/>
@@ -807,7 +806,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                           return (
                             <td key={ci} className="text-right px-3 py-2 font-black tabular-nums" style={{
                               fontSize: '11px',
-                              background: 'rgba(0,0,0,0.04)',
+                              border: '1px solid rgba(0,0,0,0.05)',
                               color: isVar ? (isNeg ? '#e03131' : '#2f9e44') : 'var(--theme-text-main)'
                             }}>
                               {fmtVal(val, 'number', isVar && col?.varianceMode === '%')}
@@ -817,12 +816,8 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                       </tr>
                       {/* Child measure rows */}
                       {isExpanded && measures.map((m, mi) => (
-                        <tr key={m.id} style={{
-                          borderBottom: '1px solid var(--theme-border)',
-                          background: mi % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.015)'
-                        }}
-                        className="hover:bg-black/5 transition-colors">
-                          <td className="px-3 py-1.5 t-text-main font-medium" style={{ paddingLeft: '28px', fontSize: '11px' }}>
+                        <tr key={m.id} className="hover:bg-black/5 transition-colors">
+                          <td className="px-3 py-1.5 t-text-main font-medium" style={{ paddingLeft: '28px', fontSize: '11px', border: '1px solid rgba(0,0,0,0.05)' }}>
                             {m.label}
                           </td>
                           {allCols.map(col => {
@@ -832,6 +827,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                             return (
                               <td key={col.id} className="text-right px-3 py-1.5 tabular-nums" style={{
                                 fontSize: '11px',
+                                border: '1px solid rgba(0,0,0,0.05)',
                                 color: isVar ? (val == null ? 'var(--theme-text-muted)' : isNeg ? '#e03131' : '#2f9e44') : 'var(--theme-text-main)',
                                 fontWeight: isVar ? 600 : 400
                               }}>
