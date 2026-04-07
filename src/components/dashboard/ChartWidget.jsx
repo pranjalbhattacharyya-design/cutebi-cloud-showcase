@@ -52,7 +52,7 @@ const WrappedLabel = (props) => {
   const lx = isBBox ? x + width / 2 : x;
   const ly = isBBox ? (topLabel ? y : y + height / 2) : y;
   const baseline = (isBBox && !topLabel) ? 'middle' : 'auto';
-  const dy = topLabel ? -8 : (isBBox ? 0 : (textWrap && typeof value === 'string' && value.length >= 12 ? -10 : -14));
+  const dy = topLabel ? -14 : (isBBox ? 0 : (textWrap && typeof value === 'string' && value.length >= 12 ? -10 : -14));
 
   if (!textWrap || typeof value !== 'string' || value.length < 12) {
     return <text x={lx} y={ly} dy={dy} fill={fill} fontSize={fontSize} fontWeight={fontWeight} textAnchor="middle" dominantBaseline={baseline} style={haloStyle}>{value}</text>;
@@ -534,7 +534,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                         }
                         return <Cell key={idx} fill={fill} opacity={!isExploreMode && activeFilterVal.length > 0 && !activeFilterVal.includes(String(e.name)) ? 0.3 : 0.8} />;
                      })}
-                     {chart.showDataLabels && <LabelList dataKey="name" position="top" fill="var(--theme-text-muted)" fontSize={10} fontWeight="normal" content={(props) => getIntelligentLabelVisibility(props.index, scatterData, 'name') ? <WrappedLabel {...props} value={props.value} fill="var(--theme-text-muted)" fontWeight="normal" textWrap={textWrap} disableHalo={true} /> : null} />}
+                     {chart.showDataLabels && <LabelList dataKey="name" position="top" fill="var(--theme-text-muted)" fontSize={10} fontWeight="normal" content={(props) => getIntelligentLabelVisibility(props.index, scatterData, 'name') ? <WrappedLabel {...props} value={props.value} fill="var(--theme-text-muted)" fontWeight="normal" textWrap={textWrap} disableHalo={true} topLabel={true} /> : null} />}
                   </Scatter>
                </ScatterChart>
             </ResponsiveContainer>
@@ -579,7 +579,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
               {chart.legend && <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', color: 'var(--theme-text-main)' }} />}
                {legendKeys.map((k, i) => (
                  <Line key={k} type="linear" name={k === 'value' ? (semanticModel.find(m => m.id === chart.measure)?.label || chart.measure || 'Value') : k} dataKey={k} stroke={tColors[i % tColors.length]} strokeWidth={1.5} dot={{ r: 3, fill: tColors[i % tColors.length], strokeWidth: 0 }} activeDot={{ r: 5, onClick: (e, p) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, p.payload.name); } }} className={isExploreMode ? "" : "cursor-pointer"}>
-                   {chart.showDataLabels && <LabelList dataKey={k} position="top" fill="var(--theme-text-muted)" fontSize={10} fontWeight="normal" formatter={(v) => formatMeasVal(v, chart.measure, true)} content={(props) => getIntelligentLabelVisibility(props.index, data, k) ? <WrappedLabel {...props} value={formatMeasVal(props.value, chart.measure, true)} fill="var(--theme-text-muted)" fontWeight="normal" textWrap={textWrap} disableHalo={true} /> : null} />}
+                   {chart.showDataLabels && <LabelList dataKey={k} position="top" fill="var(--theme-text-muted)" fontSize={10} fontWeight="normal" formatter={(v) => formatMeasVal(v, chart.measure, true)} content={(props) => getIntelligentLabelVisibility(props.index, data, k) ? <WrappedLabel {...props} value={formatMeasVal(props.value, chart.measure, true)} fill="var(--theme-text-muted)" fontWeight="normal" textWrap={textWrap} disableHalo={true} topLabel={true} /> : null} />}
                  </Line>
               ))}
             </LineChart>
