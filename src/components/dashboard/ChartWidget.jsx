@@ -713,7 +713,26 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
       setShowBuilder(true);
     };
 
-    const isTall = chart.verticalSize === 'tall';
+    const toggleHeight = (e) => {
+      e.stopPropagation();
+      setDashboards(p => ({
+        ...p,
+        [activePageId]: (p[activePageId] || []).map(c => {
+          if (c.id === chart.id) {
+            const nextSize = c.verticalSize === 'tall' ? 'xl' : (c.verticalSize === 'xl' ? 'normal' : 'tall');
+            return { ...c, verticalSize: nextSize };
+          }
+          return c;
+        })
+      }));
+    };
+
+    const getWidgetHeight = () => {
+      if (isExploreMode) return '200px';
+      if (chart.verticalSize === 'xl') return '600px';
+      if (chart.verticalSize === 'tall') return '400px';
+      return '200px'; // normal
+    };
 
     return (
       <div key={chart.id} className={`${isExploreMode ? 'bg-black/5 w-full mt-2' : 't-panel'} shadow-sm border t-border flex flex-col hover:shadow-md transition-all duration-300 ${
@@ -727,7 +746,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
             {!isExploreMode && !isViewer && (
               <>
                 <button onClick={handleEdit} className="hover:opacity-70" title="Edit Visual"><Pencil size={13}/></button>
-                <button onClick={() => setDashboards(p => ({...p, [activePageId]: (p[activePageId]||[]).map(c => c.id===chart.id?{...c,verticalSize:c.verticalSize==='tall'?'normal':'tall'}:c)}))} className="hover:opacity-70" title="Toggle Height"><ArrowUpDown size={14}/></button>
+                <button onClick={toggleHeight} className="hover:opacity-70" title="Toggle Height"><ArrowUpDown size={14}/></button>
                 <button onClick={() => setDashboards(p => ({...p, [activePageId]: (p[activePageId]||[]).map(c => c.id===chart.id?{...c,size:(!c.size||c.size==='half')?'third':(c.size==='third'?'full':'half')}:c)}))} className="hover:opacity-70" title="Toggle Width"><Maximize2 size={14}/></button>
                 <button onClick={() => setDashboards(p => ({...p, [activePageId]: (p[activePageId]||[]).filter(c => c.id!==chart.id)}))} className="hover:opacity-70" title="Remove"><X size={14}/></button>
               </>
@@ -736,7 +755,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
         </div>
 
         {/* Scrollable table body — explicit height enables toggle */}
-        <div className="overflow-y-auto transition-all duration-300" style={{ height: isTall ? '520px' : '260px' }}>
+        <div className="overflow-y-auto transition-all duration-300" style={{ height: getWidgetHeight() }}>
           {matrixLoading ? (
             <div className="flex items-center justify-center h-20 t-text-muted text-xs">Loading matrix data…</div>
           ) : (
@@ -920,7 +939,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                     });
                     setShowBuilder(true);
                 }} className="hover:opacity-70" title="Edit Visual"><Pencil size={14}/></button>}
-                {!isViewer && <button onClick={() => setDashboards(p => ({...p, [activePageId]: (p[activePageId] || []).map(c => c.id === chart.id ? { ...c, verticalSize: c.verticalSize === 'tall' ? 'normal' : 'tall' } : c)}))} className="hover:opacity-70" title="Toggle Height"><ArrowUpDown size={14} /></button>}
+                {!isViewer && <button onClick={toggleHeight} className="hover:opacity-70" title="Toggle Height"><ArrowUpDown size={14} /></button>}
                 {!isViewer && <button onClick={() => setDashboards(p => ({...p, [activePageId]: (p[activePageId] || []).map(c => c.id === chart.id ? { ...c, size: (!c.size || c.size === 'half') ? 'third' : (c.size === 'third' ? 'full' : 'half') } : c)}))} className="hover:opacity-70" title="Toggle Width"><Maximize2 size={14} /></button>}
                 {!isViewer && <button onClick={() => setDashboards(p => ({...p, [activePageId]: (p[activePageId] || []).filter(c => c.id !== chart.id)}))} className="hover:opacity-70" title="Remove Visual"><X size={16} /></button>}
               </>
@@ -928,7 +947,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
         </div>
       </div>
      
-      <div className="w-full flex items-center justify-center transition-all duration-300 overflow-hidden" style={{ height: isExploreMode ? '200px' : (chart.verticalSize === 'tall' ? '400px' : '200px') }}>
+      <div className="w-full flex items-center justify-center transition-all duration-300 overflow-hidden" style={{ height: getWidgetHeight() }}>
          {content}
       </div>
     </div>
