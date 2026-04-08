@@ -136,11 +136,16 @@ export const useDataEngine = () => {
   }, [datasets]);
 
   // --- Dynamic CTE Generator: BFS Join Traversal ---
-  const generateUnifiedCTE = useCallback((rootId = null) => {
+  const generateUnifiedCTE = useCallback((rootId = null, scopedToFactOnly = false) => {
     const startId = rootId || activeDatasetId;
     if (!startId) return "";
     const activeDs = datasets.find(d => d.id === startId);
     if (!activeDs) return "";
+
+    // Chasm Trap Guard: A secondary fact table has non-calculated measures and is NOT the root.
+    // When scopedToFactOnly=true, we stop BFS at their boundaries to prevent row fan-out.
+    const isSecondaryFact = (dsId) => dsId !== startId &&
+        (semanticModels[dsId] || []).some(f => f.type === 'measure' && !f.isCalculated);
 
     const baseTable = getCleanTableName(startId);
     const joinedTables = new Set([startId]);
@@ -164,6 +169,9 @@ export const useDataEngine = () => {
             const targetTable = getCleanTableName(targetId);
             
             if (!joinedTables.has(targetId)) {
+                // Stop BFS at secondary fact tables to prevent Chasm Trap fan-out
+                if (scopedToFactOnly && isSecondaryFact(targetId)) return;
+
                 joinedTables.add(targetId);
                 queue.push(targetId);
                 
@@ -187,14 +195,14 @@ export const useDataEngine = () => {
             detail: { 
                 type: 'success', 
                 category: 'Join Trace', 
-                message: `Unified Model Active: [${Array.from(joinedTables).map(id => datasets.find(d=>d.id===id)?.name || id).join(' -> ')}]`,
-                details: { tableCount: joinedTables.size, joins: joinStrings.length }
+                message: `Unified Model Active: [${Array.from(joinedTables).map(id => datasets.find(d=>d.id===id)?.name || id).join(' -> ')}]${scopedToFactOnly ? ' [Fact-Scoped]' : ''}`,
+                details: { tableCount: joinedTables.size, joins: joinStrings.length, scopedToFactOnly }
             } 
         }));
     }
 
     return sql;
-  }, [activeDatasetId, relationships, getCleanTableName, datasets]);
+  }, [activeDatasetId, relationships, getCleanTableName, datasets, semanticModels]);
 
   const updateSemanticModel = useCallback((datasetId, updatedModel) => {
     setSemanticModels(prev => ({ ...prev, [datasetId]: updatedModel }));
@@ -218,12 +226,14 @@ export const useDataEngine = () => {
 
 
   // --- SQL Generator Helper: Unified Approach ---
-  const generateSQL = useCallback((datasetId, dimensions = [], measures = [], filters = [], limit = null) => {
+  const generateSQL = useCallback((datasetId, dimensions = [], measures = [], filters = [], limit = null, scopedFactId = null) => {
     const activeJoinGroup = getJoinGroup(activeDatasetId);
     const isMasterView = activeJoinGroup.includes(datasetId);
     const activeDs = datasets.find(d => d.id === datasetId);
     const sourceTable = isMasterView ? "ds_unified" : (activeDs?.tableName || datasetId);
-    const ctePrefix = isMasterView ? generateUnifiedCTE(datasetId) : "";
+    // scopedFactId: when set, CTE is built from this fact's roots only (Chasm Trap fix)
+    const cteRootId = scopedFactId || datasetId;
+    const ctePrefix = isMasterView ? generateUnifiedCTE(cteRootId, !!scopedFactId) : "";
 
     window.dispatchEvent(new CustomEvent('mvantage-debug', { 
       detail: { 
@@ -481,44 +491,119 @@ export const useDataEngine = () => {
 
   const getPivotData = useCallback(async (datasetId, rowDims, colDims, measureIds) => {
      if (!datasetId || !rowDims?.length || !measureIds?.length) return { rowKeys: [], colKeys: [], matrix: {} };
-     const sql = generateSQL(datasetId, [...(rowDims || []), ...(colDims || [])], measureIds);
-     try {
-       const results = await queryDuckDB(sql);
-       const matrix = {};
-       const colKeysSet = new Set();
-       const rowKeysSet = new Set();
-       results.forEach(row => {
-          const rowKey = rowDims.map(d => row[d]).join(' | ');
-          const baseColKey = colDims?.length ? colDims.map(d => row[d]).join(' | ') : 'All';
-          rowKeysSet.add(rowKey);
-          if (!matrix[rowKey]) matrix[rowKey] = {};
-          measureIds.forEach(mId => {
-             const fullColKey = measureIds.length > 1 ? `${baseColKey} | ${mId}` : baseColKey;
-             colKeysSet.add(fullColKey);
-             matrix[rowKey][fullColKey] = row[mId];
-          });
+
+     const allDims = [...(rowDims || []), ...(colDims || [])];
+     const joinGroup = getJoinGroup(activeDatasetId || datasetId);
+     const isFactTable = (dsId) => (semanticModels[dsId] || []).some(f => f.type === 'measure' && !f.isCalculated);
+
+     // Group measures by source fact table
+     const measuresByFact = new Map();
+     (measureIds || []).forEach(measId => {
+       let originFact = datasetId;
+       for (const dsId of joinGroup) {
+         const found = (semanticModels[dsId] || []).find(f => f.id.toLowerCase() === measId.toLowerCase() && !f.isCalculated);
+         if (found) { originFact = dsId; break; }
+       }
+       if (!measuresByFact.has(originFact)) measuresByFact.set(originFact, []);
+       measuresByFact.get(originFact).push(measId);
+     });
+
+     const buildMatrix = (results, factMeasures) => {
+       const matrix = {}; const colKeysSet = new Set(); const rowKeysSet = new Set();
+       (results || []).forEach(row => {
+         const rowKey = rowDims.map(d => row[d]).join(' | ');
+         const baseColKey = colDims?.length ? colDims.map(d => row[d]).join(' | ') : 'All';
+         rowKeysSet.add(rowKey);
+         if (!matrix[rowKey]) matrix[rowKey] = {};
+         factMeasures.forEach(mId => {
+           const fullColKey = measureIds.length > 1 ? `${baseColKey} | ${mId}` : baseColKey;
+           colKeysSet.add(fullColKey);
+           matrix[rowKey][fullColKey] = row[mId];
+         });
        });
+       return { rowKeysSet, colKeysSet, matrix };
+     };
+
+     try {
+       if (measuresByFact.size > 1) {
+         // Multi-fact: issue isolated queries per fact, merge matrices
+         const mergedMatrix = {}; const allRowKeys = new Set(); const allColKeys = new Set();
+         for (const [factId, factMeasures] of measuresByFact) {
+           const isSecondary = factId !== datasetId;
+           const sql = generateSQL(datasetId, allDims, factMeasures, [], null, isSecondary ? factId : null);
+           const results = await queryDuckDB(sql) || [];
+           const { rowKeysSet, colKeysSet, matrix } = buildMatrix(results, factMeasures);
+           rowKeysSet.forEach(k => allRowKeys.add(k));
+           colKeysSet.forEach(k => allColKeys.add(k));
+           Object.entries(matrix).forEach(([rk, cols]) => {
+             if (!mergedMatrix[rk]) mergedMatrix[rk] = {};
+             Object.assign(mergedMatrix[rk], cols);
+           });
+         }
+         return { rowKeys: Array.from(allRowKeys).sort(), colKeys: Array.from(allColKeys).sort(), matrix: mergedMatrix };
+       }
+
+       // Single fact: existing path
+       const sql = generateSQL(datasetId, allDims, measureIds);
+       const results = await queryDuckDB(sql);
+       const { rowKeysSet, colKeysSet, matrix } = buildMatrix(results, measureIds);
        return { rowKeys: Array.from(rowKeysSet).sort(), colKeys: Array.from(colKeysSet).sort(), matrix };
      } catch (e) { console.error("Pivot Error:", e); throw e; }
-  }, [generateSQL]);
+  }, [generateSQL, getJoinGroup, activeDatasetId, semanticModels]);
 
   const getTableData = useCallback(async (datasetId, dimensions, measures) => {
      if (!datasetId || (!dimensions?.length && !measures?.length)) return { headers: [], headerIds: [], rows: [] };
-     const sql = generateSQL(datasetId, dimensions, measures);
-     const sm = semanticModels[datasetId] || [];
+
+     const resolveLabel = (id) => {
+         const bareId = id.includes('::') ? id.split('::')[1] : id;
+         const allSemanticFields = Object.values(semanticModels).flat();
+         const match = allSemanticFields.find(x => x.id.toLowerCase() === bareId.toLowerCase());
+         return match ? match.label : bareId;
+     };
+
+     const joinGroup = getJoinGroup(activeDatasetId || datasetId);
+
+     // Group measures by source fact table (Chasm Trap detection)
+     const measuresByFact = new Map();
+     (measures || []).forEach(measId => {
+       let originFact = datasetId;
+       for (const dsId of joinGroup) {
+         const found = (semanticModels[dsId] || []).find(f => f.id.toLowerCase() === measId.toLowerCase() && !f.isCalculated);
+         if (found) { originFact = dsId; break; }
+       }
+       if (!measuresByFact.has(originFact)) measuresByFact.set(originFact, []);
+       measuresByFact.get(originFact).push(measId);
+     });
+
+     const headers = [...(dimensions || []).map(resolveLabel), ...(measures || []).map(resolveLabel)];
+     const headerIds = [...(dimensions || []), ...(measures || [])];
+
      try {
+       if (measuresByFact.size > 1) {
+         // Multi-fact: issue isolated query per fact, merge rows by dimension key
+         const mergedByKey = new Map();
+         for (const [factId, factMeasures] of measuresByFact) {
+           const isSecondary = factId !== datasetId;
+           const sql = generateSQL(datasetId, dimensions, factMeasures, [], null, isSecondary ? factId : null);
+           const rows = await queryDuckDB(`${sql} LIMIT 100`) || [];
+           rows.forEach(row => {
+             const dimKey = (dimensions || []).map(d => String(row[d] ?? '')).join('\x00');
+             if (!mergedByKey.has(dimKey)) {
+               mergedByKey.set(dimKey, { ...Object.fromEntries((dimensions || []).map(d => [d, row[d]])) });
+             }
+             factMeasures.forEach(m => { mergedByKey.get(dimKey)[m] = row[m]; });
+           });
+         }
+         return { headers, headerIds, rows: Array.from(mergedByKey.values()) };
+       }
+
+       // Single fact: existing path
+       const sql = generateSQL(datasetId, dimensions, measures);
        const rows = await queryDuckDB(`${sql} LIMIT 100`) || [];
-       const resolveLabel = (id) => {
-           const bareId = id.includes('::') ? id.split('::')[1] : id;
-           const allSemanticFields = Object.values(semanticModels).flat();
-           const match = allSemanticFields.find(x => x.id.toLowerCase() === bareId.toLowerCase());
-           return match ? match.label : bareId;
-       };
-       const headers = [...(dimensions || []).map(resolveLabel), ...(measures || []).map(resolveLabel)];
-       const headerIds = [...(dimensions || []), ...(measures || [])];
        return { headers, headerIds, rows };
      } catch (e) { console.error("Table Error:", e); throw e; }
-  }, [generateSQL, semanticModels, datasets]);
+  }, [generateSQL, semanticModels, datasets, getJoinGroup, activeDatasetId]);
+
 
   const getScatterData = useCallback(async (datasetId, dimensionId, xMeas, yMeas, cMeas, sMeas) => {
     if (!datasetId || !dimensionId || !xMeas || !yMeas) return [];
