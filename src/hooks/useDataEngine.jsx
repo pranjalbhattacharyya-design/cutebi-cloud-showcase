@@ -844,8 +844,33 @@ export const useDataEngine = () => {
           }
           return 'TRUE';
         });
+
         allConds.push(`(${fp.join(` ${f.filterLogic || 'AND'} `)})`);
       }
+      if (f.timeConfig && f.timeConfig.enabled && f.timeConfig.dateDimensionId) {
+        const dateCol = `SAFE_CAST(\`${sourceTable}\`.\`${f.timeConfig.dateDimensionId}\` AS DATE)`;
+        const baseKey = `${f.originDatasetId || datasetId}::${f.timeConfig.dateDimensionId}`;
+        const mdc = maxDatesCacheRef.current?.[baseKey];
+        let refDateStr = new Date().toISOString().split('T')[0];
+        if (mdc && /^\d{4}-\d{2}-\d{2}$/.test(String(mdc))) refDateStr = String(mdc);
+        const refDate = `CAST('${refDateStr}' AS DATE)`;
+        const _now = new Date(); 
+        const todayStr = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}-${String(_now.getDate()).padStart(2,'0')}`;
+        const staticRef = `CAST('${todayStr}' AS DATE)`;
+        const fyRow = `(CASE WHEN EXTRACT(MONTH FROM ${dateCol}) >= 4 THEN EXTRACT(YEAR FROM ${dateCol}) + 1 ELSE EXTRACT(YEAR FROM ${dateCol}) END)`;
+        const fyRefStatic = `(CASE WHEN EXTRACT(MONTH FROM ${staticRef}) >= 4 THEN EXTRACT(YEAR FROM ${staticRef}) + 1 ELSE EXTRACT(YEAR FROM ${staticRef}) END)`;
+        const mo = `EXTRACT(MONTH FROM ${dateCol})`;
+        const moRefStatic = `EXTRACT(MONTH FROM ${staticRef})`;
+
+        switch (f.timeConfig.period) {
+          case 'YTD':   allConds.push(`(${fyRow} = ${fyRefStatic} AND ${dateCol} <= ${staticRef})`); break;
+          case 'LYYTD': allConds.push(`(${fyRow} = ${fyRefStatic} - 1 AND ${dateCol} <= ${staticRef} - INTERVAL 1 YEAR)`); break;
+          case 'MTD':   allConds.push(`(${fyRow} = ${fyRefStatic} AND ${mo} = ${moRefStatic} AND ${dateCol} <= ${staticRef})`); break;
+          case 'LY':    allConds.push(`(${fyRow} = ${fyRefStatic} - 1)`); break;
+          case 'DYTD':  allConds.push(`(${fyRow} = (CASE WHEN EXTRACT(MONTH FROM ${refDate}) >= 4 THEN EXTRACT(YEAR FROM ${refDate}) + 1 ELSE EXTRACT(YEAR FROM ${refDate}) END) AND ${dateCol} <= ${refDate})`); break;
+        }
+      }
+
       if (!f.isCalculated) {
         const col_ref = `\`${sourceTable}\`.\`${f.id}\``;
         const agg = f.aggType === 'countDistinct' ? 'COUNT(DISTINCT ' : (f.aggType === 'count' ? 'COUNT(' : `${(f.aggType || 'SUM').toUpperCase()}(`);
