@@ -240,7 +240,9 @@ export const useDataEngine = () => {
 
   const resolveMeasureOrigin = useCallback((measId, factTablesInGroup, defaultFactId) => {
     for (const dsId of factTablesInGroup) {
-      const found = (semanticModels[dsId] || []).find(f => f.id.toLowerCase() === measId.toLowerCase() && !f.isCalculated);
+      // Find the measure in any semantic model within the join group.
+      // We no longer skip calculated measures, as they still "belong" to the fact they were created in.
+      const found = (semanticModels[dsId] || []).find(f => f.id.toLowerCase() === measId.toLowerCase());
       if (found) return dsId;
     }
     return defaultFactId;
