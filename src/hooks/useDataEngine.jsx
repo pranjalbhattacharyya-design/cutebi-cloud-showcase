@@ -239,13 +239,64 @@ export const useDataEngine = () => {
   }, [getJoinGroup, semanticModels]);
 
   const resolveMeasureOrigin = useCallback((measId, factTablesInGroup, defaultFactId) => {
+    const measIdLower = String(measId || '').toLowerCase();
+    
+    // 1. Initial Match: Find the measure in the semantic models
+    let foundMeasure = null;
+    let fallbackDsId = defaultFactId;
+
     for (const dsId of factTablesInGroup) {
-      // Find the measure in any semantic model within the join group.
-      // We no longer skip calculated measures, as they still "belong" to the fact they were created in.
-      const found = (semanticModels[dsId] || []).find(f => f.id.toLowerCase() === measId.toLowerCase());
-      if (found) return dsId;
+      const match = (semanticModels[dsId] || []).find(f => f.id.toLowerCase() === measIdLower);
+      if (match) {
+        foundMeasure = match;
+        fallbackDsId = dsId;
+        break;
+      }
     }
-    return defaultFactId;
+
+    // 2. Smart Grain Peeking: If calculated, analyze its dependencies to find the true grain
+    if (foundMeasure?.isCalculated && foundMeasure.expression) {
+      const matches = foundMeasure.expression.match(/\[(.*?)\]/g) || [];
+      const dependencies = matches.map(m => m.slice(1, -1).toLowerCase());
+      
+      if (dependencies.length > 0) {
+          const factCounts = {};
+          dependencies.forEach(depId => {
+              for (const dsId of factTablesInGroup) {
+                  // Check if this fact owns the underlying physical column
+                  const isOwner = (semanticModels[dsId] || []).some(f => f.id.toLowerCase() === depId && !f.isCalculated);
+                  if (isOwner) {
+                      factCounts[dsId] = (factCounts[dsId] || 0) + 1;
+                      break;
+                  }
+              }
+          });
+
+          // Route to the fact that owns the majority of the underlying columns
+          const mostFrequentFact = Object.entries(factCounts).sort((a,b) => b[1] - a[1])[0];
+          if (mostFrequentFact) {
+              window.dispatchEvent(new CustomEvent('mvantage-debug', { 
+                  detail: { 
+                      type: 'success', 
+                      category: 'Grain Trace', 
+                      message: `Self-Healed: Routing '${measId}' to '${mostFrequentFact[0]}'`,
+                      details: { reason: `Depends on: ${dependencies.join(', ')}` }
+                  } 
+              }));
+              return mostFrequentFact[0];
+          }
+      }
+    }
+
+    // 3. Fallback: If not found in any model, search for raw column matches
+    if (!foundMeasure) {
+        for (const dsId of factTablesInGroup) {
+            const isBaseField = (semanticModels[dsId] || []).some(f => f.id.toLowerCase() === measIdLower && !f.isCalculated);
+            if (isBaseField) return dsId;
+        }
+    }
+
+    return fallbackDsId;
   }, [semanticModels]);
 
 
