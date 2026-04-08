@@ -76,7 +76,7 @@ const DashboardSlicer = React.memo(({ slicer, globalFilters, setGlobalFilterArra
             ) : (
                 <div className="flex-1 flex flex-col gap-1">
                     <div className="flex justify-between items-center px-1">
-                        <span className="text-[10px] font-black t-text-muted uppercase tracking-wider">{slicer.title}</span>
+                        <span className="text-[10px] font-black t-text-muted tracking-wider">{slicer.title}</span>
                         <button onClick={() => {setEditingSlicerId(slicer.id); setEditingSlicerTitle(slicer.title);}} className="opacity-0 group-hover:opacity-100 p-1 t-text-muted hover:t-accent transition-all">
                             <Pencil size={10}/>
                         </button>
@@ -259,7 +259,7 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
                                 className={`px-4 py-1 text-[10px] font-black tracking-wide transition-all ${activePageId === p.id ? 't-panel t-text-main shadow-sm' : 't-text-muted hover:t-text-main'}`} 
                                 style={{ borderRadius: 'var(--theme-radius-button)' }}
                               >
-                                  {p.name.toUpperCase()}
+                                  {p.name}
                               </button>
                             )}
                         </div>

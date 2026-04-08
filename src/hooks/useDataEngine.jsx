@@ -509,14 +509,10 @@ export const useDataEngine = () => {
      try {
        const rows = await queryDuckDB(`${sql} LIMIT 100`) || [];
        const resolveLabel = (id) => {
-           const localField = sm.find(x => x.id === id);
-           if (localField) return localField.label;
-           if (id.includes('::')) {
-               const [oDsId, oFId] = id.split('::');
-               const ds = datasets.find(d => d.id === oDsId);
-               return ds ? `${oFId} (${ds.name})` : oFId;
-           }
-           return id;
+           const bareId = id.includes('::') ? id.split('::')[1] : id;
+           const allSemanticFields = Object.values(semanticModels).flat();
+           const match = allSemanticFields.find(x => x.id === bareId);
+           return match ? match.label : bareId;
        };
        const headers = [...(dimensions || []).map(resolveLabel), ...(measures || []).map(resolveLabel)];
        const headerIds = [...(dimensions || []), ...(measures || [])];
