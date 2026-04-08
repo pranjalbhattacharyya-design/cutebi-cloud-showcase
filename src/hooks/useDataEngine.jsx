@@ -748,6 +748,7 @@ export const useDataEngine = () => {
 
 
   // --- KPI Matrix Data Fetcher ---
+  // --- KPI Matrix Data Fetcher ---
   const getMatrixData = useCallback(async (chart) => {
     const { matrixMeasures = [], matrixColumns = [], datasetId } = chart;
     const scopeCols = matrixColumns.filter(c => c.type === 'scope');
@@ -755,21 +756,26 @@ export const useDataEngine = () => {
 
     const factTablesInGroup = getFactTablesInGroup(activeDatasetId || datasetId);
     const isMultiFactModel = factTablesInGroup.length > 1;
-
-    // Determine target scoping for this matrix: if all measures belong to one fact, scope it.
-    let targetFactId = datasetId;
-    const origins = new Set();
-    matrixMeasures.forEach(m => origins.add(resolveMeasureOrigin(m, factTablesInGroup, datasetId)));
-    if (origins.size === 1) targetFactId = Array.from(origins)[0];
-
-    const isMasterView = factTablesInGroup.length > 0; // Simplified multi-table check
+    const activeJoinGroup = getJoinGroup(activeDatasetId);
+    const isMasterView = factTablesInGroup.length > 0;
     const activeDs = datasets.find(d => d.id === datasetId);
     const sourceTable = isMasterView ? 'ds_unified' : (activeDs?.tableName || datasetId);
-    
-    // Use scoped CTE if multi-fact model to prevent fan-out
-    const ctePrefix = isMasterView ? generateUnifiedCTE(targetFactId, isMultiFactModel) : '';
 
-    // Build outer WHERE from global slicers
+    // [DIAGNOSTIC] Log measure routing
+    const measuresByFact = new Map();
+    const routingDetails = {};
+    matrixMeasures.forEach(measId => {
+      const originFact = resolveMeasureOrigin(measId, factTablesInGroup, datasetId);
+      if (!measuresByFact.has(originFact)) measuresByFact.set(originFact, []);
+      measuresByFact.get(originFact).push(measId);
+      routingDetails[measId] = originFact;
+    });
+
+    window.dispatchEvent(new CustomEvent('mvantage-debug', { 
+        detail: { type: 'info', category: 'Matrix', message: 'KPI Matrix routing resolved', details: { routing: routingDetails } } 
+    }));
+
+    // Build outer WHERE from global slicers (shared across all batches)
     const slicerParts = [];
     Object.entries(globalFilters).forEach(([originKey, vals]) => {
       if (!vals || vals.length === 0) return;
@@ -784,8 +790,6 @@ export const useDataEngine = () => {
     // Helper: build CASE WHEN condition string for one scope column
     const buildScopeCondition = (col) => {
       const parts = [];
-
-      // Filter context
       (col.filters || []).forEach(filt => {
         if (!filt.dimensionId || filt.value === '') return;
         const col_ref = `\`${sourceTable}\`.\`${filt.dimensionId}\``;
@@ -794,13 +798,10 @@ export const useDataEngine = () => {
         else if (filt.operator === '!=') parts.push(`CAST(${col_ref} AS STRING) <> '${val}'`);
         else if (filt.operator === 'contains') parts.push(`LOWER(CAST(${col_ref} AS STRING)) LIKE LOWER('%${val}%')`);
         else if (filt.operator === 'IN') {
-          const items = val.split(',').map(v => `'${v.trim().replace(/'/g,"''")}'`).join(',');
+          const items = (Array.isArray(filt.value) ? filt.value : String(filt.value).split(',')).map(v => `'${String(v).trim().replace(/'/g,"''")}'`).join(',');
           parts.push(`CAST(${col_ref} AS STRING) IN (${items})`);
         }
       });
-      const filterLogic = col.filterLogic || 'AND';
-
-      // Time intelligence
       if (col.timeConfig?.enabled && col.timeConfig?.dateDimensionId) {
         const dateCol = `SAFE_CAST(\`${sourceTable}\`.\`${col.timeConfig.dateDimensionId}\` AS DATE)`;
         const _now = new Date();
@@ -818,12 +819,9 @@ export const useDataEngine = () => {
           default: break;
         }
       }
-
-      return parts.length > 0 ? parts.join(` ${filterLogic} `) : 'TRUE';
+      return parts.length > 0 ? parts.join(` ${col.filterLogic || 'AND'} `) : 'TRUE';
     };
 
-    // Helper: resolve a measure to its SQL expression with optional extra filter conditions
-    // Mirrors the resolveMeasureSQL logic from generateSQL to handle calculated measures.
     const buildMeasureExpr = (measId, extraConditions = []) => {
       let f = null;
       for (const dsId of activeJoinGroup) {
@@ -831,10 +829,7 @@ export const useDataEngine = () => {
         if (f) break;
       }
       if (!f) return `SUM(\`${sourceTable}\`.\`${measId}\`)`;
-
       const allConds = [...extraConditions];
-
-      // Collect the measure's own filter context
       if (f.filters && f.filters.length > 0) {
         const fp = f.filters.map(filt => {
           if (!filt.dimensionId) return 'TRUE';
@@ -844,104 +839,101 @@ export const useDataEngine = () => {
           if (filt.operator === '!=') return `CAST(${col_ref} AS STRING) <> '${val}'`;
           if (filt.operator === 'contains') return `LOWER(CAST(${col_ref} AS STRING)) LIKE LOWER('%${val}%')`;
           if (filt.operator === 'IN') {
-            const items = (Array.isArray(filt.value) ? filt.value : String(filt.value).split(','))
-              .map(v => `'${String(v).trim().replace(/'/g, "''")}' `).join(', ');
+            const items = (Array.isArray(filt.value) ? filt.value : String(filt.value).split(',')).map(v => `'${String(v).trim().replace(/'/g, "''")}' `).join(', ');
             return `CAST(${col_ref} AS STRING) IN (${items})`;
           }
           return 'TRUE';
         });
         allConds.push(`(${fp.join(` ${f.filterLogic || 'AND'} `)})`);
       }
-
       if (!f.isCalculated) {
         const col_ref = `\`${sourceTable}\`.\`${f.id}\``;
         const agg = f.aggType === 'countDistinct' ? 'COUNT(DISTINCT ' : (f.aggType === 'count' ? 'COUNT(' : `${(f.aggType || 'SUM').toUpperCase()}(`);
         if (allConds.length > 0) return `${agg}CASE WHEN ${allConds.join(' AND ')} THEN ${col_ref} ELSE NULL END)`;
         return `${agg}${col_ref})`;
       } else {
-        // Calculated measure: expand the expression with conditions threaded in recursively
         if (!f.expression) return 'NULL';
         let evalStr = f.expression;
         const matches = evalStr.match(/\[(.*?)\]/g) || [];
         for (const match of matches) {
-          const innerId = match.slice(1, -1);
-          const innerSQL = buildMeasureExpr(innerId, allConds);
-          evalStr = evalStr.replace(match, `COALESCE(CAST((${innerSQL}) AS FLOAT64), 0)`);
+            const innerId = match.slice(1, -1);
+            const innerSQL = buildMeasureExpr(innerId, allConds);
+            evalStr = evalStr.replace(match, `COALESCE(CAST((${innerSQL}) AS FLOAT64), 0)`);
         }
         return `(${evalStr})`;
       }
     };
 
-    // For each measure × scope column, generate aggregate expression + date bounds
-    const selectParts = [];
-    scopeCols.forEach(col => {
-      const condition = buildScopeCondition(col);
-      const safeColId = col.id.replace(/[^a-zA-Z0-9_]/g, '_');
-      const conditionParts = condition === 'TRUE' ? [] : [condition];
+    // --- SCATTER-GATHER MATRIX ENGINE ---
+    const mergedResult = {};
+    const mergeStats = [];
 
-      matrixMeasures.forEach(measId => {
-        const safeMeasId = measId.replace(/[^a-zA-Z0-9_]/g, '_');
-        const resolvedExpr = buildMeasureExpr(measId, conditionParts);
-        selectParts.push(`${resolvedExpr} AS \`m_${safeMeasId}_${safeColId}\``);
-      });
+    for (const [scopedFactId, factMeasures] of measuresByFact) {
+        const ctePrefix = isMasterView ? generateUnifiedCTE(scopedFactId, isMultiFactModel) : '';
+        const selectParts = [];
+        
+        scopeCols.forEach(col => {
+            const condition = buildScopeCondition(col);
+            const safeColId = col.id.replace(/[^a-zA-Z0-9_]/g, '_');
+            const conditionParts = condition === 'TRUE' ? [] : [condition];
 
-      // Date bounds: always add MIN/MAX date for every scope column so headers show the date range.
-      // Prefer the time-intelligence date dim if configured, otherwise fall back to the first
-      // date-format field found in the semantic model for the join group.
-      const dateDimId = col.timeConfig?.enabled && col.timeConfig?.dateDimensionId
-        ? col.timeConfig.dateDimensionId
-        : (() => {
-            for (const dsId of activeJoinGroup) {
-              const dateFld = (semanticModels[dsId] || []).find(f => f.format === 'date' || f.type === 'date');
-              if (dateFld) return dateFld.id;
+            factMeasures.forEach(measId => {
+                const safeMeasId = measId.replace(/[^a-zA-Z0-9_]/g, '_');
+                const resolvedExpr = buildMeasureExpr(measId, conditionParts);
+                selectParts.push(`${resolvedExpr} AS \`m_${safeMeasId}_${safeColId}\``);
+            });
+
+            const dateDimId = col.timeConfig?.enabled && col.timeConfig?.dateDimensionId
+                ? col.timeConfig.dateDimensionId
+                : (() => {
+                    for (const dsId of activeJoinGroup) {
+                      const dateFld = (semanticModels[dsId] || []).find(f => f.format === 'date' || f.type === 'date');
+                      if (dateFld) return dateFld.id;
+                    }
+                    return null;
+                  })();
+            if (dateDimId) {
+                const dc = `SAFE_CAST(\`${sourceTable}\`.\`${dateDimId}\` AS DATE)`;
+                selectParts.push(`MIN(CASE WHEN (${condition}) THEN ${dc} END) AS \`start_${safeColId}\``);
+                selectParts.push(`MAX(CASE WHEN (${condition}) THEN ${dc} END) AS \`end_${safeColId}\``);
             }
-            return null;
-          })();
-      if (dateDimId) {
-        const dc = `SAFE_CAST(\`${sourceTable}\`.\`${dateDimId}\` AS DATE)`;
-        selectParts.push(`MIN(CASE WHEN (${condition}) THEN ${dc} END) AS \`start_${safeColId}\``);
-        selectParts.push(`MAX(CASE WHEN (${condition}) THEN ${dc} END) AS \`end_${safeColId}\``);
-      }
-    });
+        });
 
-    if (selectParts.length === 0) return null;
+        if (selectParts.length === 0) continue;
+        const sql = `${ctePrefix}SELECT ${selectParts.join(', ')} FROM \`${sourceTable}\`${whereClause}`;
 
-    const sql = `${ctePrefix}SELECT ${selectParts.join(', ')} FROM \`${sourceTable}\`${whereClause}`;
+        window.dispatchEvent(new CustomEvent('mvantage-debug', {
+            detail: { type: 'info', category: 'Matrix', message: `Batch SQL for ${scopedFactId}`, details: { sql } }
+        }));
+
+        try {
+            const response = await apiClient.post('/query', { sql });
+            const row = (response?.data || [])[0] || {};
+            mergeStats.push(`${scopedFactId}: ${Object.keys(row).length} cells`);
+            
+            // Merge into final result
+            Object.entries(row).forEach(([key, val]) => {
+                if (key.startsWith('start_')) {
+                    if (!mergedResult[key] || (val && val < mergedResult[key])) mergedResult[key] = val;
+                } else if (key.startsWith('end_')) {
+                    if (!mergedResult[key] || (val && val > mergedResult[key])) mergedResult[key] = val;
+                } else {
+                    mergedResult[key] = val;
+                }
+            });
+        } catch (err) {
+            console.error(`[Matrix Batch] Failed for ${scopedFactId}:`, err);
+        }
+    }
+
+    if (Object.keys(mergedResult).length === 0) return null;
 
     window.dispatchEvent(new CustomEvent('mvantage-debug', {
-      detail: { type: 'info', category: 'Matrix', message: 'KPI Matrix SQL Generated', details: { sql } }
+      detail: { type: 'success', category: 'Matrix', message: 'KPI Matrix merge complete', details: { stats: mergeStats.join(' | '), sample: mergedResult } }
     }));
 
-    try {
-      // Direct (non-batched) call so BigQuery errors are surfaced in debug panel
-      const response = await apiClient.post('/query', { sql });
-
-      if (response?.error) {
-        window.dispatchEvent(new CustomEvent('mvantage-debug', {
-          detail: { type: 'error', category: 'Matrix', message: `BigQuery error: ${response.error}`, details: { transformedSql: response.sql } }
-        }));
-        return null;
-      }
-
-      const rows = response?.data || [];
-      const row = rows[0] || null;
-      window.dispatchEvent(new CustomEvent('mvantage-debug', {
-        detail: { type: 'success', category: 'Matrix', message: 'KPI Matrix raw result', details: {
-          engine: response?.engine,
-          resultsLength: rows.length,
-          firstRowKeys: row ? Object.keys(row) : null,
-          firstRow: row
-        }}
-      }));
-      return row;
-    } catch (err) {
-      console.error('[getMatrixData] Query failed:', err);
-      window.dispatchEvent(new CustomEvent('mvantage-debug', {
-        detail: { type: 'error', category: 'Matrix', message: `Query exception: ${err.message}` }
-      }));
-      return null;
-    }
-  }, [activeDatasetId, datasets, semanticModels, globalFilters, getJoinGroup, generateUnifiedCTE]);
+    return mergedResult;
+  }, [activeDatasetId, datasets, semanticModels, globalFilters, getJoinGroup, generateUnifiedCTE, getFactTablesInGroup, resolveMeasureOrigin]);
 
   return {
     datasets,
