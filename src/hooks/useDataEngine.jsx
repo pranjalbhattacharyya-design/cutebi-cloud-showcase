@@ -188,8 +188,13 @@ export const useDataEngine = () => {
                 const sourceCol = isFrom ? rel.fromColumn : rel.toColumn;
                 const targetCol = isFrom ? rel.toColumn : rel.fromColumn;
                 
+                // --- Grain Hardening: Auto-detect Date/Time columns and cast to DATE for join safety ---
+                const isDate = (col) => col.toLowerCase().includes('date') || col.toLowerCase().includes('time');
+                const sourceExpr = isDate(sourceCol) ? `SAFE_CAST(\`${currentTableName}\`.\`${sourceCol}\` AS DATE)` : `\`${currentTableName}\`.\`${sourceCol}\``;
+                const targetExpr = isDate(targetCol) ? `SAFE_CAST(\`${targetTable}\`.\`${targetCol}\` AS DATE)` : `\`${targetTable}\`.\`${targetCol}\``;
+
                 selectItems.push(generateTableSelect(targetId));
-                joinStrings.push(` LEFT JOIN \`${targetTable}\` ON \`${currentTableName}\`.\`${sourceCol}\` = \`${targetTable}\`.\`${targetCol}\``);
+                joinStrings.push(` LEFT JOIN \`${targetTable}\` ON ${sourceExpr} = ${targetExpr}`);
             }
         });
     }
