@@ -551,8 +551,8 @@ export const AppStateProvider = ({ children }) => {
          
          model.forEach(f => {
              const fType = f.type || 'dimension';
-             const cleanLabel = (f.label || '').trim();
-             const key = cleanLabel.toLowerCase();
+             const cleanLabel = (f.label || '');
+             const key = cleanLabel.toLowerCase().trim();
              
              // Multi-pass Logic: If this is a calculated measure, it should ALWAYS take 
              // priority over a base field with the same name in the unified dictionary.

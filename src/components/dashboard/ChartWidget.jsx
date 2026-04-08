@@ -171,7 +171,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
       if (!fieldRef) return '';
       const bareId = String(fieldRef).includes('::') ? String(fieldRef).split('::')[1] : String(fieldRef);
       for (const model of Object.values(semanticModels)) {
-          const match = model.find(f => f.id === bareId);
+          const match = model.find(f => f.id.toLowerCase() === bareId.toLowerCase());
           if (match && match.label) return match.label;
       }
       return bareId;
@@ -519,7 +519,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                   const val = parts[levelIndex] || '';
                   return (
                       <th key={`${ck}-${levelIndex}`} colSpan={span} className="px-3 py-2.5 font-bold t-text-main text-center text-[12px]" style={{ whiteSpace: tWrap ? 'normal' : 'nowrap', border: '1px solid rgba(0,0,0,0.05)' }}>
-                          {levelIndex < (chart.pivotCols || []).length ? formatDimVal(val, chart.pivotCols[levelIndex]) : val}
+                          {levelIndex < (chart.pivotCols || []).length ? formatDimVal(val, chart.pivotCols[levelIndex]) : getDisplayLabel(val)}
                       </th>
                   );
               })}

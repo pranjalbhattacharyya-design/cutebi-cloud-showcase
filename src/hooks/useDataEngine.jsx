@@ -511,7 +511,7 @@ export const useDataEngine = () => {
        const resolveLabel = (id) => {
            const bareId = id.includes('::') ? id.split('::')[1] : id;
            const allSemanticFields = Object.values(semanticModels).flat();
-           const match = allSemanticFields.find(x => x.id === bareId);
+           const match = allSemanticFields.find(x => x.id.toLowerCase() === bareId.toLowerCase());
            return match ? match.label : bareId;
        };
        const headers = [...(dimensions || []).map(resolveLabel), ...(measures || []).map(resolveLabel)];
