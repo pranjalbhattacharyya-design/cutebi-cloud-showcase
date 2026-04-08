@@ -142,8 +142,6 @@ export const useDataEngine = () => {
     const activeDs = datasets.find(d => d.id === startId);
     if (!activeDs) return "";
 
-    // Chasm Trap Guard: A secondary fact table has non-calculated measures and is NOT the root.
-    // When scopedToFactOnly=true, we stop BFS at their boundaries to prevent row fan-out.
     const isSecondaryFact = (dsId) => dsId !== startId &&
         (semanticModels[dsId] || []).some(f => f.type === 'measure' && !f.isCalculated);
 
@@ -151,16 +149,28 @@ export const useDataEngine = () => {
     const joinedTables = new Set([startId]);
     const queue = [startId];
     
-    let selectItems = [`\`${baseTable}\`.*`];
-    let joinStrings = [];
-    const usedJoinKeys = new Set(); // Prevent duplicate join keys in select if possible
+    // Helper: Build SELECT clause with EXCEPT to avoid duplicate names in unified view
+    const generateTableSelect = (id, isRoot = false) => {
+        const tableName = getCleanTableName(id);
+        if (isRoot) return `\`${tableName}\`.*`;
+        
+        // Find which keys to EXCEPT (the join keys used in the entire graph for this table)
+        const tabRels = relationships.filter(r => r.fromDatasetId === id || r.toDatasetId === id);
+        const joinKeys = Array.from(new Set(tabRels.map(r => r.fromDatasetId === id ? r.fromColumn : r.toColumn)));
+        
+        if (joinKeys.length > 0) {
+            return `\`${tableName}\`.* EXCEPT (\`${joinKeys.join('`, `')}\`)`;
+        }
+        return `\`${tableName}\`.*`;
+    };
 
-    // Breadth-First Search to traverse the relationship graph starting from the active dataset
+    let selectItems = [generateTableSelect(startId, true)];
+    let joinStrings = [];
+    const visited = new Set([startId]);
+
     while (queue.length > 0) {
         const currentDsId = queue.shift();
         const currentTableName = getCleanTableName(currentDsId);
-        
-        // Find all relationships connected to the current table in our traversal
         const rels = relationships.filter(r => r.fromDatasetId === currentDsId || r.toDatasetId === currentDsId);
         
         rels.forEach(rel => {
@@ -168,20 +178,17 @@ export const useDataEngine = () => {
             const targetId = isFrom ? rel.toDatasetId : rel.fromDatasetId;
             const targetTable = getCleanTableName(targetId);
             
-            if (!joinedTables.has(targetId)) {
-                // Stop BFS at secondary fact tables to prevent Chasm Trap fan-out
+            if (!visited.has(targetId)) {
                 if (scopedToFactOnly && isSecondaryFact(targetId)) return;
 
+                visited.add(targetId);
                 joinedTables.add(targetId);
                 queue.push(targetId);
                 
                 const sourceCol = isFrom ? rel.fromColumn : rel.toColumn;
                 const targetCol = isFrom ? rel.toColumn : rel.fromColumn;
                 
-                // Add the table's data, excluding the join key to avoid naming collisions
-                selectItems.push(`\`${targetTable}\`.* EXCEPT (\`${targetCol}\`)`);
-                
-                // Construct the join back to the current table in the traversal path
+                selectItems.push(generateTableSelect(targetId));
                 joinStrings.push(` LEFT JOIN \`${targetTable}\` ON \`${currentTableName}\`.\`${sourceCol}\` = \`${targetTable}\`.\`${targetCol}\``);
             }
         });
@@ -189,17 +196,14 @@ export const useDataEngine = () => {
 
     const sql = `WITH ds_unified AS (SELECT ${selectItems.join(', ')} FROM \`${baseTable}\`${joinStrings.join('')}) `;
     
-    // --- Unified Model Debug Trace: Log the exact join path to the debug panel ---
-    if (joinStrings.length > 0) {
-        window.dispatchEvent(new CustomEvent('mvantage-debug', { 
-            detail: { 
-                type: 'success', 
-                category: 'Join Trace', 
-                message: `Unified Model Active: [${Array.from(joinedTables).map(id => datasets.find(d=>d.id===id)?.name || id).join(' -> ')}]${scopedToFactOnly ? ' [Fact-Scoped]' : ''}`,
-                details: { tableCount: joinedTables.size, joins: joinStrings.length, scopedToFactOnly }
-            } 
-        }));
-    }
+    window.dispatchEvent(new CustomEvent('mvantage-debug', { 
+        detail: { 
+            type: 'info', 
+            category: 'Join Trace', 
+            message: `Join Chain [${datasets.find(d=>d.id===startId)?.name || startId}]: ${Array.from(joinedTables).map(id => datasets.find(d=>d.id===id)?.name || id).join(' -> ')}`,
+            details: { tables: Array.from(joinedTables), joins: joinStrings.length, scopedToFactOnly }
+        } 
+    }));
 
     return sql;
   }, [activeDatasetId, relationships, getCleanTableName, datasets, semanticModels]);

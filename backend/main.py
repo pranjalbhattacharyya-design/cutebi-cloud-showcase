@@ -1108,11 +1108,22 @@ def run_query(query_request: dict, db: Session = Depends(database.get_db)):
 
         if ds_map:  # At least one BQ dataset is registered → use BQ
             bq_sql = sql
+            match_stats = []
             for friendly_name, bq_ref in ds_map.items():
+                found_from = f"FROM `{friendly_name}`" in bq_sql or f"FROM \"{friendly_name}\"" in bq_sql
+                found_join = f"JOIN `{friendly_name}`" in bq_sql or f"JOIN \"{friendly_name}\"" in bq_sql
+                
+                # Support both backtick and double-quote identifiers from various engines
                 bq_sql = bq_sql.replace(f"FROM `{friendly_name}`", f"FROM `{bq_ref}` AS `{friendly_name}`")
+                bq_sql = bq_sql.replace(f"FROM \"{friendly_name}\"", f"FROM `{bq_ref}` AS `{friendly_name}`")
                 bq_sql = bq_sql.replace(f"JOIN `{friendly_name}`", f"JOIN `{bq_ref}` AS `{friendly_name}`")
+                bq_sql = bq_sql.replace(f"JOIN \"{friendly_name}\"", f"JOIN `{bq_ref}` AS `{friendly_name}`")
+                
+                if found_from or found_join:
+                    match_stats.append(friendly_name)
 
-            print(f"[BQ Query] Transformed SQL (first 400 chars):\n{bq_sql[:400]}")
+            print(f"[BQ Query] Mapped tables: {match_stats if match_stats else 'NONE'}")
+            print(f"[BQ Query] Transformed SQL (excerpt):\n{bq_sql[:500]}")
             try:
                 from google.cloud import bigquery as _bq
                 job    = bq_client.query(bq_sql)
@@ -1213,7 +1224,27 @@ def engine_status():
         "engine":       "BigQuery" if (bq_client) else "persistent-duckdb",
         "bq_project":   BQ_PROJECT if bq_client else None,
         "bq_dataset":   BQ_DATASET if bq_client else None,
+        "ds_map_keys":  list(db.query(models.Dataset.id).all()) if bq_client else []
     }
+
+@app.get("/api/diag/check-fact")
+def diag_check_fact(table_id: str, db: Session = Depends(database.get_db)):
+    """Diagnostic endpoint to check if a table exists and has data."""
+    if not bq_client: return {"status": "BQ Disabled"}
+    
+    # Resolve friendly name to BQ ref
+    all_ds = db.query(models.Dataset).all()
+    ds_map = {ds.id: ds.file_path for ds in all_ds}
+    bq_ref = ds_map.get(table_id, table_id)
+    
+    sql = f"SELECT count(*) as row_count FROM `{bq_ref}`"
+    try:
+        job = bq_client.query(sql)
+        res = list(job.result())
+        cnt = res[0].row_count if res else 0
+        return {"table_id": table_id, "bq_ref": bq_ref, "count": cnt, "status": "Success"}
+    except Exception as e:
+        return {"table_id": table_id, "bq_ref": bq_ref, "error": str(e), "status": "Failed"}
 
 
 # ---------------------------------------------------------------------------
