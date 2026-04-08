@@ -263,18 +263,21 @@ export const useDataEngine = () => {
     const sm = semanticModels[datasetId] || [];
 
     dimensions.forEach(dimId => {
-       if (dimId.includes('::')) {
-           const [oDsId, oFId] = dimId.split('::');
-           if (isMasterView) {
-               selectClause.push(`\`${sourceTable}\`.\`${oFId}\` AS \`${dimId}\``);
-           } else {
-               const targetDs = datasets.find(d => d.id === oDsId);
-               const targetTable = targetDs?.tableName || oDsId;
-               selectClause.push(`\`${targetTable}\`.\`${oFId}\` AS \`${dimId}\``);
-           }
-       } else {
-           selectClause.push(`\`${sourceTable}\`.\`${dimId}\` AS \`${dimId}\``);
-       }
+        // Enforce string casting for dimensions in multi-fact mode to ensure merge-key compatibility
+        const wrap = (expr) => scopedFactId ? `CAST(${expr} AS STRING)` : expr;
+
+        if (dimId.includes('::')) {
+            const [oDsId, oFId] = dimId.split('::');
+            if (isMasterView) {
+                selectClause.push(`${wrap(`\`${sourceTable}\`.\`${oFId}\``)} AS \`${dimId}\``);
+            } else {
+                const targetDs = datasets.find(d => d.id === oDsId);
+                const targetTable = targetDs?.tableName || oDsId;
+                selectClause.push(`${wrap(`\`${targetTable}\`.\`${oFId}\``)} AS \`${dimId}\``);
+            }
+        } else {
+            selectClause.push(`${wrap(`\`${sourceTable}\`.\`${dimId}\``)} AS \`${dimId}\``);
+        }
     });
 
     const resolveMeasureSQL = (measId, conditions = [], visited = new Set()) => {
@@ -539,10 +542,13 @@ export const useDataEngine = () => {
        // If multi-fact model, ALWAYS issue scoped queries to prevent Chasm Traps
        if (isMultiFactModel) {
          const mergedMatrix = {}; const allRowKeys = new Set(); const allColKeys = new Set();
+         const mergeStats = [];
          for (const [factId, factMeasures] of measuresByFact) {
-           const sql = generateSQL(datasetId, allDims, factMeasures, [], null, factId);
+           const sql = generateSQL(datasetId, rowDims, factMeasures, [], null, factId);
            const results = await queryDuckDB(sql) || [];
            const { rowKeysSet, colKeysSet, matrix } = buildMatrix(results, factMeasures);
+           
+           mergeStats.push(`${factId}: ${results.length} rows`);
            rowKeysSet.forEach(k => allRowKeys.add(k));
            colKeysSet.forEach(k => allColKeys.add(k));
            Object.entries(matrix).forEach(([rk, cols]) => {
@@ -550,6 +556,15 @@ export const useDataEngine = () => {
              Object.assign(mergedMatrix[rk], cols);
            });
          }
+
+         window.dispatchEvent(new CustomEvent('mvantage-debug', { 
+           detail: { 
+             type: 'success', 
+             category: 'Merge', 
+             message: `Multi-fact merge complete: ${allRowKeys.size} unique keys`,
+             details: { stats: mergeStats.join(' | '), keys: Array.from(allRowKeys).slice(0,5) } 
+           } 
+         }));
          return { rowKeys: Array.from(allRowKeys).sort(), colKeys: Array.from(allColKeys).sort(), matrix: mergedMatrix };
        }
 
@@ -589,17 +604,35 @@ export const useDataEngine = () => {
        // If multi-fact model, ALWAYS issue scoped queries to prevent Chasm Traps
        if (isMultiFactModel) {
          const mergedByKey = new Map();
+         const mergeStats = [];
          for (const [factId, factMeasures] of measuresByFact) {
            const sql = generateSQL(datasetId, dimensions, factMeasures, [], null, factId);
-           const rows = await queryDuckDB(`${sql} LIMIT 100`) || [];
+           const rows = await queryDuckDB(`${sql} LIMIT 500`) || [];
+           
+           mergeStats.push(`${factId}: ${rows.length} rows`);
            rows.forEach(row => {
-             const dimKey = (dimensions || []).map(d => String(row[d] ?? '')).join('\x00');
+             // Robust dimension key generation: normalize to string and trim 
+             const dimKey = (dimensions || []).map(d => {
+               const val = row[d];
+               if (val === null || val === undefined) return '';
+               return String(val).trim();
+             }).join('\x00');
+
              if (!mergedByKey.has(dimKey)) {
                mergedByKey.set(dimKey, { ...Object.fromEntries((dimensions || []).map(d => [d, row[d]])) });
              }
              factMeasures.forEach(m => { mergedByKey.get(dimKey)[m] = row[m]; });
            });
          }
+
+         window.dispatchEvent(new CustomEvent('mvantage-debug', { 
+           detail: { 
+             type: 'success', 
+             category: 'Merge', 
+             message: `Table merge complete: ${mergedByKey.size} rows`,
+             details: { stats: mergeStats.join(' | ') } 
+           } 
+         }));
          return { headers, headerIds, rows: Array.from(mergedByKey.values()) };
        }
 
