@@ -222,6 +222,21 @@ export const useDataEngine = () => {
     return Array.from(group);
   }, [relationships]);
 
+  const getFactTablesInGroup = useCallback((startId) => {
+    const group = getJoinGroup(startId);
+    return group.filter(dsId =>
+      (semanticModels[dsId] || []).some(f => f.type === 'measure' && !f.isCalculated)
+    );
+  }, [getJoinGroup, semanticModels]);
+
+  const resolveMeasureOrigin = useCallback((measId, factTablesInGroup, defaultFactId) => {
+    for (const dsId of factTablesInGroup) {
+      const found = (semanticModels[dsId] || []).find(f => f.id.toLowerCase() === measId.toLowerCase() && !f.isCalculated);
+      if (found) return dsId;
+    }
+    return defaultFactId;
+  }, [semanticModels]);
+
 
 
 
@@ -239,8 +254,8 @@ export const useDataEngine = () => {
       detail: { 
         type: 'info', 
         category: 'Engine', 
-        message: `Generating SQL. Source: ${sourceTable}`, 
-        details: { dimensions, measures, filters, ctePresent: !!ctePrefix } 
+        message: `Generating SQL. Source: ${sourceTable}${scopedFactId ? ` [Scoped: ${scopedFactId}]` : ''}`, 
+        details: { dimensions, measures, filters, ctePresent: !!ctePrefix, scopedFactId } 
       } 
     }));
 
@@ -493,17 +508,13 @@ export const useDataEngine = () => {
      if (!datasetId || !rowDims?.length || !measureIds?.length) return { rowKeys: [], colKeys: [], matrix: {} };
 
      const allDims = [...(rowDims || []), ...(colDims || [])];
-     const joinGroup = getJoinGroup(activeDatasetId || datasetId);
-     const isFactTable = (dsId) => (semanticModels[dsId] || []).some(f => f.type === 'measure' && !f.isCalculated);
+     const factTablesInGroup = getFactTablesInGroup(activeDatasetId || datasetId);
+     const isMultiFactModel = factTablesInGroup.length > 1;
 
      // Group measures by source fact table
      const measuresByFact = new Map();
      (measureIds || []).forEach(measId => {
-       let originFact = datasetId;
-       for (const dsId of joinGroup) {
-         const found = (semanticModels[dsId] || []).find(f => f.id.toLowerCase() === measId.toLowerCase() && !f.isCalculated);
-         if (found) { originFact = dsId; break; }
-       }
+       const originFact = resolveMeasureOrigin(measId, factTablesInGroup, datasetId);
        if (!measuresByFact.has(originFact)) measuresByFact.set(originFact, []);
        measuresByFact.get(originFact).push(measId);
      });
@@ -525,12 +536,11 @@ export const useDataEngine = () => {
      };
 
      try {
-       if (measuresByFact.size > 1) {
-         // Multi-fact: issue isolated queries per fact, merge matrices
+       // If multi-fact model, ALWAYS issue scoped queries to prevent Chasm Traps
+       if (isMultiFactModel) {
          const mergedMatrix = {}; const allRowKeys = new Set(); const allColKeys = new Set();
          for (const [factId, factMeasures] of measuresByFact) {
-           const isSecondary = factId !== datasetId;
-           const sql = generateSQL(datasetId, allDims, factMeasures, [], null, isSecondary ? factId : null);
+           const sql = generateSQL(datasetId, allDims, factMeasures, [], null, factId);
            const results = await queryDuckDB(sql) || [];
            const { rowKeysSet, colKeysSet, matrix } = buildMatrix(results, factMeasures);
            rowKeysSet.forEach(k => allRowKeys.add(k));
@@ -543,13 +553,13 @@ export const useDataEngine = () => {
          return { rowKeys: Array.from(allRowKeys).sort(), colKeys: Array.from(allColKeys).sort(), matrix: mergedMatrix };
        }
 
-       // Single fact: existing path
+       // Standard single-fact model path
        const sql = generateSQL(datasetId, allDims, measureIds);
        const results = await queryDuckDB(sql);
        const { rowKeysSet, colKeysSet, matrix } = buildMatrix(results, measureIds);
        return { rowKeys: Array.from(rowKeysSet).sort(), colKeys: Array.from(colKeysSet).sort(), matrix };
      } catch (e) { console.error("Pivot Error:", e); throw e; }
-  }, [generateSQL, getJoinGroup, activeDatasetId, semanticModels]);
+  }, [generateSQL, getFactTablesInGroup, resolveMeasureOrigin, activeDatasetId, semanticModels, datasets]);
 
   const getTableData = useCallback(async (datasetId, dimensions, measures) => {
      if (!datasetId || (!dimensions?.length && !measures?.length)) return { headers: [], headerIds: [], rows: [] };
@@ -561,16 +571,13 @@ export const useDataEngine = () => {
          return match ? match.label : bareId;
      };
 
-     const joinGroup = getJoinGroup(activeDatasetId || datasetId);
+     const factTablesInGroup = getFactTablesInGroup(activeDatasetId || datasetId);
+     const isMultiFactModel = factTablesInGroup.length > 1;
 
-     // Group measures by source fact table (Chasm Trap detection)
+     // Search fact tables for measure ownership
      const measuresByFact = new Map();
      (measures || []).forEach(measId => {
-       let originFact = datasetId;
-       for (const dsId of joinGroup) {
-         const found = (semanticModels[dsId] || []).find(f => f.id.toLowerCase() === measId.toLowerCase() && !f.isCalculated);
-         if (found) { originFact = dsId; break; }
-       }
+       const originFact = resolveMeasureOrigin(measId, factTablesInGroup, datasetId);
        if (!measuresByFact.has(originFact)) measuresByFact.set(originFact, []);
        measuresByFact.get(originFact).push(measId);
      });
@@ -579,12 +586,11 @@ export const useDataEngine = () => {
      const headerIds = [...(dimensions || []), ...(measures || [])];
 
      try {
-       if (measuresByFact.size > 1) {
-         // Multi-fact: issue isolated query per fact, merge rows by dimension key
+       // If multi-fact model, ALWAYS issue scoped queries to prevent Chasm Traps
+       if (isMultiFactModel) {
          const mergedByKey = new Map();
          for (const [factId, factMeasures] of measuresByFact) {
-           const isSecondary = factId !== datasetId;
-           const sql = generateSQL(datasetId, dimensions, factMeasures, [], null, isSecondary ? factId : null);
+           const sql = generateSQL(datasetId, dimensions, factMeasures, [], null, factId);
            const rows = await queryDuckDB(`${sql} LIMIT 100`) || [];
            rows.forEach(row => {
              const dimKey = (dimensions || []).map(d => String(row[d] ?? '')).join('\x00');
@@ -597,12 +603,12 @@ export const useDataEngine = () => {
          return { headers, headerIds, rows: Array.from(mergedByKey.values()) };
        }
 
-       // Single fact: existing path
+       // Standard single-fact model path
        const sql = generateSQL(datasetId, dimensions, measures);
        const rows = await queryDuckDB(`${sql} LIMIT 100`) || [];
        return { headers, headerIds, rows };
      } catch (e) { console.error("Table Error:", e); throw e; }
-  }, [generateSQL, semanticModels, datasets, getJoinGroup, activeDatasetId]);
+  }, [generateSQL, semanticModels, datasets, getFactTablesInGroup, resolveMeasureOrigin, activeDatasetId]);
 
 
   const getScatterData = useCallback(async (datasetId, dimensionId, xMeas, yMeas, cMeas, sMeas) => {
@@ -652,11 +658,21 @@ export const useDataEngine = () => {
     const scopeCols = matrixColumns.filter(c => c.type === 'scope');
     if (!datasetId || matrixMeasures.length === 0 || scopeCols.length === 0) return null;
 
-    const activeJoinGroup = getJoinGroup(activeDatasetId);
-    const isMasterView = activeJoinGroup.includes(datasetId);
+    const factTablesInGroup = getFactTablesInGroup(activeDatasetId || datasetId);
+    const isMultiFactModel = factTablesInGroup.length > 1;
+
+    // Determine target scoping for this matrix: if all measures belong to one fact, scope it.
+    let targetFactId = datasetId;
+    const origins = new Set();
+    matrixMeasures.forEach(m => origins.add(resolveMeasureOrigin(m, factTablesInGroup, datasetId)));
+    if (origins.size === 1) targetFactId = Array.from(origins)[0];
+
+    const isMasterView = factTablesInGroup.length > 0; // Simplified multi-table check
     const activeDs = datasets.find(d => d.id === datasetId);
     const sourceTable = isMasterView ? 'ds_unified' : (activeDs?.tableName || datasetId);
-    const ctePrefix = isMasterView ? generateUnifiedCTE(datasetId) : '';
+    
+    // Use scoped CTE if multi-fact model to prevent fan-out
+    const ctePrefix = isMasterView ? generateUnifiedCTE(targetFactId, isMultiFactModel) : '';
 
     // Build outer WHERE from global slicers
     const slicerParts = [];
