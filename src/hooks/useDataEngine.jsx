@@ -606,7 +606,7 @@ export const useDataEngine = () => {
          const mergedMatrix = {}; const allRowKeys = new Set(); const allColKeys = new Set();
          const mergeStats = [];
          for (const [factId, factMeasures] of measuresByFact) {
-           const sql = generateSQL(datasetId, rowDims, factMeasures, [], null, factId);
+           const sql = generateSQL(datasetId, allDims, factMeasures, [], null, factId);
            const results = await queryDuckDB(sql) || [];
            const { rowKeysSet, colKeysSet, matrix } = buildMatrix(results, factMeasures);
            
