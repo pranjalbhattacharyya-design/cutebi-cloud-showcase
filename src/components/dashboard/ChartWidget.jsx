@@ -774,24 +774,27 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
             <Treemap
                 data={Array.isArray(chartData) ? chartData : (chartData?.data || [])}
                 dataKey="value"
+                nameKey="fullPath"
                 stroke="var(--theme-panel-bg)"
                 content={(props) => {
-                   const { depth, x, y, width, height, name, value, fullPath, rootIndex } = props;
+                   const { depth, x, y, width, height, name, value, rootIndex, children } = props;
                    if (width < 10 || height < 10 || depth < 1) return null;
                    
                    const colorIdx = rootIndex !== undefined ? rootIndex : props.index;
                    const fill = tColors[Math.max(0, colorIdx) % tColors.length] || tColors[0];
                    
+                   const isLeaf = !children || children.length === 0;
+                   
                    return (
                       <g>
                          <rect x={x} y={y} width={width} height={height} fill={fill} stroke="var(--theme-panel-bg)" strokeWidth={2} style={{ fillOpacity: depth === 1 ? 0.9 : 0.7 }} />
-                         {width > 40 && height > 24 && (
-                            <text x={x + 6} y={y + 18} fill="#fff" fontSize={11} fontWeight="600" className="pointer-events-none" style={{ fontFamily: 'var(--theme-font, inherit)' }}>
-                               {fullPath || name}
+                         {isLeaf && width > 40 && height > 24 && (
+                            <text x={x + 6} y={y + 18} fill="#fff" fontSize={12} fontWeight="700" className="pointer-events-none" style={{ fontFamily: 'var(--theme-font, inherit)', textShadow: '0px 1px 2px rgba(0,0,0,0.2)' }}>
+                               {name}
                             </text>
                          )}
-                         {width > 40 && height > 40 && (
-                            <text x={x + 6} y={y + 32} fill="#fff" fontSize={10} className="pointer-events-none" style={{ fontFamily: 'var(--theme-font, inherit)', opacity: 0.9 }}>
+                         {isLeaf && width > 40 && height > 40 && (
+                            <text x={x + 6} y={y + 34} fill="#fff" fontSize={11} fontWeight="500" className="pointer-events-none" style={{ fontFamily: 'var(--theme-font, inherit)', opacity: 0.95, textShadow: '0px 1px 2px rgba(0,0,0,0.2)' }}>
                                {formatMeasVal(value, chart.measure, false)}
                             </text>
                          )}
