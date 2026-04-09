@@ -513,7 +513,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
      }
 
      if (chart.type === 'pivot') {
-        const { rowKeys, colKeys, matrix } = chartData;
+        const { rowKeys, colKeys, matrix, rowTotals: backendRowTotals, colTotals: backendColTotals, grandTotal: backendGrandTotal } = chartData;
         if (!rowKeys || rowKeys.length === 0) return <div className="t-text-muted text-center pt-10 font-medium text-sm">Add dimensions and measures to see the Pivot Table.</div>;
        
         const headerDepth = Math.max(1, (chart.pivotCols || []).length + (((chart.pivotMeasures || []).length > 1) ? 1 : 0));
@@ -525,8 +525,24 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
             let startIndex = 0;
             for (let i = 1; i <= colKeys.length; i++) {
                 const parts = colKeys[i] ? colKeys[i].split(' | ') : [];
-        const { rowKeys, colKeys, matrix, rowTotals: backendRowTotals, colTotals: backendColTotals, grandTotal: backendGrandTotal } = chartData;
-        if (!rowKeys || rowKeys.length === 0) return <div className="t-text-muted text-center pt-10 font-medium text-sm">Add dimensions and measures to see the Pivot Table.</div>;
+                const prevParts = colKeys[i-1] ? colKeys[i-1].split(' | ') : [];
+               
+                let sameAsPrev = false;
+                if (i < colKeys.length && i > 0) {
+                    sameAsPrev = true;
+                    for (let j = 0; j <= level; j++) {
+                        if (parts[j] !== prevParts[j]) sameAsPrev = false;
+                    }
+                }
+                if (sameAsPrev) {
+                    currentSpan++;
+                } else {
+                    colSpans[level][startIndex] = currentSpan;
+                    startIndex = i;
+                    currentSpan = 1;
+                }
+            }
+        }
 
         const isCalculated = chart.totalMode === 'calculated';
        

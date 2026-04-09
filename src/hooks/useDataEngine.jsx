@@ -276,13 +276,8 @@ export const useDataEngine = () => {
       headerIds: [...(dimensions || []), ...(measures || [])]
     };
   }, [semanticModels]);
-        foundMeasure = match;
-        fallbackDsId = dsId;
-        break;
-      }
-    }
 
-    // 2. Smart Grain Peeking: If calculated, analyze its dependencies to find the true grain
+  // 2. Smart Grain Peeking: If calculated, analyze its dependencies to find the true grain
     if (foundMeasure?.isCalculated && foundMeasure.expression) {
       const matches = foundMeasure.expression.match(/\[(.*?)\]/g) || [];
       const dependencies = matches.map(m => m.slice(1, -1).toLowerCase());
