@@ -239,17 +239,19 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
                           <Sparkles size={12} /> Ask AI
                       </button>
                     )}
-                    <button 
-                      onClick={() => setIsFilterPaneOpen(!isFilterPaneOpen)} 
-                      className={`flex items-center gap-1.5 px-3 py-1 font-black text-[10px] uppercase tracking-wider transition-all border t-border ${isFilterPaneOpen ? 't-accent-bg text-white border-transparent shadow-md' : 't-panel t-text-muted hover:t-text-main'}`}
-                      style={{ borderRadius: 'var(--theme-radius-button)' }}
-                    >
-                      <Filter size={12} />
-                      Authored Filters
-                      {(authoredReportFilters.length > 0 || (pageFilters[activePageId] || []).length > 0) && (
-                        <span className="ml-1 w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-                      )}
-                    </button>
+                    {!isViewer && (
+                      <button 
+                        onClick={() => setIsFilterPaneOpen(!isFilterPaneOpen)} 
+                        className={`flex items-center gap-1.5 px-3 py-1 font-black text-[10px] uppercase tracking-wider transition-all border t-border ${isFilterPaneOpen ? 't-accent-bg text-white border-transparent shadow-md' : 't-panel t-text-muted hover:t-text-main'}`}
+                        style={{ borderRadius: 'var(--theme-radius-button)' }}
+                      >
+                        <Filter size={12} />
+                        Authored Filters
+                        {(authoredReportFilters.length > 0 || (pageFilters[activePageId] || []).length > 0) && (
+                          <span className="ml-1 w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                        )}
+                      </button>
+                    )}
                 </div>
                 
                 <div className="flex items-center gap-3">
