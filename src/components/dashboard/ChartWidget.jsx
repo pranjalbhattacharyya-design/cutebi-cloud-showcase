@@ -769,8 +769,10 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
               <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', color: 'var(--theme-text-main)' }} />
             </RechartsPieChart>
           ) : chart.type === 'treemap' ? (
+            <React.Fragment>
+            {console.log('TREEMAP DATA:', Array.isArray(chartData) ? chartData : chartData?.data)}
             <Treemap
-                data={data}
+                data={Array.isArray(chartData) ? chartData : (chartData?.data || [])}
                 dataKey="value"
                 stroke="var(--theme-panel-bg)"
                 content={({ root, depth, x, y, width, height, index, name, value }) => {
@@ -797,6 +799,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
             >
                <RechartsTooltip contentStyle={{ borderRadius: 'var(--theme-radius-panel)', border: 'none', boxShadow: 'var(--theme-shadow)', background: 'var(--theme-panel-bg)', color: 'var(--theme-text-main)' }} formatter={(v, n) => [formatMeasVal(v, chart.measure), n]} />
             </Treemap>
+            </React.Fragment>
           ) : (
             <LineChart data={data} margin={{ top: 10, right: 20, left: 10, bottom: 20 }}>
               <CartesianGrid vertical={false} stroke="var(--theme-border)" />
