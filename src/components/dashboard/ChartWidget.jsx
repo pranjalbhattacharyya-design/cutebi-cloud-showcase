@@ -544,6 +544,37 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
             }
         }
 
+        const headerRows = Array.from({ length: headerDepth }).map((_, levelIndex) => (
+           <tr key={`hrow-${levelIndex}`} style={{ background: 'var(--theme-header-bg)' }}>
+              {levelIndex === 0 && (chart.pivotRows || []).map((r, i) => (
+                 <th key={`rh-${i}`} rowSpan={headerDepth} className="px-3 py-2.5 font-bold t-text-main align-bottom text-[12px]" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
+                    {getDisplayLabel(r)}
+                 </th>
+              ))}
+              {levelIndex === 0 && chart.showRowTotals && chart.rowTotalPosition === 'start' && (chart.pivotMeasures || []).map((mId, idx) => (
+                 <th key={`rhts-${idx}`} rowSpan={headerDepth} className="px-3 py-2.5 font-bold t-text-main align-bottom text-[12px] bg-black/10" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
+                     Total {chart.pivotMeasures.length > 1 ? getDisplayLabel(mId) : ''}
+                 </th>
+              ))}
+              {colKeys.map((ck, i) => {
+                  const span = colSpans[levelIndex][i];
+                  if (!span) return null;
+                  const parts = ck.split(' | ');
+                  const val = parts[levelIndex] || '';
+                  return (
+                      <th key={`${ck}-${levelIndex}`} colSpan={span} className="px-3 py-2.5 font-bold t-text-main text-center text-[12px]" style={{ whiteSpace: tWrap ? 'normal' : 'nowrap', border: '1px solid rgba(0,0,0,0.05)' }}>
+                          {levelIndex < (chart.pivotCols || []).length ? formatDimVal(val, chart.pivotCols[levelIndex]) : getDisplayLabel(val)}
+                      </th>
+                  );
+              })}
+              {levelIndex === 0 && chart.showRowTotals && chart.rowTotalPosition === 'end' && (chart.pivotMeasures || []).map((mId, idx) => (
+                 <th key={`rhte-${idx}`} rowSpan={headerDepth} className="px-3 py-2.5 font-bold t-text-main align-bottom text-[12px] bg-black/10" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
+                     Total {chart.pivotMeasures.length > 1 ? getDisplayLabel(mId) : ''}
+                 </th>
+              ))}
+           </tr>
+        ));
+
         const isCalculated = chart.totalMode === 'calculated';
        
         // Row Total aggregator function
