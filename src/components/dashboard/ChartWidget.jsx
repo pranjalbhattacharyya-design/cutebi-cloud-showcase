@@ -891,10 +891,10 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
             <div className="flex items-center justify-center h-20 t-text-muted text-xs">Loading matrix data…</div>
           ) : (
             <table className="w-full text-xs border-collapse" style={{ fontFamily: 'inherit' }}>
-              <thead className="sticky top-0 z-10">
-                <tr style={{ background: 'var(--theme-header-bg)' }}>
+              <thead className="sticky top-0 z-10 matrix-header-glass">
+                <tr>
                   {/* First column — editable row header label */}
-                  <th className="text-left px-3 py-2 font-black t-text-muted" style={{ fontSize: '12px', background: 'var(--theme-header-bg)', border: '1px solid rgba(0,0,0,0.05)' }}>
+                  <th className="text-left px-3 py-2 font-black t-text-muted" style={{ fontSize: '12px', border: '1px solid rgba(0,0,0,0.05)' }}>
                     <span
                       contentEditable
                       suppressContentEditableWarning
@@ -907,7 +907,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                     const baseLabel = col.type === 'variance' ? (matrixColLabels[col.id] ?? col.label) : h?.baseLabel;
                     const dateRange = h?.dateRange;
                     return (
-                      <th key={col.id} className="text-right px-3 py-2 font-black t-text-muted" style={{ fontSize: '12px', background: 'var(--theme-header-bg)', border: '1px solid rgba(0,0,0,0.05)' }}>
+                      <th key={col.id} className="text-right px-3 py-2 font-black t-text-muted" style={{ fontSize: '12px', border: '1px solid rgba(0,0,0,0.05)' }}>
                         <div className="flex flex-col items-end gap-px">
                           <span
                             contentEditable
@@ -938,7 +938,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                     <React.Fragment key={cat}>
                       {/* Category header row — plain white background, faint cell borders */}
                       <tr
-                        className="cursor-pointer select-none transition-colors hover:bg-black/5"
+                        className="cursor-pointer select-none matrix-row-hover"
                         onClick={() => setExpandedCategories(prev => ({ ...prev, [cat]: !prev[cat] }))}
                       >
                         <td className="px-3 py-2 font-black t-text-main" style={{ fontSize: '11px', border: '1px solid rgba(0,0,0,0.05)' }}>
@@ -965,9 +965,8 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                         })}
                       </tr>
                       {/* Child measure rows */}
-                      {isExpanded && measures.map((m, mi) => (
-                        <tr key={m.id} className="hover:bg-black/5 transition-colors">
-                          <td className="px-3 py-1.5 t-text-main font-medium" style={{ paddingLeft: '28px', fontSize: '11px', border: '1px solid rgba(0,0,0,0.05)' }}>
+                        <tr key={m.id} className="matrix-row-hover">
+                          <td className="px-3 py-1.5 t-text-main font-medium transition-colors" style={{ paddingLeft: '28px', fontSize: '11px', border: '1px solid rgba(0,0,0,0.05)' }}>
                             {m.label}
                           </td>
                           {allCols.map(col => {
@@ -975,7 +974,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                             const val = isVar ? computeVariance(col, m.id) : getValue(m.id, col.id);
                             const isNeg = val != null && val < 0;
                             return (
-                              <td key={col.id} className="text-right px-3 py-1.5 tabular-nums" style={{
+                              <td key={col.id} className="text-right px-3 py-1.5 tabular-nums transition-all" style={{
                                 fontSize: '11px',
                                 border: '1px solid rgba(0,0,0,0.05)',
                                 color: isVar ? (val == null ? 'var(--theme-text-muted)' : isNeg ? '#e03131' : '#2f9e44') : 'var(--theme-text-main)',

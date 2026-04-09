@@ -87,3 +87,29 @@ option {
   background: var(--theme-panel-bg); 
   color: var(--theme-text-main); 
 }
+
+/* KPI Matrix Specialized Aesthetics */
+.matrix-header-glass {
+  background: color-mix(in srgb, var(--theme-header-bg) 85%, transparent) !important;
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  border-bottom: 1px solid rgba(0,0,0,0.1) !important;
+  z-index: 20;
+}
+
+.matrix-row-hover {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.matrix-row-hover:hover {
+  background: color-mix(in srgb, var(--theme-accent) 4%, transparent) !important;
+}
+
+.matrix-row-hover:hover td {
+  color: var(--theme-accent) !important;
+}
+
+.matrix-row-hover:hover .tabular-nums {
+  transform: scale(1.02);
+  transition: transform 0.2s ease;
+}
