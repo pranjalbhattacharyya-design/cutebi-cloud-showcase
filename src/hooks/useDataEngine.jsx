@@ -670,14 +670,14 @@ const legendKeys = legendId ? [...new Set(results.map(r => r[legendId]))] : ['va
           const isLast = idx === dimensions.length - 1;
           pathSoFar.push(val);
           
-          let existingNode = currentLevel.find(c => c.name === val);
+          let existingNode = currentLevel.find(c => c.origName === val);
           
           if (!existingNode) {
             existingNode = { 
-                name: val, 
+                name: pathSoFar.join(' / '), 
+                origName: val,
                 value: 0, 
-                fullPath: pathSoFar.join(' / '),
-                rootIndex: root.children.findIndex(c => c.name === pathSoFar[0])
+                rootIndex: root.children.findIndex(c => c.origName === pathSoFar[0])
             };
             if (idx === 0) existingNode.rootIndex = root.children.length; // Set rootIndex for top level
             

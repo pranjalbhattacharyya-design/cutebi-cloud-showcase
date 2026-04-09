@@ -774,7 +774,6 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
             <Treemap
                 data={Array.isArray(chartData) ? chartData : (chartData?.data || [])}
                 dataKey="value"
-                nameKey="fullPath"
                 stroke="var(--theme-panel-bg)"
                 content={(props) => {
                    const { depth, x, y, width, height, name, value, rootIndex, children } = props;
