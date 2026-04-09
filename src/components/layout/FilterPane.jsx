@@ -75,17 +75,25 @@ export default function FilterPane({ isOpen, onClose }) {
   const [expandedSections, setExpandedSections] = React.useState({ page: true, report: true });
 
   const currentPage = pages.find(p => p.id === activePageId);
-  const currentPageFilters = pageFilters[activePageId] || [];
+  const [localPageFilters, setLocalPageFilters] = React.useState([]);
+  const [localReportFilters, setLocalReportFilters] = React.useState([]);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setLocalPageFilters(pageFilters[activePageId] || []);
+      setLocalReportFilters(authoredReportFilters || []);
+    }
+  }, [isOpen, activePageId]);
 
   const dimensions = React.useMemo(() => globalSemanticFields.filter(f => f.type === 'dimension'), [globalSemanticFields]);
 
   // Sync fetching logic with builder
   const activeDimIds = React.useMemo(() => {
     const ids = new Set();
-    currentPageFilters.forEach(f => { if (f.dimensionId) ids.add(f.dimensionId); });
-    authoredReportFilters.forEach(f => { if (f.dimensionId) ids.add(f.dimensionId); });
+    localPageFilters.forEach(f => { if (f.dimensionId) ids.add(f.dimensionId); });
+    localReportFilters.forEach(f => { if (f.dimensionId) ids.add(f.dimensionId); });
     return Array.from(ids);
-  }, [currentPageFilters, authoredReportFilters]);
+  }, [localPageFilters, localReportFilters]);
 
   React.useEffect(() => {
     const toFetch = activeDimIds.filter(id => !dimValuesCache[id] && !fetchingDims.current.has(id));
@@ -105,8 +113,8 @@ export default function FilterPane({ isOpen, onClose }) {
   }, [activeDimIds, activeDatasetId, getUniqueValuesForDim, dimensions, dimValuesCache]);
 
   const updatePageFilter = (idx, key, val) => {
-    setPageFilters(prev => {
-      const pageList = [...(prev[activePageId] || [])];
+    setLocalPageFilters(prev => {
+      const pageList = [...prev];
       if (idx === -1) {
         pageList.push({ dimensionId: '', operator: '=', value: '' });
       } else {
@@ -114,19 +122,16 @@ export default function FilterPane({ isOpen, onClose }) {
         // Reset value type if operator changes
         if (key === 'operator') pageList[idx].value = val === 'IN' ? [] : '';
       }
-      return { ...prev, [activePageId]: pageList };
+      return pageList;
     });
   };
 
   const removePageFilter = (idx) => {
-    setPageFilters(prev => ({
-      ...prev,
-      [activePageId]: (prev[activePageId] || []).filter((_, i) => i !== idx)
-    }));
+    setLocalPageFilters(prev => prev.filter((_, i) => i !== idx));
   };
 
   const updateReportFilter = (idx, key, val) => {
-    setAuthoredReportFilters(prev => {
+    setLocalReportFilters(prev => {
       const next = [...prev];
       if (idx === -1) {
         next.push({ dimensionId: '', operator: '=', value: '' });
@@ -139,7 +144,7 @@ export default function FilterPane({ isOpen, onClose }) {
   };
 
   const removeReportFilter = (idx) => {
-    setAuthoredReportFilters(prev => prev.filter((_, i) => i !== idx));
+    setLocalReportFilters(prev => prev.filter((_, i) => i !== idx));
   };
 
   if (!isOpen) return null;
@@ -184,7 +189,7 @@ export default function FilterPane({ isOpen, onClose }) {
           {expandedSections.page && (
             <div className="space-y-3 animate-in fade-in duration-200">
               <div className="flex flex-col gap-2.5">
-                {currentPageFilters.map((f, fi) => (
+                {localPageFilters.map((f, fi) => (
                   <AuthoredFilterRow 
                     key={fi} 
                     idx={fi} 
@@ -195,7 +200,7 @@ export default function FilterPane({ isOpen, onClose }) {
                     onRemove={removePageFilter}
                   />
                 ))}
-                {currentPageFilters.length === 0 && (
+                {localPageFilters.length === 0 && (
                   <div className="text-center py-6 border-2 border-dashed t-border rounded-lg text-[10px] t-text-muted uppercase font-black opacity-40">
                     No active page criteria
                   </div>
@@ -229,7 +234,7 @@ export default function FilterPane({ isOpen, onClose }) {
           {expandedSections.report && (
             <div className="space-y-3 animate-in fade-in duration-200">
                 <div className="flex flex-col gap-2.5">
-                {authoredReportFilters.map((f, fi) => (
+                {localReportFilters.map((f, fi) => (
                   <AuthoredFilterRow 
                     key={fi} 
                     idx={fi} 
@@ -240,7 +245,7 @@ export default function FilterPane({ isOpen, onClose }) {
                     onRemove={removeReportFilter}
                   />
                 ))}
-                {authoredReportFilters.length === 0 && (
+                {localReportFilters.length === 0 && (
                   <div className="text-center py-6 border-2 border-dashed t-border rounded-lg text-[10px] t-text-muted uppercase font-black opacity-40">
                     No active report criteria
                   </div>
@@ -251,10 +256,20 @@ export default function FilterPane({ isOpen, onClose }) {
         </section>
       </div>
 
-      <div className="p-4 bg-black/5 border-t t-border">
+      <div className="p-4 bg-black/5 border-t t-border flex flex-col gap-4">
          <p className="text-[9px] t-text-muted italic leading-tight uppercase font-black tracking-tighter opacity-70">
            Note: Slicers on the dashboard act as top-level interactive filters and are merged with these authored constraints.
          </p>
+         <button 
+           onClick={() => {
+             setPageFilters(p => ({ ...p, [activePageId]: localPageFilters }));
+             setAuthoredReportFilters(localReportFilters);
+           }}
+           className="w-full t-accent-bg text-white py-3 font-bold text-xs shadow-md transition-all hover:scale-105 active:scale-95"
+           style={{ borderRadius: 'var(--theme-radius-button)' }}
+         >
+            Apply Filters
+         </button>
       </div>
     </div>
   );
