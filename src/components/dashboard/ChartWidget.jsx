@@ -247,12 +247,15 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
            return arr.map(row => {
              const cleanRow = { ...row };
              Object.keys(cleanRow).forEach(k => {
-                if (k !== 'name' && cleanRow[k] !== null && typeof cleanRow[k] !== 'number') {
+                if (k !== 'name' && k !== 'children' && cleanRow[k] !== null && typeof cleanRow[k] !== 'number') {
                    const str = String(cleanRow[k]).replace(/^["']|["']$/g, '').replace(/\\"/g, '"').replace(/"/g, '');
                    const num = Number(str.replace(/[^0-9.-]/g, ''));
-                   if (!isNaN(num)) cleanRow[k] = num;
+                   if (!isNaN(num) && str.trim() !== '') cleanRow[k] = num;
                 }
              });
+             if (Array.isArray(cleanRow.children)) {
+                 cleanRow.children = sanitizeArr(cleanRow.children);
+             }
              return cleanRow;
            });
         };
