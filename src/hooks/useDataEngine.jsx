@@ -669,10 +669,26 @@ export const useDataEngine = () => {
        if (isMultiFactModel) {
          const mergedByKey = new Map();
          const mergeStats = [];
-         for (const [factId, factMeasures] of measuresByFact) {
+         let grandTotals = {};
+         
+         const factTasks = Array.from(measuresByFact.entries()).map(async ([factId, factMeasures]) => {
            const sql = generateSQL(datasetId, dimensions, factMeasures, [], null, factId);
-           const rows = await queryDuckDB(`${sql} LIMIT 500`) || [];
+           const totalsSql = generateSQL(datasetId, [], factMeasures, [], null, factId);
            
+           const [rows, totalsResp] = await Promise.all([
+             queryDuckDB(`${sql} LIMIT 500`),
+             queryDuckDB(totalsSql)
+           ]);
+           
+           const tRow = (totalsResp && totalsResp[0]) || {};
+           factMeasures.forEach(mId => grandTotals[mId] = tRow[mId] !== undefined ? tRow[mId] : 0);
+
+           return { factId, factMeasures, rows: rows || [] };
+         });
+
+         const results = await Promise.all(factTasks);
+
+         for (const { factId, factMeasures, rows } of results) {
            mergeStats.push(`${factId}: ${rows.length} rows`);
            rows.forEach(row => {
              // Robust dimension key generation: normalize to string and trim 
@@ -697,13 +713,19 @@ export const useDataEngine = () => {
              details: { stats: mergeStats.join(' | ') } 
            } 
          }));
-         return { headers, headerIds, rows: Array.from(mergedByKey.values()) };
+         return { headers, headerIds, rows: Array.from(mergedByKey.values()), totals: grandTotals };
        }
 
-       // Standard single-fact model path
-       const sql = generateSQL(datasetId, dimensions, measures);
-       const rows = await queryDuckDB(`${sql} LIMIT 100`) || [];
-       return { headers, headerIds, rows };
+        // Standard single-fact model path
+        const sql = generateSQL(datasetId, dimensions, measures);
+        const totalsSql = generateSQL(datasetId, [], measures);
+        
+        const [rows, totalsResp] = await Promise.all([
+           queryDuckDB(`${sql} LIMIT 500`),
+           (measures && measures.length > 0) ? queryDuckDB(totalsSql) : Promise.resolve([])
+        ]);
+        
+        return { headers, headerIds, rows: rows || [], totals: (totalsResp && totalsResp[0]) || {} };
      } catch (e) { console.error("Table Error:", e); throw e; }
   }, [generateSQL, semanticModels, datasets, getFactTablesInGroup, resolveMeasureOrigin, activeDatasetId]);
 
