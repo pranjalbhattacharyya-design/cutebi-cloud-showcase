@@ -786,14 +786,39 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                    
                    return (
                       <g>
-                         <rect x={x} y={y} width={width} height={height} fill={fill} stroke="var(--theme-panel-bg)" strokeWidth={2} style={{ fillOpacity: depth === 1 ? 0.9 : 0.7 }} />
+                         <rect x={x} y={y} width={width} height={height} fill={fill} stroke="var(--theme-panel-bg)" strokeWidth={1} style={{ fillOpacity: depth === 1 ? 0.9 : 0.7 }} />
                          {isLeaf && width > 40 && height > 24 && (
-                            <text x={x + 6} y={y + 18} fill="#fff" fontSize={12} fontWeight="700" className="pointer-events-none" style={{ fontFamily: 'var(--theme-font, inherit)', textShadow: '0px 1px 2px rgba(0,0,0,0.2)' }}>
+                            <text 
+                               x={x + 6} 
+                               y={y + 18} 
+                               fill="#fff" 
+                               fontSize={11} 
+                               fontWeight="600" 
+                               className="pointer-events-none" 
+                               style={{ 
+                                  fontFamily: 'var(--theme-font, inherit)',
+                                  textRendering: 'geometricPrecision',
+                                  WebkitFontSmoothing: 'antialiased'
+                               }}
+                            >
                                {name}
                             </text>
                          )}
                          {isLeaf && width > 40 && height > 40 && (
-                            <text x={x + 6} y={y + 34} fill="#fff" fontSize={11} fontWeight="500" className="pointer-events-none" style={{ fontFamily: 'var(--theme-font, inherit)', opacity: 0.95, textShadow: '0px 1px 2px rgba(0,0,0,0.2)' }}>
+                            <text 
+                               x={x + 6} 
+                               y={y + 32} 
+                               fill="#fff" 
+                               fontSize={10} 
+                               fontWeight="400" 
+                               className="pointer-events-none" 
+                               style={{ 
+                                  fontFamily: 'var(--theme-font, inherit)', 
+                                  opacity: 0.9,
+                                  textRendering: 'geometricPrecision',
+                                  WebkitFontSmoothing: 'antialiased'
+                               }}
+                            >
                                {formatMeasVal(value, chart.measure, false)}
                             </text>
                          )}
