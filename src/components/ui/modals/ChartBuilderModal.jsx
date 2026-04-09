@@ -225,14 +225,15 @@ export default function ChartBuilderModal() {
   const [dimValuesCache, setDimValuesCache] = React.useState({});
   const fetchingDims = React.useRef(new Set());
 
-  // Collect all dimensionId values currently used across all scope column filters
+  // Collect all dimensionId values currently used across all filters (matrix + top-level)
   const activeDimIds = React.useMemo(() => {
     const ids = new Set();
     (builderForm.matrixColumns || []).forEach(col => {
       if (col.type === 'scope') (col.filters || []).forEach(f => { if (f.dimensionId) ids.add(f.dimensionId); });
     });
+    (builderForm.filters || []).forEach(f => { if (f.dimensionId) ids.add(f.dimensionId); });
     return Array.from(ids);
-  }, [builderForm.matrixColumns]);
+  }, [builderForm.matrixColumns, builderForm.filters]);
 
   // Auto-fetch distinct values for any newly selected dimension
   React.useEffect(() => {
@@ -246,7 +247,7 @@ export default function ChartBuilderModal() {
         const values = await getUniqueValuesForDim(targetDsId, dimId);
         setDimValuesCache(prev => ({ ...prev, [dimId]: values || [] }));
       } catch (err) {
-        console.error('[MatrixBuilder] Failed to fetch values for', dimId, err);
+        console.error('[Builder] Failed to fetch values for', dimId, err);
       } finally {
         fetchingDims.current.delete(dimId);
       }
@@ -559,6 +560,66 @@ export default function ChartBuilderModal() {
             </div>
           );
         })()}
+
+        {/* ── Visual Level filters (Authored) ── */}
+        <div className="mt-8 border-t t-border pt-6 mb-6">
+           <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black t-text-muted uppercase tracking-widest flex items-center gap-1.5"><FilterIcon size={12}/> Visual Level Filters</span>
+                <p className="text-[10px] t-text-muted italic opacity-60">Static filters that apply only to this specific visual.</p>
+              </div>
+              <button 
+                onClick={() => setBuilderForm(prev => ({ ...prev, filters: [...(prev.filters || []), { dimensionId: '', operator: '=', value: '' }] }))}
+                className="text-[10px] font-black t-accent flex items-center gap-1 hover:brightness-110 transition-all uppercase tracking-wider"
+              >
+                <Plus size={12}/> Add Criteria
+              </button>
+           </div>
+           
+           <div className="flex flex-col gap-2.5">
+              {(builderForm.filters || []).map((f, fi) => (
+                <MatrixFilterRow 
+                  key={fi} 
+                  filter={f} 
+                  idx={fi} 
+                  dimensions={dimensions} 
+                  dimValuesCache={dimValuesCache}
+                  onChange={(idx, key, val) => {
+                      const next = (builderForm.filters || []).map((v, i) => i === idx ? { ...v, [key]: val } : v);
+                      // Reset value when dimension changes
+                      if (key === 'dimensionId') {
+                        setBuilderForm({ ...builderForm, filters: next.map((v, i) => i === idx ? { ...v, value: v.operator === 'IN' ? [] : '' } : v) });
+                      } else {
+                        setBuilderForm({ ...builderForm, filters: next });
+                      }
+                  }} 
+                  onRemove={(idx) => setBuilderForm({ ...builderForm, filters: (builderForm.filters || []).filter((_, i) => i !== idx) })} 
+                />
+              ))}
+              {(builderForm.filters || []).length === 0 && (
+                <div className="text-center py-4 border-2 border-dashed t-border rounded-lg text-[10px] t-text-muted opacity-50 uppercase tracking-widest font-black">
+                    No active visual criteria
+                </div>
+              )}
+           </div>
+
+           {(builderForm.filters || []).length > 1 && (
+             <div className="mt-3 flex items-center gap-3 bg-black/5 p-2 rounded-lg border t-border">
+                <span className="text-[10px] font-black t-text-muted uppercase tracking-widest">Filter Logic:</span>
+                <div className="flex gap-1.5">
+                  {['AND', 'OR'].map(op => (
+                    <button 
+                      key={op}
+                      onClick={() => setBuilderForm({ ...builderForm, filterLogic: op })}
+                      className={`px-3 py-1 text-[10px] font-black rounded border transition-all ${builderForm.filterLogic === op ? 't-accent-bg text-white border-transparent shadow-sm' : 't-panel t-text-muted t-border hover:t-text-main'}`}
+                    >
+                      {op}
+                    </button>
+                  ))}
+                </div>
+             </div>
+           )}
+        </div>
 
         <div className="flex gap-6 mt-6 pt-4 border-t t-border items-center">
            <div className="flex flex-col gap-1.5">

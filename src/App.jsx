@@ -233,6 +233,7 @@ function AppContent() {
       setPages(rData.pages || [{ id: 'page_1', name: 'Page 1' }]);
       setActivePageId(rData.pages?.[0]?.id || 'page_1');
       setSlicers(rData.slicers || []);
+      setPageFilters(rData.pageFilters || {});
       setCategories(rData.categories || []);
       
       if (restoredDatasets.length > 0) {
@@ -525,6 +526,7 @@ function AppContent() {
       relationships: relationships,
       pages: pages,
       slicers: slicers,
+      pageFilters: pageFilters,
       theme: theme,
       categories: categories,
       workspaceId: currentWorkspaceId,

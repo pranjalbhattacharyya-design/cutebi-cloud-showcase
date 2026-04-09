@@ -224,17 +224,17 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
             } 
         }));
         if (chart.type === 'table') {
-          res = await getTableData(chart.datasetId, chart.tableDimensions || [], chart.tableMeasures || [], chart.totalMode);
+          res = await getTableData(chart.datasetId, chart.tableDimensions || [], chart.tableMeasures || [], chart.totalMode, chart.filters || []);
         } else if (chart.type === 'pivot') {
-          res = await getPivotData(chart.datasetId, chart.pivotRows || [], chart.pivotCols || [], chart.pivotMeasures || [], chart.totalMode);
+          res = await getPivotData(chart.datasetId, chart.pivotRows || [], chart.pivotCols || [], chart.pivotMeasures || [], chart.totalMode, chart.filters || []);
         } else if (chart.type === 'scatter') {
-          res = await getScatterData(chart.datasetId, chart.dimension, chart.xMeasure, chart.yMeasure, chart.colorMeasure, chart.sizeMeasure);
+          res = await getScatterData(chart.datasetId, chart.dimension, chart.xMeasure, chart.yMeasure, chart.colorMeasure, chart.sizeMeasure, chart.filters || []);
         } else if (chart.type === 'matrix') {
           // matrix type is handled by its own useEffect below
           setLoading(false);
           return;
         } else {
-          res = await getAggregatedData(chart.datasetId, chart.dimension, chart.measure, chart.legend);
+          res = await getAggregatedData(chart.datasetId, chart.dimension, chart.measure, chart.legend, chart.filters || []);
         }
         
         const count = Array.isArray(res) ? res.length : (res?.data?.length || res?.rows?.length || (res?.matrix ? Object.keys(res.matrix).length : 0));

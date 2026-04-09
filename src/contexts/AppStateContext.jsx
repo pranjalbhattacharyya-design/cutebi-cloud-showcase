@@ -18,6 +18,7 @@ export const AppStateProvider = ({ children }) => {
   const [semanticModels, setSemanticModels] = useState({});
   const [dashboards, setDashboards] = useState({});
   const [globalFilters, setGlobalFilters] = useState({});
+  const [pageFilters, setPageFilters] = useState({}); // { [pageId]: { [originKey]: [values] } }
   const [relationships, setRelationships] = useState([]);
   const [slicers, setSlicers] = useState([]);
   const [hiddenDatasetIds, setHiddenDatasetIds] = useState([]);  // Persistence & Library State
@@ -112,6 +113,8 @@ export const AppStateProvider = ({ children }) => {
   const [showSlicerPane, setShowSlicerPane] = useState(true);
   const [showMeasureBuilder, setShowMeasureBuilder] = useState(false);
   const [semanticViewMode, setSemanticViewMode] = useState('grid');
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  const [isFilterPaneOpen, setIsFilterPaneOpen] = useState(false);
  
   // --- AI Dual Mode State ---
   const [aiMode, setAiMode] = useState('build');
@@ -120,7 +123,6 @@ export const AppStateProvider = ({ children }) => {
   const [pendingAIAction, setPendingAIAction] = useState(null);
   const [aiError, setAiError] = useState(null);
   const [aiThinkingLabel, setAiThinkingLabel] = useState('Analyzing...');
-  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   // Hierarchy for deep dive: { macro_dim, meso_dim, micro_dim } — set via counter-question
   const [deepDiveHierarchy, setDeepDiveHierarchy] = useState(null);
   const [hierarchyPending, setHierarchyPending] = useState(null); // stores the pending query
@@ -148,7 +150,10 @@ export const AppStateProvider = ({ children }) => {
      totalMode: 'calculated', // 'calculated' | 'sum'
      // KPI Matrix fields
      matrixMeasures: [],
-     matrixColumns: [] // [{ id, label, type: 'scope'|'variance', filters, filterLogic, timeConfig } | { id, label, type: 'variance', colAId, colBId, varianceMode: '#'|'%' }]
+     matrixColumns: [], // [{ id, label, type: 'scope'|'variance', filters, filterLogic, timeConfig } | { id, label, type: 'variance', colAId, colBId, varianceMode: '#'|'%' }]
+     // Visual-Level Context Filters (Static)
+     filters: [], // [{ dimensionId, operator, value }]
+     filterLogic: 'AND'
   };
   const [builderForm, setBuilderForm] = useState(initBuilderForm);
   const [relForm, setRelForm] = useState({ fromColumn: '', toDatasetId: '', toColumn: '', direction: 'left' });
@@ -635,7 +640,9 @@ export const AppStateProvider = ({ children }) => {
     // Data
     datasets, setDatasets, activeDatasetId, setActiveDatasetId,
     semanticModels, setSemanticModels, dashboards, setDashboards,
-    globalFilters, setGlobalFilters, relationships, setRelationships, slicers, setSlicers,
+    globalFilters, setGlobalFilters, 
+    pageFilters, setPageFilters,
+    relationships, setRelationships, slicers, setSlicers,
     workspaceDatasets, setWorkspaceDatasets, workspaceSemanticModels, setWorkspaceSemanticModels,
     publishedModels, setPublishedModels,
     // Categories
@@ -645,7 +652,10 @@ export const AppStateProvider = ({ children }) => {
     dictSearch, setDictSearch, dictFilterCategory, setDictFilterCategory, measureSearch, setMeasureSearch,
     // UI
     theme, setTheme, fontScale, setFontScale, textWrap, setTextWrap,
-    isUploading, setIsUploading, chatInput, setChatInput, isThinking, setIsThinking,
+    isLibraryOpen, setIsLibraryOpen,
+    isFilterPaneOpen, setIsFilterPaneOpen,
+    aiMode, setAiMode, isThinking, setIsThinking,
+    isUploading, setIsUploading, chatInput, setChatInput,
     showSemanticModeler, setShowSemanticModeler, showRelModal, setShowRelModal, dragActive, setDragActive,
     toastMessage, setToastMessage, showSaveModal, setShowSaveModal, reportNameInput, setReportNameInput,
     reportToDelete, setReportToDelete, showBuilder, setShowBuilder, showMagicBar, setShowMagicBar,

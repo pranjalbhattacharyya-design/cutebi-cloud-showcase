@@ -9,6 +9,7 @@ export const useDataEngine = () => {
     semanticModels, setSemanticModels,
     relationships, setRelationships,
     globalFilters,
+    pageFilters, activePageId,
     activeDatasetId, setActiveDatasetId,
     hiddenDatasetIds,
     globalSemanticFields, isUnified,
@@ -460,16 +461,46 @@ export const useDataEngine = () => {
     let whereClause = "";
     const filterParts = [];
     
-    // 1. Process global UI filters
+    // 1. Process Global/Interactive Slicers (Report Level)
     Object.entries(globalFilters).forEach(([originKey, vals]) => {
       if (!vals || vals.length === 0) return;
       const [oDsId, oFId] = originKey.split('::');
-      const colName = oFId ?? oDsId; // if no '::' separator, the whole key IS the column name
+      const colName = oFId ?? oDsId;
       const table = datasets.find(d => d.id === oDsId)?.tableName || oDsId;
       const colIdent = isMasterView ? `\`${colName}\`` : `\`${table}\`.\`${colName}\``;
       const valList = vals.map(v => typeof v === 'string' ? `'${String(v).replace(/'/g, "''")}'` : v).join(', ');
       filterParts.push(`CAST(${colIdent} AS STRING) IN (${valList})`);
     });
+
+    // 2. Process Authored Page-Level Filters
+    const currentPageFilters = pageFilters[activePageId] || {};
+    Object.entries(currentPageFilters).forEach(([originKey, vals]) => {
+      if (!vals || vals.length === 0) return;
+      const [oDsId, oFId] = originKey.split('::');
+      const colName = oFId ?? oDsId;
+      const table = datasets.find(d => d.id === oDsId)?.tableName || oDsId;
+      const colIdent = isMasterView ? `\`${colName}\`` : `\`${table}\`.\`${colName}\``;
+      const valList = vals.map(v => typeof v === 'string' ? `'${String(v).replace(/'/g, "''")}'` : v).join(', ');
+      filterParts.push(`CAST(${colIdent} AS STRING) IN (${valList})`);
+    });
+
+    // 3. Process Authored Visual-Level Filters (Passed via 'filters' param)
+    if (Array.isArray(filters) && filters.length > 0) {
+        const visualFilterParts = filters.map(f => {
+            if (!f.dimensionId) return 'TRUE';
+            const colIdent = isMasterView ? `\`${f.dimensionId}\`` : `\`${sourceTable}\`.\`${f.dimensionId}\``;
+            let val = f.value;
+            if (f.operator === '=') return `CAST(${colIdent} AS STRING) = '${String(val).replace(/'/g, "''")}'`;
+            if (f.operator === '!=') return `CAST(${colIdent} AS STRING) <> '${String(val).replace(/'/g, "''")}'`;
+            if (f.operator === 'contains') return `LOWER(CAST(${colIdent} AS STRING)) LIKE LOWER('%${String(val).replace(/'/g, "''")}%')`;
+            if (f.operator === 'IN') {
+                if (!Array.isArray(val) || val.length === 0) return 'FALSE';
+                return `CAST(${colIdent} AS STRING) IN (${val.map(v => `'${String(v).replace(/'/g, "''")}'`).join(', ')})`;
+            }
+            return 'TRUE';
+        });
+        filterParts.push(`(${visualFilterParts.join(' AND ')})`);
+    }
     
     // 2. Process AI-generated filters
     const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -568,11 +599,11 @@ export const useDataEngine = () => {
       return filteredData;
   }, [globalFilters, semanticModels]);
 
-  const getAggregatedData = useCallback(async (datasetId, dimensionId, measureId, legendId) => {
+  const getAggregatedData = useCallback(async (datasetId, dimensionId, measureId, legendId, filters = []) => {
     if (!datasetId || !dimensionId || !measureId) return { data: [], legendKeys: [] };
     const dimensions = [dimensionId];
     if (legendId) dimensions.push(legendId);
-    const sql = generateSQL(datasetId, dimensions, [measureId]);
+    const sql = generateSQL(datasetId, dimensions, [measureId], filters);
     try {
       const results = await queryDuckDB(sql);
       const dataMap = new Map();
@@ -594,7 +625,7 @@ const legendKeys = legendId ? [...new Set(results.map(r => r[legendId]))] : ['va
     } catch (e) { console.error("Agg Error:", e); throw e; }
   }, [generateSQL]);
 
-   const getTableData = useCallback(async (datasetId, dimensions, measures, totalMode = 'calculated') => {
+   const getTableData = useCallback(async (datasetId, dimensions, measures, totalMode = 'calculated', filters = []) => {
       if (!datasetId || (!dimensions?.length && !measures?.length)) return { headers: [], headerIds: [], rows: [] };
       const { headers, headerIds } = getTableHeaders(measures, dimensions);
       const factTablesInGroup = getFactTablesInGroup(activeDatasetId || datasetId);
@@ -608,10 +639,10 @@ const legendKeys = legendId ? [...new Set(results.map(r => r[legendId]))] : ['va
           let grandTotals = {};
           
           const factTasks = Array.from(measuresByFact.entries()).map(async ([factId, factMeasures]) => {
-            const sql = generateSQL(datasetId, dimensions, factMeasures, [], null, factId);
+            const sql = generateSQL(datasetId, dimensions, factMeasures, filters, null, factId);
             const totalsSql = totalMode === 'sum' 
               ? `WITH base AS (${sql}) SELECT ${factMeasures.map(m => `SUM(\`${m}\`) as \`${m}\``).join(', ')} FROM base`
-              : generateSQL(datasetId, [], factMeasures, [], null, factId);
+              : generateSQL(datasetId, [], factMeasures, filters, null, factId);
             
             const [rows, totalsResp] = await Promise.all([
               queryDuckDB(`${sql} LIMIT 500`),
@@ -660,11 +691,11 @@ const legendKeys = legendId ? [...new Set(results.map(r => r[legendId]))] : ['va
         
         return { headers, headerIds, rows: rows || [], totals: (totalsResp && totalsResp[0]) || {} };
       } catch (e) { console.error("Table Error:", e); throw e; }
-   }, [generateSQL, semanticModels, datasets, getFactTablesInGroup, resolveMeasureOrigin, activeDatasetId, getTableHeaders, groupMeasuresByFact]);
+   }, [generateSQL, getFactTablesInGroup, resolveMeasureOrigin, activeDatasetId, semanticModels, datasets, groupMeasuresByFact, getTableHeaders]);
 
 
-  const getPivotData = useCallback(async (datasetId, rowDims, colDims, measureIds, totalMode = 'calculated') => {
-     if (!datasetId || !rowDims?.length || !measureIds?.length) return { rowKeys: [], colKeys: [], matrix: {} };
+  const getPivotData = useCallback(async (datasetId, rowDims, colDims, measureIds, totalMode = 'calculated', filters = []) => {
+     if (!datasetId || (rowDims.length === 0 && colDims.length === 0)) return { rowKeys: [], colKeys: [], matrix: {} };
 
      const allDims = [...(rowDims || []), ...(colDims || [])];
      const factTablesInGroup = getFactTablesInGroup(activeDatasetId || datasetId);
@@ -693,7 +724,7 @@ const legendKeys = legendId ? [...new Set(results.map(r => r[legendId]))] : ['va
 
        if (isMultiFactModel) {
          for (const [factId, factMeasures] of measuresByFact) {
-           const sql = generateSQL(datasetId, allDims, factMeasures, [], null, factId);
+           const sql = generateSQL(datasetId, allDims, factMeasures, filters, null, factId);
            const results = await queryDuckDB(sql) || [];
            const { rowKeysSet, colKeysSet, matrix } = buildMatrix(results, factMeasures);
            rowKeysSet.forEach(k => allRowKeys.add(k)); colKeysSet.forEach(k => allColKeys.add(k));
@@ -703,9 +734,9 @@ const legendKeys = legendId ? [...new Set(results.map(r => r[legendId]))] : ['va
            });
 
            if (totalMode === 'calculated') {
-             const rowSql = generateSQL(datasetId, rowDims, factMeasures, [], null, factId);
-             const colSql = colDims.length > 0 ? generateSQL(datasetId, colDims, factMeasures, [], null, factId) : null;
-             const grandSql = generateSQL(datasetId, [], factMeasures, [], null, factId);
+             const rowSql = generateSQL(datasetId, rowDims, factMeasures, filters, null, factId);
+             const colSql = colDims.length > 0 ? generateSQL(datasetId, colDims, factMeasures, filters, null, factId) : null;
+             const grandSql = generateSQL(datasetId, [], factMeasures, filters, null, factId);
              
              const [rRes, cRes, gRes] = await Promise.all([
                queryDuckDB(rowSql),
@@ -729,15 +760,15 @@ const legendKeys = legendId ? [...new Set(results.map(r => r[legendId]))] : ['va
            }
          }
        } else {
-         const sql = generateSQL(datasetId, allDims, measureIds);
+         const sql = generateSQL(datasetId, allDims, measureIds, filters);
          const results = await queryDuckDB(sql) || [];
          const { rowKeysSet, colKeysSet, matrix } = buildMatrix(results, measureIds);
          allRowKeys = rowKeysSet; allColKeys = colKeysSet; mergedMatrix = matrix;
 
          if (totalMode === 'calculated') {
-            const rowSql = generateSQL(datasetId, rowDims, measureIds);
-            const colSql = colDims.length > 0 ? generateSQL(datasetId, colDims, measureIds) : null;
-            const grandSql = generateSQL(datasetId, [], measureIds);
+            const rowSql = generateSQL(datasetId, rowDims, measureIds, filters);
+            const colSql = colDims.length > 0 ? generateSQL(datasetId, colDims, measureIds, filters) : null;
+            const grandSql = generateSQL(datasetId, [], measureIds, filters);
             
             const [rRes, cRes, gRes] = await Promise.all([
               queryDuckDB(rowSql),
@@ -773,12 +804,12 @@ const legendKeys = legendId ? [...new Set(results.map(r => r[legendId]))] : ['va
    }, [generateSQL, getFactTablesInGroup, resolveMeasureOrigin, activeDatasetId, semanticModels, datasets, groupMeasuresByFact]);
 
 
-  const getScatterData = useCallback(async (datasetId, dimensionId, xMeas, yMeas, cMeas, sMeas) => {
+  const getScatterData = useCallback(async (datasetId, dimensionId, xMeas, yMeas, cMeas, sMeas, filters = []) => {
     if (!datasetId || !dimensionId || !xMeas || !yMeas) return [];
     const measures = [xMeas, yMeas];
     if (cMeas) measures.push(cMeas);
     if (sMeas) measures.push(sMeas);
-    const sql = generateSQL(datasetId, [dimensionId], measures);
+    const sql = generateSQL(datasetId, [dimensionId], measures, filters);
     try {
       const results = await queryDuckDB(sql);
       return results.map(row => ({ name: row[dimensionId], x: row[xMeas], y: row[yMeas], color: cMeas ? row[cMeas] : null, size: sMeas ? row[sMeas] : null }));
@@ -842,7 +873,7 @@ const legendKeys = legendId ? [...new Set(results.map(r => r[legendId]))] : ['va
         detail: { type: 'info', category: 'Matrix', message: 'KPI Matrix routing resolved', details: { routing: routingDetails } } 
     }));
 
-    // Build outer WHERE from global slicers (shared across all batches)
+    // 1. Process Global/Interactive Slicers (Report Level)
     const slicerParts = [];
     Object.entries(globalFilters).forEach(([originKey, vals]) => {
       if (!vals || vals.length === 0) return;
@@ -852,6 +883,36 @@ const legendKeys = legendId ? [...new Set(results.map(r => r[legendId]))] : ['va
       const valList = vals.map(v => `'${String(v).replace(/'/g, "''")}' `).join(', ');
       slicerParts.push(`CAST(${colIdent} AS STRING) IN (${valList})`);
     });
+
+    // 2. Process Authored Page-Level Filters
+    const currentPageFilters = pageFilters[activePageId] || {};
+    Object.entries(currentPageFilters).forEach(([originKey, vals]) => {
+      if (!vals || vals.length === 0) return;
+      const [oDsId, oFId] = originKey.split('::');
+      const colName = oFId ?? oDsId;
+      const colIdent = isMasterView ? `\`${colName}\`` : `\`${sourceTable}\`.\`${colName}\``;
+      const valList = vals.map(v => `'${String(v).replace(/'/g, "''")}' `).join(', ');
+      slicerParts.push(`CAST(${colIdent} AS STRING) IN (${valList})`);
+    });
+
+    // 3. Process Authored Visual-Level Filters
+    if (Array.isArray(chart.filters) && chart.filters.length > 0) {
+        const visualFilterParts = chart.filters.map(f => {
+            if (!f.dimensionId) return 'TRUE';
+            const colIdent = isMasterView ? `\`${f.dimensionId}\`` : `\`${sourceTable}\`.\`${f.dimensionId}\``;
+            let val = f.value;
+            if (f.operator === '=') return `CAST(${colIdent} AS STRING) = '${String(val).replace(/'/g, "''")}'`;
+            if (f.operator === '!=') return `CAST(${colIdent} AS STRING) <> '${String(val).replace(/'/g, "''")}'`;
+            if (f.operator === 'contains') return `LOWER(CAST(${colIdent} AS STRING)) LIKE LOWER('%${String(val).replace(/'/g, "''")}%')`;
+            if (f.operator === 'IN') {
+                if (!Array.isArray(val) || val.length === 0) return 'FALSE';
+                return `CAST(${colIdent} AS STRING) IN (${val.map(v => `'${String(v).replace(/'/g, "''")}'`).join(', ')})`;
+            }
+            return 'TRUE';
+        });
+        slicerParts.push(`(${visualFilterParts.join(` ${chart.filterLogic || 'AND'} `)})`);
+    }
+
     const whereClause = slicerParts.length > 0 ? ` WHERE ${slicerParts.join(' AND ')}` : '';
 
     // Helper: build CASE WHEN condition string for one scope column

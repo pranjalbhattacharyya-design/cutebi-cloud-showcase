@@ -8,6 +8,7 @@ import { useDataEngine } from '../../hooks/useDataEngine';
 import { MultiSelect } from '../ui/MultiSelect';
 import ChartWidget from './ChartWidget';
 import ThemeSelector from '../ui/ThemeSelector';
+import FilterPane from '../layout/FilterPane';
 
 // Memoized Slicer Component for Performance
 const DashboardSlicer = React.memo(({ slicer, globalFilters, setGlobalFilterArray, setEditingSlicerId, setEditingSlicerTitle, editingSlicerId, editingSlicerTitle, saveSlicerTitle, setSlicers, globalSemanticFields, activeDatasetId, getUniqueValuesForDim, datesReady }) => {
@@ -107,6 +108,8 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
       pages, setPages, activePageId, setActivePageId,
       dashboards, setDashboards,
       setBuilderForm, initBuilderForm, setShowBuilder,
+      isFilterPaneOpen, setIsFilterPaneOpen,
+      pageFilters,
       userRole
   } = useAppState();
 
@@ -236,6 +239,17 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
                           <Sparkles size={12} /> Ask AI
                       </button>
                     )}
+                    <button 
+                      onClick={() => setIsFilterPaneOpen(!isFilterPaneOpen)} 
+                      className={`flex items-center gap-1.5 px-3 py-1 font-black text-[10px] uppercase tracking-wider transition-all border t-border ${isFilterPaneOpen ? 't-accent-bg text-white border-transparent shadow-md' : 't-panel t-text-muted hover:t-text-main'}`}
+                      style={{ borderRadius: 'var(--theme-radius-button)' }}
+                    >
+                      <Filter size={12} />
+                      Authored Filters
+                      {(Object.keys(globalFilters).length > 0 || Object.keys(pageFilters[activePageId] || {}).length > 0) && (
+                        <span className="ml-1 w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                      )}
+                    </button>
                 </div>
                 
                 <div className="flex items-center gap-3">
@@ -329,6 +343,11 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
             </div>
           )}
       </div>
+      
+      <FilterPane 
+        isOpen={isFilterPaneOpen} 
+        onClose={() => setIsFilterPaneOpen(false)} 
+      />
     </div>
   );
 }
