@@ -42,6 +42,7 @@ function AppContent() {
     currentTemplateId, setCurrentTemplateId, reportNameInput, setReportNameInput,
     dashboards, setDashboards, activePageId, setActivePageId, semanticModels, setSemanticModels, globalFilters, setGlobalFilters, 
     pageFilters, setPageFilters,
+    authoredReportFilters, setAuthoredReportFilters,
     relationships, setRelationships, pages, setPages,
     slicers, setSlicers, categories, setCategories,
     toastMessage, showToast, isExploreOpen, setIsExploreOpen, savedReports, setSavedReports,
@@ -236,6 +237,7 @@ function AppContent() {
       setActivePageId(rData.pages?.[0]?.id || 'page_1');
       setSlicers(rData.slicers || []);
       setPageFilters(rData.pageFilters || {});
+      setAuthoredReportFilters(rData.authoredReportFilters || []);
       setCategories(rData.categories || []);
       
       if (restoredDatasets.length > 0) {
@@ -529,6 +531,7 @@ function AppContent() {
       pages: pages,
       slicers: slicers,
       pageFilters: pageFilters,
+      authoredReportFilters: authoredReportFilters,
       theme: theme,
       categories: categories,
       workspaceId: currentWorkspaceId,

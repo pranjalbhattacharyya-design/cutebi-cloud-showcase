@@ -109,7 +109,7 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
       dashboards, setDashboards,
       setBuilderForm, initBuilderForm, setShowBuilder,
       isFilterPaneOpen, setIsFilterPaneOpen,
-      pageFilters,
+      pageFilters, authoredReportFilters,
       userRole
   } = useAppState();
 
@@ -246,7 +246,7 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
                     >
                       <Filter size={12} />
                       Authored Filters
-                      {(Object.keys(globalFilters).length > 0 || Object.keys(pageFilters[activePageId] || {}).length > 0) && (
+                      {(authoredReportFilters.length > 0 || (pageFilters[activePageId] || []).length > 0) && (
                         <span className="ml-1 w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
                       )}
                     </button>

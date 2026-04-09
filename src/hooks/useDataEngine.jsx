@@ -9,7 +9,7 @@ export const useDataEngine = () => {
     semanticModels, setSemanticModels,
     relationships, setRelationships,
     globalFilters,
-    pageFilters, activePageId,
+    pageFilters, authoredReportFilters, activePageId,
     activeDatasetId, setActiveDatasetId,
     hiddenDatasetIds,
     globalSemanticFields, isUnified,
@@ -472,19 +472,44 @@ export const useDataEngine = () => {
       filterParts.push(`CAST(${colIdent} AS STRING) IN (${valList})`);
     });
 
-    // 2. Process Authored Page-Level Filters
-    const currentPageFilters = pageFilters[activePageId] || {};
-    Object.entries(currentPageFilters).forEach(([originKey, vals]) => {
-      if (!vals || vals.length === 0) return;
-      const [oDsId, oFId] = originKey.split('::');
-      const colName = oFId ?? oDsId;
-      const table = datasets.find(d => d.id === oDsId)?.tableName || oDsId;
-      const colIdent = isMasterView ? `\`${colName}\`` : `\`${table}\`.\`${colName}\``;
-      const valList = vals.map(v => typeof v === 'string' ? `'${String(v).replace(/'/g, "''")}'` : v).join(', ');
-      filterParts.push(`CAST(${colIdent} AS STRING) IN (${valList})`);
-    });
+    // 2. Process Authored Report-Level Filters
+    if (Array.isArray(authoredReportFilters) && authoredReportFilters.length > 0) {
+        const reportFilterParts = authoredReportFilters.map(f => {
+            if (!f.dimensionId) return 'TRUE';
+            const colIdent = isMasterView ? `\`${f.dimensionId}\`` : `\`${sourceTable}\`.\`${f.dimensionId}\``;
+            let val = f.value;
+            if (f.operator === '=') return `CAST(${colIdent} AS STRING) = '${String(val).replace(/'/g, "''")}'`;
+            if (f.operator === '!=') return `CAST(${colIdent} AS STRING) <> '${String(val).replace(/'/g, "''")}'`;
+            if (f.operator === 'contains') return `LOWER(CAST(${colIdent} AS STRING)) LIKE LOWER('%${String(val).replace(/'/g, "''")}%')`;
+            if (f.operator === 'IN') {
+                if (!Array.isArray(val) || val.length === 0) return 'FALSE';
+                return `CAST(${colIdent} AS STRING) IN (${val.map(v => `'${String(v).replace(/'/g, "''")}'`).join(', ')})`;
+            }
+            return 'TRUE';
+        });
+        filterParts.push(`(${reportFilterParts.join(' AND ')})`);
+    }
 
-    // 3. Process Authored Visual-Level Filters (Passed via 'filters' param)
+    // 3. Process Authored Page-Level Filters
+    const currentPageFilters = pageFilters[activePageId] || [];
+    if (Array.isArray(currentPageFilters) && currentPageFilters.length > 0) {
+        const pageFilterParts = currentPageFilters.map(f => {
+            if (!f.dimensionId) return 'TRUE';
+            const colIdent = isMasterView ? `\`${f.dimensionId}\`` : `\`${sourceTable}\`.\`${f.dimensionId}\``;
+            let val = f.value;
+            if (f.operator === '=') return `CAST(${colIdent} AS STRING) = '${String(val).replace(/'/g, "''")}'`;
+            if (f.operator === '!=') return `CAST(${colIdent} AS STRING) <> '${String(val).replace(/'/g, "''")}'`;
+            if (f.operator === 'contains') return `LOWER(CAST(${colIdent} AS STRING)) LIKE LOWER('%${String(val).replace(/'/g, "''")}%')`;
+            if (f.operator === 'IN') {
+                if (!Array.isArray(val) || val.length === 0) return 'FALSE';
+                return `CAST(${colIdent} AS STRING) IN (${val.map(v => `'${String(v).replace(/'/g, "''")}'`).join(', ')})`;
+            }
+            return 'TRUE';
+        });
+        filterParts.push(`(${pageFilterParts.join(' AND ')})`);
+    }
+
+    // 4. Process Authored Visual-Level Filters (Passed via 'filters' param)
     if (Array.isArray(filters) && filters.length > 0) {
         const visualFilterParts = filters.map(f => {
             if (!f.dimensionId) return 'TRUE';
@@ -884,18 +909,44 @@ const legendKeys = legendId ? [...new Set(results.map(r => r[legendId]))] : ['va
       slicerParts.push(`CAST(${colIdent} AS STRING) IN (${valList})`);
     });
 
-    // 2. Process Authored Page-Level Filters
-    const currentPageFilters = pageFilters[activePageId] || {};
-    Object.entries(currentPageFilters).forEach(([originKey, vals]) => {
-      if (!vals || vals.length === 0) return;
-      const [oDsId, oFId] = originKey.split('::');
-      const colName = oFId ?? oDsId;
-      const colIdent = isMasterView ? `\`${colName}\`` : `\`${sourceTable}\`.\`${colName}\``;
-      const valList = vals.map(v => `'${String(v).replace(/'/g, "''")}' `).join(', ');
-      slicerParts.push(`CAST(${colIdent} AS STRING) IN (${valList})`);
-    });
+    // 2. Process Authored Report-Level Filters
+    if (Array.isArray(authoredReportFilters) && authoredReportFilters.length > 0) {
+        const reportFilterParts = authoredReportFilters.map(f => {
+            if (!f.dimensionId) return 'TRUE';
+            const colIdent = isMasterView ? `\`${f.dimensionId}\`` : `\`${sourceTable}\`.\`${f.dimensionId}\``;
+            let val = f.value;
+            if (f.operator === '=') return `CAST(${colIdent} AS STRING) = '${String(val).replace(/'/g, "''")}'`;
+            if (f.operator === '!=') return `CAST(${colIdent} AS STRING) <> '${String(val).replace(/'/g, "''")}'`;
+            if (f.operator === 'contains') return `LOWER(CAST(${colIdent} AS STRING)) LIKE LOWER('%${String(val).replace(/'/g, "''")}%')`;
+            if (f.operator === 'IN') {
+                if (!Array.isArray(val) || val.length === 0) return 'FALSE';
+                return `CAST(${colIdent} AS STRING) IN (${val.map(v => `'${String(v).replace(/'/g, "''")}'`).join(', ')})`;
+            }
+            return 'TRUE';
+        });
+        slicerParts.push(`(${reportFilterParts.join(' AND ')})`);
+    }
 
-    // 3. Process Authored Visual-Level Filters
+    // 3. Process Authored Page-Level Filters
+    const currentPageFilters = pageFilters[activePageId] || [];
+    if (Array.isArray(currentPageFilters) && currentPageFilters.length > 0) {
+        const pageFilterParts = currentPageFilters.map(f => {
+            if (!f.dimensionId) return 'TRUE';
+            const colIdent = isMasterView ? `\`${f.dimensionId}\`` : `\`${sourceTable}\`.\`${f.dimensionId}\``;
+            let val = f.value;
+            if (f.operator === '=') return `CAST(${colIdent} AS STRING) = '${String(val).replace(/'/g, "''")}'`;
+            if (f.operator === '!=') return `CAST(${colIdent} AS STRING) <> '${String(val).replace(/'/g, "''")}'`;
+            if (f.operator === 'contains') return `LOWER(CAST(${colIdent} AS STRING)) LIKE LOWER('%${String(val).replace(/'/g, "''")}%')`;
+            if (f.operator === 'IN') {
+                if (!Array.isArray(val) || val.length === 0) return 'FALSE';
+                return `CAST(${colIdent} AS STRING) IN (${val.map(v => `'${String(v).replace(/'/g, "''")}'`).join(', ')})`;
+            }
+            return 'TRUE';
+        });
+        slicerParts.push(`(${pageFilterParts.join(' AND ')})`);
+    }
+
+    // 4. Process Authored Visual-Level Filters
     if (Array.isArray(chart.filters) && chart.filters.length > 0) {
         const visualFilterParts = chart.filters.map(f => {
             if (!f.dimensionId) return 'TRUE';

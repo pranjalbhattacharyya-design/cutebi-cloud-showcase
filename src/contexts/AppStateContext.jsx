@@ -18,7 +18,8 @@ export const AppStateProvider = ({ children }) => {
   const [semanticModels, setSemanticModels] = useState({});
   const [dashboards, setDashboards] = useState({});
   const [globalFilters, setGlobalFilters] = useState({});
-  const [pageFilters, setPageFilters] = useState({}); // { [pageId]: { [originKey]: [values] } }
+  const [pageFilters, setPageFilters] = useState({}); // { [pageId]: [{ dimensionId, operator, value, filterLogic }] }
+  const [authoredReportFilters, setAuthoredReportFilters] = useState([]); // [{ dimensionId, operator, value, filterLogic }]
   const [relationships, setRelationships] = useState([]);
   const [slicers, setSlicers] = useState([]);
   const [hiddenDatasetIds, setHiddenDatasetIds] = useState([]);  // Persistence & Library State
@@ -642,6 +643,7 @@ export const AppStateProvider = ({ children }) => {
     semanticModels, setSemanticModels, dashboards, setDashboards,
     globalFilters, setGlobalFilters, 
     pageFilters, setPageFilters,
+    authoredReportFilters, setAuthoredReportFilters,
     relationships, setRelationships, slicers, setSlicers,
     workspaceDatasets, setWorkspaceDatasets, workspaceSemanticModels, setWorkspaceSemanticModels,
     publishedModels, setPublishedModels,
