@@ -787,40 +787,26 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                    return (
                       <g>
                          <rect x={x} y={y} width={width} height={height} fill={fill} stroke="var(--theme-panel-bg)" strokeWidth={1} style={{ fillOpacity: depth === 1 ? 0.9 : 0.7 }} />
-                         {isLeaf && width > 40 && height > 24 && (
-                            <text 
-                               x={x + 6} 
-                               y={y + 18} 
-                               fill="#fff" 
-                               fontSize={11} 
-                               fontWeight="600" 
-                               className="pointer-events-none" 
-                               style={{ 
+                         {isLeaf && width > 30 && height > 20 && (
+                            <foreignObject x={x + 4} y={y + 4} width={width - 8} height={height - 8} style={{ pointerEvents: 'none' }}>
+                               <div style={{ 
+                                  color: '#fff', 
                                   fontFamily: 'var(--theme-font, inherit)',
-                                  textRendering: 'geometricPrecision',
-                                  WebkitFontSmoothing: 'antialiased'
-                               }}
-                            >
-                               {name}
-                            </text>
-                         )}
-                         {isLeaf && width > 40 && height > 40 && (
-                            <text 
-                               x={x + 6} 
-                               y={y + 32} 
-                               fill="#fff" 
-                               fontSize={10} 
-                               fontWeight="400" 
-                               className="pointer-events-none" 
-                               style={{ 
-                                  fontFamily: 'var(--theme-font, inherit)', 
-                                  opacity: 0.9,
-                                  textRendering: 'geometricPrecision',
-                                  WebkitFontSmoothing: 'antialiased'
-                               }}
-                            >
-                               {formatMeasVal(value, chart.measure, false)}
-                            </text>
+                                  fontSize: '11px',
+                                  lineHeight: '1.2',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '2px',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'normal',
+                                  WebkitFontSmoothing: 'antialiased',
+                                  MozOsxFontSmoothing: 'grayscale'
+                               }}>
+                                  <div style={{ fontWeight: '600', opacity: 1, letterSpacing: '-0.01em' }}>{name}</div>
+                                  <div style={{ fontWeight: '400', opacity: 0.85, fontSize: '10px' }}>{formatMeasVal(value, chart.measure, false)}</div>
+                               </div>
+                            </foreignObject>
                          )}
                       </g>
                    );
