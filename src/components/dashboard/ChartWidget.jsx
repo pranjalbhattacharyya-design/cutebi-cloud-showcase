@@ -775,21 +775,23 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                 data={Array.isArray(chartData) ? chartData : (chartData?.data || [])}
                 dataKey="value"
                 stroke="var(--theme-panel-bg)"
-                content={({ root, depth, x, y, width, height, index, name, value }) => {
-                   if (width < 10 || height < 10) return null;
-                   // Just use the root level index for coloring so family stays same color
-                   const colorIdx = root && root.children ? root.children.findIndex(c => c.name === (depth === 1 ? name : '')) : index;
+                content={(props) => {
+                   const { depth, x, y, width, height, name, value, fullPath, rootIndex } = props;
+                   if (width < 10 || height < 10 || depth < 1) return null;
+                   
+                   const colorIdx = rootIndex !== undefined ? rootIndex : props.index;
                    const fill = tColors[Math.max(0, colorIdx) % tColors.length] || tColors[0];
+                   
                    return (
                       <g>
-                         <rect x={x} y={y} width={width} height={height} fill={fill} stroke="var(--theme-panel-bg)" strokeWidth={2} style={{ fillOpacity: depth === 1 ? 0.9 : 0.6 }} />
+                         <rect x={x} y={y} width={width} height={height} fill={fill} stroke="var(--theme-panel-bg)" strokeWidth={2} style={{ fillOpacity: depth === 1 ? 0.9 : 0.7 }} />
                          {width > 40 && height > 24 && (
-                            <text x={x + 6} y={y + 18} fill="#fff" fontSize={11} fontWeight="bold" className="pointer-events-none" style={{ textShadow: '0px 1px 2px rgba(0,0,0,0.5)' }}>
-                               {formatDimVal(name, chart.treeDimensions?.[depth - 1] || chart.dimension)}
+                            <text x={x + 6} y={y + 18} fill="#fff" fontSize={11} fontWeight="600" className="pointer-events-none" style={{ fontFamily: 'var(--theme-font, inherit)' }}>
+                               {fullPath || name}
                             </text>
                          )}
                          {width > 40 && height > 40 && (
-                            <text x={x + 6} y={y + 32} fill="#fff" fontSize={10} className="pointer-events-none" style={{ textShadow: '0px 1px 2px rgba(0,0,0,0.5)' }}>
+                            <text x={x + 6} y={y + 32} fill="#fff" fontSize={10} className="pointer-events-none" style={{ fontFamily: 'var(--theme-font, inherit)', opacity: 0.9 }}>
                                {formatMeasVal(value, chart.measure, false)}
                             </text>
                          )}

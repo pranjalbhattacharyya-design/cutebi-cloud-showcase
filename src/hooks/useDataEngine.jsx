@@ -664,15 +664,23 @@ const legendKeys = legendId ? [...new Set(results.map(r => r[legendId]))] : ['va
         let currentLevel = root.children;
         const measureVal = Number(row[measureId]) || 0;
         root.value += measureVal;
-        
+        let pathSoFar = [];
         dimensions.forEach((dim, idx) => {
           const val = row[dim] === null || row[dim] === undefined ? 'Unknown' : String(row[dim]);
           const isLast = idx === dimensions.length - 1;
+          pathSoFar.push(val);
           
           let existingNode = currentLevel.find(c => c.name === val);
           
           if (!existingNode) {
-            existingNode = { name: val, value: 0 };
+            existingNode = { 
+                name: val, 
+                value: 0, 
+                fullPath: pathSoFar.join(' / '),
+                rootIndex: root.children.findIndex(c => c.name === pathSoFar[0])
+            };
+            if (idx === 0) existingNode.rootIndex = root.children.length; // Set rootIndex for top level
+            
             if (!isLast) {
               existingNode.children = [];
             }
