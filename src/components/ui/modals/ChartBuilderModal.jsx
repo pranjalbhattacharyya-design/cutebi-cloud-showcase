@@ -306,6 +306,7 @@ export default function ChartBuilderModal() {
                  <option value="scatter">Scatter Plot</option>
                  <option value="pivot">Pivot Table</option>
                  <option value="matrix">KPI Matrix</option>
+                 <option value="treemap">Treemap</option>
               </select>
            </div>
         </div>
@@ -359,7 +360,7 @@ export default function ChartBuilderModal() {
            </div>
         )}
 
-        {builderForm.type !== 'pivot' && builderForm.type !== 'scatter' && builderForm.type !== 'table' && builderForm.type !== 'matrix' && (
+        {builderForm.type !== 'pivot' && builderForm.type !== 'scatter' && builderForm.type !== 'table' && builderForm.type !== 'matrix' && builderForm.type !== 'treemap' && (
            <div className="grid grid-cols-2 gap-6 mb-6">
               <div>
                  <label className="text-[10px] font-black t-text-muted uppercase tracking-widest mb-2 block">X-Axis (Dimension)</label>
@@ -442,12 +443,37 @@ export default function ChartBuilderModal() {
                    </div>
                    <div className="col-span-2">
                       <label className="text-xs font-bold t-text-muted uppercase tracking-wide mb-1 block">Values (Measures)</label>
-                      <MultiSelect
+                       <MultiSelect
                          placeholder="Measures"
                          options={measures}
                          value={builderForm.pivotMeasures}
                          onChange={vals => setBuilderForm({...builderForm, pivotMeasures: vals})}
                       />
+                   </div>
+                </div>
+            </div>
+        )}
+
+        {builderForm.type === 'treemap' && (
+           <div className="grid grid-cols-2 gap-6 mb-6">
+              <div>
+                 <label className="text-[10px] font-black t-text-muted uppercase tracking-widest mb-2 block">Hierarchy Dimensions (Order matters)</label>
+                 <MultiSelect
+                    placeholder="Select Dimensions"
+                    options={dimensions}
+                    value={builderForm.treeDimensions || []}
+                    onChange={vals => setBuilderForm({...builderForm, treeDimensions: vals})}
+                 />
+              </div>
+              <div>
+                 <label className="text-[10px] font-black t-text-muted uppercase tracking-widest mb-2 block">Size (Measure)</label>
+                 <select value={builderForm.measure} onChange={e => setBuilderForm({...builderForm, measure: e.target.value})} className="w-full t-panel t-border border px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-[var(--theme-accent)]/30 transition-all outline-none" style={{ borderRadius: 'var(--theme-radius-button)' }}>
+                    <option value="">Select Measure...</option>
+                    {measures.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                 </select>
+              </div>
+           </div>
+        )}
                    </div>
                    <div className="col-span-2 flex flex-col gap-3 bg-black/5 p-3 rounded-lg border t-border mt-2">
                        <div className="flex items-center justify-between border-b t-border pb-2 mb-1">

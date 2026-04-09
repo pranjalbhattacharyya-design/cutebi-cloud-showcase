@@ -650,6 +650,50 @@ const legendKeys = legendId ? [...new Set(results.map(r => r[legendId]))] : ['va
     } catch (e) { console.error("Agg Error:", e); throw e; }
   }, [generateSQL]);
 
+  const getHierarchicalData = useCallback(async (datasetId, dimensions, measureId, filters = []) => {
+    if (!datasetId || !dimensions || dimensions.length === 0 || !measureId) return [];
+    
+    // We group by all dimensions in the hierarchy
+    const sql = generateSQL(datasetId, dimensions, [measureId], filters);
+    try {
+      const results = await queryDuckDB(sql);
+      
+      const root = { name: 'root', children: [] };
+      
+      results.forEach(row => {
+        let currentLevel = root.children;
+        
+        dimensions.forEach((dim, idx) => {
+          const val = row[dim] === null || row[dim] === undefined ? 'Unknown' : String(row[dim]);
+          const isLast = idx === dimensions.length - 1;
+          
+          let existingNode = currentLevel.find(c => c.name === val);
+          
+          if (!existingNode) {
+            existingNode = { name: val };
+            if (!isLast) {
+              existingNode.children = [];
+            } else {
+              existingNode.value = Number(row[measureId]) || 0;
+            }
+            currentLevel.push(existingNode);
+          } else if (isLast) {
+            existingNode.value = (existingNode.value || 0) + (Number(row[measureId]) || 0);
+          }
+          
+          if (!isLast) {
+            currentLevel = existingNode.children;
+          }
+        });
+      });
+      
+      return root.children;
+    } catch (e) {
+      console.error("Hierarchical Error:", e);
+      throw e;
+    }
+  }, [generateSQL]);
+
    const getTableData = useCallback(async (datasetId, dimensions, measures, totalMode = 'calculated', filters = []) => {
       if (!datasetId || (!dimensions?.length && !measures?.length)) return { headers: [], headerIds: [], rows: [] };
       const { headers, headerIds } = getTableHeaders(measures, dimensions);
@@ -1154,6 +1198,7 @@ const legendKeys = legendId ? [...new Set(results.map(r => r[legendId]))] : ['va
     globalSemanticFields,
     applyFilters,
     getAggregatedData,
+    getHierarchicalData,
     getPivotData,
     getTableData,
     getScatterData,

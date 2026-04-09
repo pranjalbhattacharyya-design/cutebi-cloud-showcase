@@ -6,7 +6,7 @@ import { ArrowUpDown, Maximize2, X, Pencil, Pin, LayoutTemplate, ChevronRight, C
 import { 
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
   Tooltip as RechartsTooltip, Legend, LabelList, LineChart, Line, 
-  ScatterChart, Scatter, ZAxis, PieChart as RechartsPieChart, Pie, Cell, Text 
+  ScatterChart, Scatter, ZAxis, PieChart as RechartsPieChart, Pie, Cell, Text, Treemap
 } from 'recharts';
 
 /**
@@ -133,7 +133,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
       globalFilters, joinGroupIds, fontScale, textWrap
   } = useAppState();
   
-  const { getAggregatedData, getPivotData, getTableData, getScatterData, getMatrixData, datesReady } = useChartData();
+  const { getAggregatedData, getPivotData, getTableData, getScatterData, getMatrixData, getHierarchicalData, datesReady } = useChartData();
 
   const [chartData, setChartData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
@@ -233,6 +233,8 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
           // matrix type is handled by its own useEffect below
           setLoading(false);
           return;
+        } else if (chart.type === 'treemap') {
+          res = await getHierarchicalData(chart.datasetId, chart.treeDimensions || [], chart.measure, chart.filters || []);
         } else {
           res = await getAggregatedData(chart.datasetId, chart.dimension, chart.measure, chart.legend, chart.filters || []);
         }
@@ -763,6 +765,35 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
               </Pie>
               <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', color: 'var(--theme-text-main)' }} />
             </RechartsPieChart>
+          ) : chart.type === 'treemap' ? (
+            <Treemap
+                data={data}
+                dataKey="value"
+                stroke="var(--theme-panel-bg)"
+                content={({ root, depth, x, y, width, height, index, name, value }) => {
+                   if (width < 10 || height < 10) return null;
+                   // Just use the root level index for coloring so family stays same color
+                   const colorIdx = root && root.children ? root.children.findIndex(c => c.name === (depth === 1 ? name : '')) : index;
+                   const fill = tColors[Math.max(0, colorIdx) % tColors.length] || tColors[0];
+                   return (
+                      <g>
+                         <rect x={x} y={y} width={width} height={height} fill={fill} stroke="var(--theme-panel-bg)" strokeWidth={2} style={{ fillOpacity: depth === 1 ? 0.9 : 0.6 }} />
+                         {width > 40 && height > 24 && (
+                            <text x={x + 6} y={y + 18} fill="#fff" fontSize={11} fontWeight="bold" className="pointer-events-none" style={{ textShadow: '0px 1px 2px rgba(0,0,0,0.5)' }}>
+                               {formatDimVal(name, chart.treeDimensions?.[depth - 1] || chart.dimension)}
+                            </text>
+                         )}
+                         {width > 40 && height > 40 && (
+                            <text x={x + 6} y={y + 32} fill="#fff" fontSize={10} className="pointer-events-none" style={{ textShadow: '0px 1px 2px rgba(0,0,0,0.5)' }}>
+                               {formatMeasVal(value, chart.measure, false)}
+                            </text>
+                         )}
+                      </g>
+                   );
+                }}
+            >
+               <RechartsTooltip contentStyle={{ borderRadius: 'var(--theme-radius-panel)', border: 'none', boxShadow: 'var(--theme-shadow)', background: 'var(--theme-panel-bg)', color: 'var(--theme-text-main)' }} formatter={(v, n) => [formatMeasVal(v, chart.measure), n]} />
+            </Treemap>
           ) : (
             <LineChart data={data} margin={{ top: 10, right: 20, left: 10, bottom: 20 }}>
               <CartesianGrid vertical={false} stroke="var(--theme-border)" />
