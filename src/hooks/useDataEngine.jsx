@@ -248,34 +248,11 @@ export const useDataEngine = () => {
     for (const dsId of factTablesInGroup) {
       const match = (semanticModels[dsId] || []).find(f => f.id.toLowerCase() === measIdLower);
       if (match) {
-        return dsId;
+        foundMeasure = match;
+        fallbackDsId = dsId;
+        break;
       }
     }
-    return fallbackDsId;
-  }, [semanticModels]);
-
-  const groupMeasuresByFact = useCallback((measureIds, factTablesInGroup) => {
-    const map = new Map();
-    (measureIds || []).forEach(mId => {
-      const factId = resolveMeasureOrigin(mId, factTablesInGroup, activeDatasetId);
-      if (!map.has(factId)) map.set(factId, []);
-      map.get(factId).push(mId);
-    });
-    return map;
-  }, [resolveMeasureOrigin, activeDatasetId]);
-
-  const getTableHeaders = useCallback((measures, dimensions) => {
-    const resolveLabel = (id) => {
-      const bareId = id.includes('::') ? id.split('::')[1] : id;
-      const allSemanticFields = Object.values(semanticModels).flat();
-      const match = allSemanticFields.find(x => x.id.toLowerCase() === bareId.toLowerCase());
-      return match ? match.label : bareId;
-    };
-    return {
-      headers: [...(dimensions || []).map(resolveLabel), ...(measures || []).map(resolveLabel)],
-      headerIds: [...(dimensions || []), ...(measures || [])]
-    };
-  }, [semanticModels]);
 
   // 2. Smart Grain Peeking: If calculated, analyze its dependencies to find the true grain
     if (foundMeasure?.isCalculated && foundMeasure.expression) {
@@ -320,6 +297,29 @@ export const useDataEngine = () => {
     }
 
     return fallbackDsId;
+  }, [semanticModels]);
+
+  const groupMeasuresByFact = useCallback((measureIds, factTablesInGroup) => {
+    const map = new Map();
+    (measureIds || []).forEach(mId => {
+      const factId = resolveMeasureOrigin(mId, factTablesInGroup, activeDatasetId);
+      if (!map.has(factId)) map.set(factId, []);
+      map.get(factId).push(mId);
+    });
+    return map;
+  }, [resolveMeasureOrigin, activeDatasetId]);
+
+  const getTableHeaders = useCallback((measures, dimensions) => {
+    const resolveLabel = (id) => {
+      const bareId = id.includes('::') ? id.split('::')[1] : id;
+      const allSemanticFields = Object.values(semanticModels).flat();
+      const match = allSemanticFields.find(x => x.id.toLowerCase() === bareId.toLowerCase());
+      return match ? match.label : bareId;
+    };
+    return {
+      headers: [...(dimensions || []).map(resolveLabel), ...(measures || []).map(resolveLabel)],
+      headerIds: [...(dimensions || []), ...(measures || [])]
+    };
   }, [semanticModels]);
 
 
