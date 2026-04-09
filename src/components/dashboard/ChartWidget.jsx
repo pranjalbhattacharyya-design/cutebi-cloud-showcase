@@ -297,9 +297,8 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
         setMatrixRawRow(row);
         setMatrixLoading(false);
         // Seed expanded state: all categories open by default
-        const sm = Object.values({} ); // we'll expand inline
         const cats = new Set((chart.matrixMeasures || []).map(mId => {
-          for (const model of Object.values({})) {
+          for (const model of Object.values(semanticModels)) {
             const f = model.find(x => x.id === mId);
             if (f) return f.category || 'Uncategorized';
           }
