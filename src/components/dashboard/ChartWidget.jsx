@@ -964,7 +964,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                           );
                         })}
                       </tr>
-                      {/* Child measure rows */}
+                      {isExpanded && measures.map((m, mi) => (
                         <tr key={m.id} className="matrix-row-hover">
                           <td className="px-3 py-1.5 t-text-main font-medium transition-colors" style={{ paddingLeft: '28px', fontSize: '11px', border: '1px solid rgba(0,0,0,0.05)' }}>
                             {m.label}
