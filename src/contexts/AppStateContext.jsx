@@ -145,6 +145,7 @@ export const AppStateProvider = ({ children }) => {
      // Totals Configuration
      showColTotals: false, colTotalPosition: 'bottom',
      showRowTotals: false, rowTotalPosition: 'end',
+     totalMode: 'calculated', // 'calculated' | 'sum'
      // KPI Matrix fields
      matrixMeasures: [],
      matrixColumns: [] // [{ id, label, type: 'scope'|'variance', filters, filterLogic, timeConfig } | { id, label, type: 'variance', colAId, colBId, varianceMode: '#'|'%' }]

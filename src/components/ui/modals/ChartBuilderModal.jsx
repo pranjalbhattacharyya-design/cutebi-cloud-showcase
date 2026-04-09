@@ -332,16 +332,27 @@ export default function ChartBuilderModal() {
                      />
                   </div>
                </div>
-               <div className="flex items-center gap-4 bg-black/5 p-3 rounded-lg border t-border mt-2">
-                   <label className="flex items-center gap-2 text-xs font-bold t-text-main cursor-pointer">
-                      <input type="checkbox" checked={builderForm.showColTotals} onChange={e => setBuilderForm({...builderForm, showColTotals: e.target.checked})} className="w-3 h-3 accent-[var(--theme-accent)]" />
-                      Show Column Totals
-                   </label>
+               <div className="flex items-center gap-6 bg-black/5 p-3 rounded-lg border t-border mt-2">
+                   <div className="flex items-center gap-4">
+                       <label className="flex items-center gap-2 text-xs font-bold t-text-main cursor-pointer">
+                          <input type="checkbox" checked={builderForm.showColTotals} onChange={e => setBuilderForm({...builderForm, showColTotals: e.target.checked})} className="w-3 h-3 accent-[var(--theme-accent)]" />
+                          Show Totals
+                       </label>
+                       {builderForm.showColTotals && (
+                           <select value={builderForm.colTotalPosition} onChange={e => setBuilderForm({...builderForm, colTotalPosition: e.target.value})} className="t-panel border t-border px-2 py-1 text-xs font-medium focus:outline-none rounded">
+                              <option value="bottom">At Bottom</option>
+                              <option value="top">At Top</option>
+                           </select>
+                       )}
+                   </div>
                    {builderForm.showColTotals && (
-                       <select value={builderForm.colTotalPosition} onChange={e => setBuilderForm({...builderForm, colTotalPosition: e.target.value})} className="t-panel border t-border px-2 py-1 text-xs font-medium focus:outline-none rounded">
-                          <option value="bottom">At Bottom</option>
-                          <option value="top">At Top</option>
-                       </select>
+                       <div className="flex items-center gap-2 border-l t-border pl-4">
+                           <label className="text-[10px] font-black t-text-muted uppercase tracking-widest">Logic:</label>
+                           <select value={builderForm.totalMode} onChange={e => setBuilderForm({...builderForm, totalMode: e.target.value})} className="t-panel border t-border px-2 py-1 text-xs font-bold focus:outline-none rounded">
+                              <option value="calculated">Calculated (Default)</option>
+                              <option value="sum">Sum of Rows</option>
+                           </select>
+                       </div>
                    )}
                </div>
            </div>
@@ -437,8 +448,19 @@ export default function ChartBuilderModal() {
                          onChange={vals => setBuilderForm({...builderForm, pivotMeasures: vals})}
                       />
                    </div>
-                   <div className="col-span-2 flex flex-col gap-2 bg-black/5 p-3 rounded-lg border t-border mt-2">
-                       <label className="text-[10px] font-black t-text-muted uppercase tracking-widest">Grand Totals</label>
+                   <div className="col-span-2 flex flex-col gap-3 bg-black/5 p-3 rounded-lg border t-border mt-2">
+                       <div className="flex items-center justify-between border-b t-border pb-2 mb-1">
+                           <label className="text-[10px] font-black t-text-muted uppercase tracking-widest">Grand Totals Configuration</label>
+                           {(builderForm.showColTotals || builderForm.showRowTotals) && (
+                               <div className="flex items-center gap-2">
+                                   <label className="text-[10px] font-black t-text-muted uppercase tracking-widest">Aggregation Logic:</label>
+                                   <select value={builderForm.totalMode} onChange={e => setBuilderForm({...builderForm, totalMode: e.target.value})} className="t-panel border t-border px-2 py-1 text-[10px] font-bold focus:outline-none rounded">
+                                      <option value="calculated">Calculated (Default)</option>
+                                      <option value="sum">Sum of Rows</option>
+                                   </select>
+                               </div>
+                           )}
+                       </div>
                        <div className="flex gap-6">
                            <div className="flex items-center gap-3">
                                <label className="flex items-center gap-2 text-xs font-bold t-text-main cursor-pointer">

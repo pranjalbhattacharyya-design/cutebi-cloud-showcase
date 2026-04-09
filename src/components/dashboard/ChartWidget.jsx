@@ -224,9 +224,9 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
             } 
         }));
         if (chart.type === 'table') {
-          res = await getTableData(chart.datasetId, chart.tableDimensions || [], chart.tableMeasures || []);
+          res = await getTableData(chart.datasetId, chart.tableDimensions || [], chart.tableMeasures || [], chart.totalMode);
         } else if (chart.type === 'pivot') {
-          res = await getPivotData(chart.datasetId, chart.pivotRows || [], chart.pivotCols || [], chart.pivotMeasures || []);
+          res = await getPivotData(chart.datasetId, chart.pivotRows || [], chart.pivotCols || [], chart.pivotMeasures || [], chart.totalMode);
         } else if (chart.type === 'scatter') {
           res = await getScatterData(chart.datasetId, chart.dimension, chart.xMeasure, chart.yMeasure, chart.colorMeasure, chart.sizeMeasure);
         } else if (chart.type === 'matrix') {
@@ -444,17 +444,31 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
         if (!headers || headers.length === 0) return <div className="t-text-muted text-center pt-10 font-medium text-sm">Add columns to see the Table.</div>;
        
         const renderTableTotals = () => {
-            if (!totals || Object.keys(totals).length === 0) return null;
+            const hasTotals = totals && Object.keys(totals).length > 0;
+            const isSumMode = chart.totalMode === 'sum';
+            
             return (
                 <tr className="bg-black/10 transition-colors font-bold t-text-main shadow-inner">
                     {headerIds.map((id, j) => {
                         const isMeasure = (chart.tableMeasures || []).includes(id);
                         if (j === 0 && !isMeasure) {
-                            return <th key={j} className="px-3 py-2 text-left uppercase text-[10px]" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>Grand Total</th>;
+                            return <th key={j} className="px-3 py-2 text-left uppercase text-[10px]" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>{isSumMode ? "Sum Total" : "Grand Total"}</th>;
                         }
+                        
+                        let val = 0;
+                        if (isMeasure) {
+                            if (isSumMode) {
+                                // If the engine provided a Sum total, use it. Otherwise, sum the visible rows for fallback.
+                                val = totals?.[id] !== undefined ? totals[id] : rows.reduce((s, r) => s + (Number(r[id]) || 0), 0);
+                            } else {
+                                // Calculated mode uses the 'totals' object from DB aggregate
+                                val = totals?.[id] || 0;
+                            }
+                        }
+
                         return (
                             <td key={j} className={`px-3 py-2 ${isMeasure ? 'text-right text-[12px]' : 'text-center uppercase text-[10px]'}`} style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
-                                {isMeasure ? formatMeasVal(totals[id] || 0, id) : (j === 0 ? "Grand Total" : "")}
+                                {isMeasure ? formatMeasVal(val, id) : (j === 0 ? (isSumMode ? "Sum Total" : "Grand Total") : "")}
                             </td>
                         );
                     })}
@@ -511,58 +525,16 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
             let startIndex = 0;
             for (let i = 1; i <= colKeys.length; i++) {
                 const parts = colKeys[i] ? colKeys[i].split(' | ') : [];
-                const prevParts = colKeys[i-1] ? colKeys[i-1].split(' | ') : [];
-               
-                let sameAsPrev = false;
-                if (i < colKeys.length && i > 0) {
-                    sameAsPrev = true;
-                    for (let j = 0; j <= level; j++) {
-                        if (parts[j] !== prevParts[j]) sameAsPrev = false;
-                    }
-                }
-                if (sameAsPrev) {
-                    currentSpan++;
-                } else {
-                    colSpans[level][startIndex] = currentSpan;
-                    startIndex = i;
-                    currentSpan = 1;
-                }
-            }
-        }
+        const { rowKeys, colKeys, matrix, rowTotals: backendRowTotals, colTotals: backendColTotals, grandTotal: backendGrandTotal } = chartData;
+        if (!rowKeys || rowKeys.length === 0) return <div className="t-text-muted text-center pt-10 font-medium text-sm">Add dimensions and measures to see the Pivot Table.</div>;
 
-        const headerRows = Array.from({ length: headerDepth }).map((_, levelIndex) => (
-           <tr key={`hrow-${levelIndex}`} style={{ background: 'var(--theme-header-bg)' }}>
-              {levelIndex === 0 && (chart.pivotRows || []).map((r, i) => (
-                 <th key={`rh-${i}`} rowSpan={headerDepth} className="px-3 py-2.5 font-bold t-text-main align-bottom text-[12px]" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
-                    {getDisplayLabel(r)}
-                 </th>
-              ))}
-              {levelIndex === 0 && chart.showRowTotals && chart.rowTotalPosition === 'start' && (chart.pivotMeasures || []).map((mId, idx) => (
-                 <th key={`rhts-${idx}`} rowSpan={headerDepth} className="px-3 py-2.5 font-bold t-text-main align-bottom text-[12px] bg-black/10" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
-                     Total {chart.pivotMeasures.length > 1 ? getDisplayLabel(mId) : ''}
-                 </th>
-              ))}
-              {colKeys.map((ck, i) => {
-                  const span = colSpans[levelIndex][i];
-                  if (!span) return null;
-                  const parts = ck.split(' | ');
-                  const val = parts[levelIndex] || '';
-                  return (
-                      <th key={`${ck}-${levelIndex}`} colSpan={span} className="px-3 py-2.5 font-bold t-text-main text-center text-[12px]" style={{ whiteSpace: tWrap ? 'normal' : 'nowrap', border: '1px solid rgba(0,0,0,0.05)' }}>
-                          {levelIndex < (chart.pivotCols || []).length ? formatDimVal(val, chart.pivotCols[levelIndex]) : getDisplayLabel(val)}
-                      </th>
-                  );
-              })}
-              {levelIndex === 0 && chart.showRowTotals && chart.rowTotalPosition === 'end' && (chart.pivotMeasures || []).map((mId, idx) => (
-                 <th key={`rhte-${idx}`} rowSpan={headerDepth} className="px-3 py-2.5 font-bold t-text-main align-bottom text-[12px] bg-black/10" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
-                     Total {chart.pivotMeasures.length > 1 ? getDisplayLabel(mId) : ''}
-                 </th>
-              ))}
-           </tr>
-        ));
-
+        const isCalculated = chart.totalMode === 'calculated';
+       
         // Row Total aggregator function
         const getRowTotal = (rk, mId) => {
+            if (isCalculated && backendRowTotals?.[rk]?.[mId] !== undefined) {
+                return backendRowTotals[rk][mId];
+            }
             let sum = 0;
             colKeys.forEach(ck => {
                 const parts = ck.split(' | ');
@@ -574,7 +546,13 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
 
         // Column Totals Aggregation
         const colTotals = {};
-        colKeys.forEach(ck => colTotals[ck] = rowKeys.reduce((sum, rk) => sum + (Number(matrix[rk]?.[ck]) || 0), 0));
+        colKeys.forEach(ck => {
+            if (isCalculated && backendColTotals?.[ck] !== undefined) {
+                colTotals[ck] = backendColTotals[ck];
+            } else {
+                colTotals[ck] = rowKeys.reduce((sum, rk) => sum + (Number(matrix[rk]?.[ck]) || 0), 0);
+            }
+        });
 
         const renderPivotColTotals = () => {
             if (!chart.showColTotals) return null;
@@ -582,12 +560,17 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                 <tr className="font-bold bg-black/10 t-text-main shadow-inner text-xs">
                    {chart.pivotRows.map((r, i) => (
                        <td key={`pct-${i}`} className="px-3 py-2 uppercase text-[10px]" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
-                           {i === 0 ? "Grand Total" : ""}
+                           {i === 0 ? (isCalculated ? "Grand Total" : "Sum Total") : ""}
                        </td>
                    ))}
                    {chart.showRowTotals && chart.rowTotalPosition === 'start' && chart.pivotMeasures.map(mId => {
-                       const grandSum = rowKeys.reduce((sum, rk) => sum + getRowTotal(rk, mId), 0);
-                       return <td key={`pcts-${mId}`} className="px-3 py-2 text-right text-[12px]" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>{formatMeasVal(grandSum, mId)}</td>
+                       let total = 0;
+                       if (isCalculated && backendGrandTotal?.[mId] !== undefined) {
+                           total = backendGrandTotal[mId];
+                       } else {
+                           total = rowKeys.reduce((sum, rk) => sum + getRowTotal(rk, mId), 0);
+                       }
+                       return <td key={`pcts-${mId}`} className="px-3 py-2 text-right text-[12px]" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>{formatMeasVal(total, mId)}</td>
                    })}
                    {colKeys.map(ck => {
                        const parts = ck.split(' | ');
@@ -595,61 +578,65 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                        return <td key={`pct-${ck}`} className="px-3 py-2 text-right" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>{formatMeasVal(colTotals[ck] || 0, mId)}</td>
                    })}
                    {chart.showRowTotals && chart.rowTotalPosition === 'end' && chart.pivotMeasures.map(mId => {
-                       const grandSum = rowKeys.reduce((sum, rk) => sum + getRowTotal(rk, mId), 0);
-                       return <td key={`pcte-${mId}`} className="px-3 py-2 text-right text-[12px]" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>{formatMeasVal(grandSum, mId)}</td>
+                       let total = 0;
+                       if (isCalculated && backendGrandTotal?.[mId] !== undefined) {
+                           total = backendGrandTotal[mId];
+                       } else {
+                           total = rowKeys.reduce((sum, rk) => sum + getRowTotal(rk, mId), 0);
+                       }
+                       return <td key={`pcte-${mId}`} className="px-3 py-2 text-right text-[12px]" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>{formatMeasVal(total, mId)}</td>
                    })}
                 </tr>
             );
         };
 
-         return (
-           <div className="overflow-auto h-full w-full t-border border bg-black/5" style={{ borderRadius: 'calc(var(--theme-radius-panel) / 2)' }}>
-              <table className="w-full text-xs text-left">
-                 <thead className="t-panel sticky top-0 z-10">
-                    {headerRows}
-                    {chart.showColTotals && chart.colTotalPosition === 'top' && renderPivotColTotals()}
-                 </thead>
-                  <tbody className="bg-[var(--theme-panel-bg)]">
-                    {rowKeys.map(rk => {
-                       const rkVals = rk.split(' | ');
-                       return (
-                          <tr key={rk} className="hover:bg-black/5 transition-colors text-xs">
-                             {rkVals.map((rv, idx) => (
-                                 <td key={idx} className="px-3 py-1.5 font-bold t-text-main whitespace-nowrap" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>{formatDimVal(rv, chart.pivotRows[idx])}</td>
-                             ))}
-                             {chart.showRowTotals && chart.rowTotalPosition === 'start' && chart.pivotMeasures.map(mId => (
-                                 <td key={`rts-${mId}`} className="px-3 py-1.5 font-bold t-text-main text-right bg-black/10 shadow-inner" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
-                                     {formatMeasVal(getRowTotal(rk, mId), mId)}
-                                 </td>
-                             ))}
-                             {colKeys.map(ck => {
-                                 const val = matrix[rk]?.[ck];
-                                 // Extract measure ID from column key if it was appended (pivotMeasures.length > 1)
-                                 const parts = ck.split(' | ');
-                                 const mId = chart.pivotMeasures.length > 1 ? parts[parts.length - 1] : chart.pivotMeasures[0];
-                                 return (
-                                     <td key={ck} className="px-3 py-1.5 t-text-muted text-right" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
-                                         {val !== undefined && val !== null ? formatMeasVal(val, mId) : '-'}
-                                     </td>
-                                 );
-                             })}
-                             {chart.showRowTotals && chart.rowTotalPosition === 'end' && chart.pivotMeasures.map(mId => (
-                                 <td key={`rte-${mId}`} className="px-3 py-1.5 font-bold t-text-main text-right bg-black/10 shadow-inner" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
-                                     {formatMeasVal(getRowTotal(rk, mId), mId)}
-                                 </td>
-                             ))}
-                          </tr>
-                       )
-                    })}
-                 </tbody>
-                 {chart.showColTotals && chart.colTotalPosition === 'bottom' && (
-                     <tfoot className="sticky bottom-0 z-10 shadow-[0_-2px_4px_rgba(0,0,0,0.05)] bg-[var(--theme-header-bg)]">
-                         {renderPivotColTotals()}
-                     </tfoot>
-                 )}
-              </table>
-           </div>
-         );
+        return (
+          <div className="overflow-auto h-full w-full t-border border bg-black/5" style={{ borderRadius: 'calc(var(--theme-radius-panel) / 2)' }}>
+             <table className="w-full text-xs text-left">
+                <thead className="t-panel sticky top-0 z-10">
+                   {headerRows}
+                   {chart.showColTotals && chart.colTotalPosition === 'top' && renderPivotColTotals()}
+                </thead>
+                 <tbody className="bg-[var(--theme-panel-bg)]">
+                   {rowKeys.map(rk => {
+                      const rkVals = rk.split(' | ');
+                      return (
+                         <tr key={rk} className="hover:bg-black/5 transition-colors text-xs">
+                            {rkVals.map((rv, idx) => (
+                                <td key={idx} className="px-3 py-1.5 font-bold t-text-main whitespace-nowrap" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>{formatDimVal(rv, chart.pivotRows[idx])}</td>
+                            ))}
+                            {chart.showRowTotals && chart.rowTotalPosition === 'start' && chart.pivotMeasures.map(mId => (
+                                <td key={`rts-${mId}`} className="px-3 py-1.5 font-bold t-text-main text-right bg-black/10 shadow-inner" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
+                                    {formatMeasVal(getRowTotal(rk, mId), mId)}
+                                </td>
+                            ))}
+                            {colKeys.map(ck => {
+                                const val = matrix[rk]?.[ck];
+                                const parts = ck.split(' | ');
+                                const mId = chart.pivotMeasures.length > 1 ? parts[parts.length - 1] : chart.pivotMeasures[0];
+                                return (
+                                    <td key={ck} className="px-3 py-1.5 t-text-muted text-right" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
+                                        {val !== undefined && val !== null ? formatMeasVal(val, mId) : '-'}
+                                    </td>
+                                );
+                            })}
+                            {chart.showRowTotals && chart.rowTotalPosition === 'end' && chart.pivotMeasures.map(mId => (
+                                <td key={`rte-${mId}`} className="px-3 py-1.5 font-bold t-text-main text-right bg-black/10 shadow-inner" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
+                                    {formatMeasVal(getRowTotal(rk, mId), mId)}
+                                </td>
+                            ))}
+                         </tr>
+                      )
+                   })}
+                </tbody>
+                {chart.showColTotals && chart.colTotalPosition === 'bottom' && (
+                    <tfoot className="sticky bottom-0 z-10 shadow-[0_-2px_4px_rgba(0,0,0,0.05)] bg-[var(--theme-header-bg)]">
+                        {renderPivotColTotals()}
+                    </tfoot>
+                )}
+             </table>
+          </div>
+        );
       }
 
      if (chart.type === 'scatter') {

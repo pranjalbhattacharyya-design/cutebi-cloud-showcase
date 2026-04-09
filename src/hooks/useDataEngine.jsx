@@ -248,6 +248,34 @@ export const useDataEngine = () => {
     for (const dsId of factTablesInGroup) {
       const match = (semanticModels[dsId] || []).find(f => f.id.toLowerCase() === measIdLower);
       if (match) {
+        return dsId;
+      }
+    }
+    return fallbackDsId;
+  }, [semanticModels]);
+
+  const groupMeasuresByFact = useCallback((measureIds, factTablesInGroup) => {
+    const map = new Map();
+    (measureIds || []).forEach(mId => {
+      const factId = resolveMeasureOrigin(mId, factTablesInGroup, activeDatasetId);
+      if (!map.has(factId)) map.set(factId, []);
+      map.get(factId).push(mId);
+    });
+    return map;
+  }, [resolveMeasureOrigin, activeDatasetId]);
+
+  const getTableHeaders = useCallback((measures, dimensions) => {
+    const resolveLabel = (id) => {
+      const bareId = id.includes('::') ? id.split('::')[1] : id;
+      const allSemanticFields = Object.values(semanticModels).flat();
+      const match = allSemanticFields.find(x => x.id.toLowerCase() === bareId.toLowerCase());
+      return match ? match.label : bareId;
+    };
+    return {
+      headers: [...(dimensions || []).map(resolveLabel), ...(measures || []).map(resolveLabel)],
+      headerIds: [...(dimensions || []), ...(measures || [])]
+    };
+  }, [semanticModels]);
         foundMeasure = match;
         fallbackDsId = dsId;
         break;
@@ -566,159 +594,69 @@ export const useDataEngine = () => {
       });
 
       const data = Array.from(dataMap.values());
-      const legendKeys = legendId ? [...new Set(results.map(r => r[legendId]))] : ['value'];
+const legendKeys = legendId ? [...new Set(results.map(r => r[legendId]))] : ['value'];
       return { data, legendKeys };
     } catch (e) { console.error("Agg Error:", e); throw e; }
   }, [generateSQL]);
 
-  const getPivotData = useCallback(async (datasetId, rowDims, colDims, measureIds) => {
-     if (!datasetId || !rowDims?.length || !measureIds?.length) return { rowKeys: [], colKeys: [], matrix: {} };
+   const getTableData = useCallback(async (datasetId, dimensions, measures, totalMode = 'calculated') => {
+      if (!datasetId || (!dimensions?.length && !measures?.length)) return { headers: [], headerIds: [], rows: [] };
+      const { headers, headerIds } = getTableHeaders(measures, dimensions);
+      const factTablesInGroup = getFactTablesInGroup(activeDatasetId || datasetId);
+      const isMultiFactModel = factTablesInGroup.length > 1;
+      const measuresByFact = groupMeasuresByFact(measures, factTablesInGroup);
 
-     const allDims = [...(rowDims || []), ...(colDims || [])];
-     const factTablesInGroup = getFactTablesInGroup(activeDatasetId || datasetId);
-     const isMultiFactModel = factTablesInGroup.length > 1;
+      try {
+        if (isMultiFactModel) {
+          const mergedByKey = new Map();
+          const mergeStats = [];
+          let grandTotals = {};
+          
+          const factTasks = Array.from(measuresByFact.entries()).map(async ([factId, factMeasures]) => {
+            const sql = generateSQL(datasetId, dimensions, factMeasures, [], null, factId);
+            const totalsSql = totalMode === 'sum' 
+              ? `WITH base AS (${sql}) SELECT ${factMeasures.map(m => `SUM(\`${m}\`) as \`${m}\``).join(', ')} FROM base`
+              : generateSQL(datasetId, [], factMeasures, [], null, factId);
+            
+            const [rows, totalsResp] = await Promise.all([
+              queryDuckDB(`${sql} LIMIT 500`),
+              queryDuckDB(totalsSql)
+            ]);
+            
+            const tRow = (totalsResp && totalsResp[0]) || {};
+            factMeasures.forEach(mId => grandTotals[mId] = tRow[mId] !== undefined ? tRow[mId] : 0);
 
-     // Group measures by source fact table
-     const measuresByFact = new Map();
-     (measureIds || []).forEach(measId => {
-       const originFact = resolveMeasureOrigin(measId, factTablesInGroup, datasetId);
-       if (!measuresByFact.has(originFact)) measuresByFact.set(originFact, []);
-       measuresByFact.get(originFact).push(measId);
-     });
+            return { factId, factMeasures, rows: rows || [] };
+          });
 
-     const buildMatrix = (results, factMeasures) => {
-       const matrix = {}; const colKeysSet = new Set(); const rowKeysSet = new Set();
-       (results || []).forEach(row => {
-         const rowKey = rowDims.map(d => row[d]).join(' | ');
-         const baseColKey = colDims?.length ? colDims.map(d => row[d]).join(' | ') : 'All';
-         rowKeysSet.add(rowKey);
-         if (!matrix[rowKey]) matrix[rowKey] = {};
-         factMeasures.forEach(mId => {
-           const fullColKey = measureIds.length > 1 ? `${baseColKey} | ${mId}` : baseColKey;
-           colKeysSet.add(fullColKey);
-           matrix[rowKey][fullColKey] = row[mId];
-         });
-       });
-       return { rowKeysSet, colKeysSet, matrix };
-     };
+          const results = await Promise.all(factTasks);
 
-     try {
-       // If multi-fact model, ALWAYS issue scoped queries to prevent Chasm Traps
-       if (isMultiFactModel) {
-         const mergedMatrix = {}; const allRowKeys = new Set(); const allColKeys = new Set();
-         const mergeStats = [];
-         for (const [factId, factMeasures] of measuresByFact) {
-           const sql = generateSQL(datasetId, allDims, factMeasures, [], null, factId);
-           const results = await queryDuckDB(sql) || [];
-           const { rowKeysSet, colKeysSet, matrix } = buildMatrix(results, factMeasures);
-           
-           mergeStats.push(`${factId}: ${results.length} rows`);
-           rowKeysSet.forEach(k => allRowKeys.add(k));
-           colKeysSet.forEach(k => allColKeys.add(k));
-           Object.entries(matrix).forEach(([rk, cols]) => {
-             if (!mergedMatrix[rk]) mergedMatrix[rk] = {};
-             Object.assign(mergedMatrix[rk], cols);
-           });
-         }
+          for (const { factId, rows } of results) {
+            mergeStats.push(`${factId}: ${rows.length} rows`);
+            rows.forEach(row => {
+              const dimKey = (dimensions || []).map(d => {
+                const val = row[d];
+                return val === null || val === undefined ? '' : String(val).trim();
+              }).join('\x00');
 
-         window.dispatchEvent(new CustomEvent('mvantage-debug', { 
-           detail: { 
-             type: 'success', 
-             category: 'Merge', 
-             message: `Multi-fact merge complete: ${allRowKeys.size} unique keys`,
-             details: { stats: mergeStats.join(' | '), keys: Array.from(allRowKeys).slice(0,5) } 
-           } 
-         }));
-         return { rowKeys: Array.from(allRowKeys).sort(), colKeys: Array.from(allColKeys).sort(), matrix: mergedMatrix };
-       }
+              if (!mergedByKey.has(dimKey)) {
+                mergedByKey.set(dimKey, { ...Object.fromEntries((dimensions || []).map(d => [d, row[d]])) });
+              }
+              const targetRow = mergedByKey.get(dimKey);
+              Object.assign(targetRow, row);
+            });
+          }
 
-       // Standard single-fact model path
-       const sql = generateSQL(datasetId, allDims, measureIds);
-       const results = await queryDuckDB(sql);
-       const { rowKeysSet, colKeysSet, matrix } = buildMatrix(results, measureIds);
-       return { rowKeys: Array.from(rowKeysSet).sort(), colKeys: Array.from(colKeysSet).sort(), matrix };
-     } catch (e) { console.error("Pivot Error:", e); throw e; }
-  }, [generateSQL, getFactTablesInGroup, resolveMeasureOrigin, activeDatasetId, semanticModels, datasets]);
+          window.dispatchEvent(new CustomEvent('mvantage-debug', { 
+            detail: { type: 'success', category: 'Merge', message: `Table merge complete: ${mergedByKey.size} rows`, details: { stats: mergeStats.join(' | ') } } 
+          }));
+          return { headers, headerIds, rows: Array.from(mergedByKey.values()), totals: grandTotals };
+        }
 
-  const getTableData = useCallback(async (datasetId, dimensions, measures) => {
-     if (!datasetId || (!dimensions?.length && !measures?.length)) return { headers: [], headerIds: [], rows: [] };
-
-     const resolveLabel = (id) => {
-         const bareId = id.includes('::') ? id.split('::')[1] : id;
-         const allSemanticFields = Object.values(semanticModels).flat();
-         const match = allSemanticFields.find(x => x.id.toLowerCase() === bareId.toLowerCase());
-         return match ? match.label : bareId;
-     };
-
-     const factTablesInGroup = getFactTablesInGroup(activeDatasetId || datasetId);
-     const isMultiFactModel = factTablesInGroup.length > 1;
-
-     // Search fact tables for measure ownership
-     const measuresByFact = new Map();
-     (measures || []).forEach(measId => {
-       const originFact = resolveMeasureOrigin(measId, factTablesInGroup, datasetId);
-       if (!measuresByFact.has(originFact)) measuresByFact.set(originFact, []);
-       measuresByFact.get(originFact).push(measId);
-     });
-
-     const headers = [...(dimensions || []).map(resolveLabel), ...(measures || []).map(resolveLabel)];
-     const headerIds = [...(dimensions || []), ...(measures || [])];
-
-     try {
-       // If multi-fact model, ALWAYS issue scoped queries to prevent Chasm Traps
-       if (isMultiFactModel) {
-         const mergedByKey = new Map();
-         const mergeStats = [];
-         let grandTotals = {};
-         
-         const factTasks = Array.from(measuresByFact.entries()).map(async ([factId, factMeasures]) => {
-           const sql = generateSQL(datasetId, dimensions, factMeasures, [], null, factId);
-           const totalsSql = generateSQL(datasetId, [], factMeasures, [], null, factId);
-           
-           const [rows, totalsResp] = await Promise.all([
-             queryDuckDB(`${sql} LIMIT 500`),
-             queryDuckDB(totalsSql)
-           ]);
-           
-           const tRow = (totalsResp && totalsResp[0]) || {};
-           factMeasures.forEach(mId => grandTotals[mId] = tRow[mId] !== undefined ? tRow[mId] : 0);
-
-           return { factId, factMeasures, rows: rows || [] };
-         });
-
-         const results = await Promise.all(factTasks);
-
-         for (const { factId, factMeasures, rows } of results) {
-           mergeStats.push(`${factId}: ${rows.length} rows`);
-           rows.forEach(row => {
-             // Robust dimension key generation: normalize to string and trim 
-             const dimKey = (dimensions || []).map(d => {
-               const val = row[d];
-               if (val === null || val === undefined) return '';
-               return String(val).trim();
-             }).join('\x00');
-
-             if (!mergedByKey.has(dimKey)) {
-               mergedByKey.set(dimKey, { ...Object.fromEntries((dimensions || []).map(d => [d, row[d]])) });
-             }
-             factMeasures.forEach(m => { mergedByKey.get(dimKey)[m] = row[m]; });
-           });
-         }
-
-         window.dispatchEvent(new CustomEvent('mvantage-debug', { 
-           detail: { 
-             type: 'success', 
-             category: 'Merge', 
-             message: `Table merge complete: ${mergedByKey.size} rows`,
-             details: { stats: mergeStats.join(' | ') } 
-           } 
-         }));
-         return { headers, headerIds, rows: Array.from(mergedByKey.values()), totals: grandTotals };
-       }
-
-        // Standard single-fact model path
         const sql = generateSQL(datasetId, dimensions, measures);
-        const totalsSql = generateSQL(datasetId, [], measures);
+        const totalsSql = totalMode === 'sum' 
+            ? `WITH base AS (${sql}) SELECT ${measures.map(m => `SUM(\`${m}\`) as \`${m}\``).join(', ')} FROM base`
+            : generateSQL(datasetId, [], measures);
         
         const [rows, totalsResp] = await Promise.all([
            queryDuckDB(`${sql} LIMIT 500`),
@@ -726,8 +664,118 @@ export const useDataEngine = () => {
         ]);
         
         return { headers, headerIds, rows: rows || [], totals: (totalsResp && totalsResp[0]) || {} };
-     } catch (e) { console.error("Table Error:", e); throw e; }
-  }, [generateSQL, semanticModels, datasets, getFactTablesInGroup, resolveMeasureOrigin, activeDatasetId]);
+      } catch (e) { console.error("Table Error:", e); throw e; }
+   }, [generateSQL, semanticModels, datasets, getFactTablesInGroup, resolveMeasureOrigin, activeDatasetId, getTableHeaders, groupMeasuresByFact]);
+
+
+  const getPivotData = useCallback(async (datasetId, rowDims, colDims, measureIds, totalMode = 'calculated') => {
+     if (!datasetId || !rowDims?.length || !measureIds?.length) return { rowKeys: [], colKeys: [], matrix: {} };
+
+     const allDims = [...(rowDims || []), ...(colDims || [])];
+     const factTablesInGroup = getFactTablesInGroup(activeDatasetId || datasetId);
+     const isMultiFactModel = factTablesInGroup.length > 1;
+     const measuresByFact = groupMeasuresByFact(measureIds, factTablesInGroup);
+
+     const buildMatrix = (results, measures) => {
+       const matrix = {}; const rowKeysSet = new Set(); const colKeysSet = new Set();
+       (results || []).forEach(row => {
+         const rKey = rowDims.map(d => row[d]).join(' | ');
+         const cKeyBase = colDims.map(d => row[d]).join(' | ');
+         rowKeysSet.add(rKey);
+         if (!matrix[rKey]) matrix[rKey] = {};
+         measures.forEach(m => {
+           const cKey = colDims.length > 0 || measureIds.length > 1 ? (cKeyBase ? `${cKeyBase} | ${m}` : m) : m;
+           colKeysSet.add(cKey);
+           matrix[rKey][cKey] = row[m];
+         });
+       });
+       return { rowKeysSet, colKeysSet, matrix };
+     };
+
+     try {
+       let mergedMatrix = {}; let allRowKeys = new Set(); let allColKeys = new Set();
+       let calcRowTotals = {}; let calcColTotals = {}; let grandTotal = {};
+
+       if (isMultiFactModel) {
+         for (const [factId, factMeasures] of measuresByFact) {
+           const sql = generateSQL(datasetId, allDims, factMeasures, [], null, factId);
+           const results = await queryDuckDB(sql) || [];
+           const { rowKeysSet, colKeysSet, matrix } = buildMatrix(results, factMeasures);
+           rowKeysSet.forEach(k => allRowKeys.add(k)); colKeysSet.forEach(k => allColKeys.add(k));
+           Object.entries(matrix).forEach(([rk, cols]) => {
+             if (!mergedMatrix[rk]) mergedMatrix[rk] = {};
+             Object.assign(mergedMatrix[rk], cols);
+           });
+
+           if (totalMode === 'calculated') {
+             const rowSql = generateSQL(datasetId, rowDims, factMeasures, [], null, factId);
+             const colSql = colDims.length > 0 ? generateSQL(datasetId, colDims, factMeasures, [], null, factId) : null;
+             const grandSql = generateSQL(datasetId, [], factMeasures, [], null, factId);
+             
+             const [rRes, cRes, gRes] = await Promise.all([
+               queryDuckDB(rowSql),
+               colSql ? queryDuckDB(colSql) : Promise.resolve([]),
+               queryDuckDB(grandSql)
+             ]);
+             
+             rRes.forEach(row => {
+               const rk = rowDims.map(d => row[d]).join(' | ');
+               if (!calcRowTotals[rk]) calcRowTotals[rk] = {};
+               factMeasures.forEach(m => calcRowTotals[rk][m] = row[m]);
+             });
+             cRes.forEach(row => {
+               const ckBase = colDims.map(d => row[d]).join(' | ');
+               factMeasures.forEach(m => {
+                  const ck = ckBase ? `${ckBase} | ${m}` : m;
+                  calcColTotals[ck] = row[m];
+               });
+             });
+             if (gRes && gRes[0]) factMeasures.forEach(m => grandTotal[m] = gRes[0][m]);
+           }
+         }
+       } else {
+         const sql = generateSQL(datasetId, allDims, measureIds);
+         const results = await queryDuckDB(sql) || [];
+         const { rowKeysSet, colKeysSet, matrix } = buildMatrix(results, measureIds);
+         allRowKeys = rowKeysSet; allColKeys = colKeysSet; mergedMatrix = matrix;
+
+         if (totalMode === 'calculated') {
+            const rowSql = generateSQL(datasetId, rowDims, measureIds);
+            const colSql = colDims.length > 0 ? generateSQL(datasetId, colDims, measureIds) : null;
+            const grandSql = generateSQL(datasetId, [], measureIds);
+            
+            const [rRes, cRes, gRes] = await Promise.all([
+              queryDuckDB(rowSql),
+              colSql ? queryDuckDB(colSql) : Promise.resolve([]),
+              queryDuckDB(grandSql)
+            ]);
+            
+            rRes.forEach(row => {
+              const rk = rowDims.map(d => row[d]).join(' | ');
+              calcRowTotals[rk] = {};
+              measureIds.forEach(m => calcRowTotals[rk][m] = row[m]);
+            });
+            cRes.forEach(row => {
+               const ckBase = colDims.map(d => row[d]).join(' | ');
+               measureIds.forEach(m => {
+                  const ck = ckBase ? `${ckBase} | ${m}` : m;
+                  calcColTotals[ck] = row[m];
+               });
+            });
+            if (gRes && gRes[0]) measureIds.forEach(m => grandTotal[m] = gRes[0][m]);
+         }
+       }
+
+       return { 
+         rowKeys: Array.from(allRowKeys).sort(), 
+         colKeys: Array.from(allColKeys).sort(), 
+         matrix: mergedMatrix,
+         rowTotals: calcRowTotals,
+         colTotals: calcColTotals,
+         grandTotal: grandTotal
+       };
+     } catch (e) { console.error("Pivot Error:", e); throw e; }
+   }, [generateSQL, getFactTablesInGroup, resolveMeasureOrigin, activeDatasetId, semanticModels, datasets, groupMeasuresByFact]);
 
 
   const getScatterData = useCallback(async (datasetId, dimensionId, xMeas, yMeas, cMeas, sMeas) => {
