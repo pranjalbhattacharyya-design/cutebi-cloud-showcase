@@ -218,8 +218,8 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                 details: { 
                     id: chart.id,
                     datasetId: chart.datasetId,
-                    dimensions: chart.dimension || chart.tableDimensions || [],
-                    measures: chart.measure || chart.tableMeasures || []
+                    dimensions: chart.dimension || chart.tableDimensions || chart.treeDimensions || chart.pivotRows || [],
+                    measures: chart.measure || chart.tableMeasures || chart.pivotMeasures || []
                 }
             } 
         }));

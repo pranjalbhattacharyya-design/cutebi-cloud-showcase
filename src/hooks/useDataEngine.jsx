@@ -658,10 +658,12 @@ const legendKeys = legendId ? [...new Set(results.map(r => r[legendId]))] : ['va
     try {
       const results = await queryDuckDB(sql);
       
-      const root = { name: 'root', children: [] };
+      const root = { name: 'root', children: [], value: 0 };
       
       results.forEach(row => {
         let currentLevel = root.children;
+        const measureVal = Number(row[measureId]) || 0;
+        root.value += measureVal;
         
         dimensions.forEach((dim, idx) => {
           const val = row[dim] === null || row[dim] === undefined ? 'Unknown' : String(row[dim]);
@@ -670,17 +672,14 @@ const legendKeys = legendId ? [...new Set(results.map(r => r[legendId]))] : ['va
           let existingNode = currentLevel.find(c => c.name === val);
           
           if (!existingNode) {
-            existingNode = { name: val };
+            existingNode = { name: val, value: 0 };
             if (!isLast) {
               existingNode.children = [];
-            } else {
-              existingNode.value = Number(row[measureId]) || 0;
             }
             currentLevel.push(existingNode);
-          } else if (isLast) {
-            existingNode.value = (existingNode.value || 0) + (Number(row[measureId]) || 0);
           }
           
+          existingNode.value += measureVal;
           if (!isLast) {
             currentLevel = existingNode.children;
           }
