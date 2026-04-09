@@ -606,7 +606,7 @@ export const useDataEngine = () => {
     }));
     
     return sql;
-  }, [datasets, semanticModels, activeDatasetId, relationships, globalFilters, generateUnifiedCTE]);
+  }, [datasets, semanticModels, activeDatasetId, relationships, globalFilters, generateUnifiedCTE, pageFilters, authoredReportFilters, activePageId, globalSemanticFields]);
 
 
   const applyFilters = useCallback((data, datasetId) => {
@@ -1139,7 +1139,7 @@ const legendKeys = legendId ? [...new Set(results.map(r => r[legendId]))] : ['va
     }));
 
     return mergedResult;
-  }, [activeDatasetId, datasets, semanticModels, globalFilters, getJoinGroup, generateUnifiedCTE, getFactTablesInGroup, resolveMeasureOrigin]);
+  }, [activeDatasetId, datasets, semanticModels, globalFilters, getJoinGroup, generateUnifiedCTE, getFactTablesInGroup, resolveMeasureOrigin, pageFilters, authoredReportFilters, activePageId]);
 
   return {
     datasets,
