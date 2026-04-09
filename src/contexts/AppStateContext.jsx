@@ -142,6 +142,9 @@ export const AppStateProvider = ({ children }) => {
      pivotRows: [], pivotCols: [], pivotMeasures: [],
      tableDimensions: [], tableMeasures: [],
      xMeasure: '', yMeasure: '', colorMeasure: '', sizeMeasure: '', showDataLabels: false,
+     // Totals Configuration
+     showColTotals: false, colTotalPosition: 'bottom',
+     showRowTotals: false, rowTotalPosition: 'end',
      // KPI Matrix fields
      matrixMeasures: [],
      matrixColumns: [] // [{ id, label, type: 'scope'|'variance', filters, filterLogic, timeConfig } | { id, label, type: 'variance', colAId, colBId, varianceMode: '#'|'%' }]

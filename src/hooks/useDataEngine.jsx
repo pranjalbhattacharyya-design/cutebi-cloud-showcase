@@ -518,7 +518,9 @@ export const useDataEngine = () => {
 
     const groupByClause = dimensions.length > 0 ? ` GROUP BY ${dimensions.map((_, i) => i + 1).join(', ')}` : "";
     const limitClause = limit ? ` LIMIT ${limit}` : "";
-    const sql = `${ctePrefix}SELECT ${selectClause.join(', ')} FROM \`${sourceTable}\`${whereClause}${groupByClause}${limitClause}`;
+    
+    const renderSource = sourceTable === "ds_unified" ? sourceTable : `\`${sourceTable}\``;
+    const sql = `${ctePrefix}SELECT ${selectClause.join(', ')} FROM ${renderSource}${whereClause}${groupByClause}${limitClause}`;
     
     window.dispatchEvent(new CustomEvent('mvantage-debug', { 
        detail: { type: 'success', category: 'Engine', message: 'SQL Generated Successfully', details: { sql } } 
@@ -925,7 +927,9 @@ export const useDataEngine = () => {
         });
 
         if (selectParts.length === 0) continue;
-        const sql = `${ctePrefix}SELECT ${selectParts.join(', ')} FROM \`${sourceTable}\`${whereClause}`;
+        
+        const renderSource = sourceTable === "ds_unified" ? sourceTable : `\`${sourceTable}\``;
+        const sql = `${ctePrefix}SELECT ${selectParts.join(', ')} FROM ${renderSource}${whereClause}`;
 
         window.dispatchEvent(new CustomEvent('mvantage-debug', {
             detail: { type: 'info', category: 'Matrix', message: `Batch SQL for ${scopedFactId}`, details: { sql } }

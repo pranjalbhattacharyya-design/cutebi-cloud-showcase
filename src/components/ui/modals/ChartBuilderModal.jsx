@@ -311,25 +311,39 @@ export default function ChartBuilderModal() {
 
         {/* Conditional Fields based on Type */}
         {builderForm.type === 'table' && (
-           <div className="grid grid-cols-2 gap-4 mb-4">
-              <div>
-                 <label className="text-xs font-bold t-text-muted uppercase tracking-wide mb-1 block">Dimensions</label>
-                 <MultiSelect
-                    placeholder="Dimensions"
-                    options={dimensions}
-                    value={builderForm.tableDimensions || []}
-                    onChange={vals => setBuilderForm({...builderForm, tableDimensions: vals})}
-                 />
-              </div>
-              <div>
-                 <label className="text-xs font-bold t-text-muted uppercase tracking-wide mb-1 block">Measures</label>
-                 <MultiSelect
-                    placeholder="Measures"
-                    options={measures}
-                    value={builderForm.tableMeasures || []}
-                    onChange={vals => setBuilderForm({...builderForm, tableMeasures: vals})}
-                 />
-              </div>
+           <div className="flex flex-col gap-4 mb-4">
+               <div className="grid grid-cols-2 gap-4">
+                  <div>
+                     <label className="text-xs font-bold t-text-muted uppercase tracking-wide mb-1 block">Dimensions</label>
+                     <MultiSelect
+                        placeholder="Dimensions"
+                        options={dimensions}
+                        value={builderForm.tableDimensions || []}
+                        onChange={vals => setBuilderForm({...builderForm, tableDimensions: vals})}
+                     />
+                  </div>
+                  <div>
+                     <label className="text-xs font-bold t-text-muted uppercase tracking-wide mb-1 block">Measures</label>
+                     <MultiSelect
+                        placeholder="Measures"
+                        options={measures}
+                        value={builderForm.tableMeasures || []}
+                        onChange={vals => setBuilderForm({...builderForm, tableMeasures: vals})}
+                     />
+                  </div>
+               </div>
+               <div className="flex items-center gap-4 bg-black/5 p-3 rounded-lg border t-border mt-2">
+                   <label className="flex items-center gap-2 text-xs font-bold t-text-main cursor-pointer">
+                      <input type="checkbox" checked={builderForm.showColTotals} onChange={e => setBuilderForm({...builderForm, showColTotals: e.target.checked})} className="w-3 h-3 accent-[var(--theme-accent)]" />
+                      Show Column Totals
+                   </label>
+                   {builderForm.showColTotals && (
+                       <select value={builderForm.colTotalPosition} onChange={e => setBuilderForm({...builderForm, colTotalPosition: e.target.value})} className="t-panel border t-border px-2 py-1 text-xs font-medium focus:outline-none rounded">
+                          <option value="bottom">At Bottom</option>
+                          <option value="top">At Top</option>
+                       </select>
+                   )}
+               </div>
            </div>
         )}
 
@@ -422,6 +436,35 @@ export default function ChartBuilderModal() {
                          value={builderForm.pivotMeasures}
                          onChange={vals => setBuilderForm({...builderForm, pivotMeasures: vals})}
                       />
+                   </div>
+                   <div className="col-span-2 flex flex-col gap-2 bg-black/5 p-3 rounded-lg border t-border mt-2">
+                       <label className="text-[10px] font-black t-text-muted uppercase tracking-widest">Grand Totals</label>
+                       <div className="flex gap-6">
+                           <div className="flex items-center gap-3">
+                               <label className="flex items-center gap-2 text-xs font-bold t-text-main cursor-pointer">
+                                  <input type="checkbox" checked={builderForm.showColTotals} onChange={e => setBuilderForm({...builderForm, showColTotals: e.target.checked})} className="w-3 h-3 accent-[var(--theme-accent)]" />
+                                  Column Totals
+                               </label>
+                               {builderForm.showColTotals && (
+                                   <select value={builderForm.colTotalPosition} onChange={e => setBuilderForm({...builderForm, colTotalPosition: e.target.value})} className="t-panel border t-border px-2 py-1 text-xs font-medium focus:outline-none rounded">
+                                      <option value="bottom">Bottom</option>
+                                      <option value="top">Top</option>
+                                   </select>
+                               )}
+                           </div>
+                           <div className="flex items-center gap-3">
+                               <label className="flex items-center gap-2 text-xs font-bold t-text-main cursor-pointer">
+                                  <input type="checkbox" checked={builderForm.showRowTotals} onChange={e => setBuilderForm({...builderForm, showRowTotals: e.target.checked})} className="w-3 h-3 accent-[var(--theme-accent)]" />
+                                  Row Totals
+                               </label>
+                               {builderForm.showRowTotals && (
+                                   <select value={builderForm.rowTotalPosition} onChange={e => setBuilderForm({...builderForm, rowTotalPosition: e.target.value})} className="t-panel border t-border px-2 py-1 text-xs font-medium focus:outline-none rounded">
+                                      <option value="end">End (Right)</option>
+                                      <option value="start">Start (Left)</option>
+                                   </select>
+                               )}
+                           </div>
+                       </div>
                    </div>
                 </div>
             </div>

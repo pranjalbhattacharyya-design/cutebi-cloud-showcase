@@ -440,9 +440,28 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
      }
 
      if (chart.type === 'table') {
-        const { headers, headerIds, rows } = chartData;
+        const { headers, headerIds, rows, totals } = chartData;
         if (!headers || headers.length === 0) return <div className="t-text-muted text-center pt-10 font-medium text-sm">Add columns to see the Table.</div>;
        
+        const renderTableTotals = () => {
+            if (!totals || Object.keys(totals).length === 0) return null;
+            return (
+                <tr className="bg-black/10 transition-colors font-bold t-text-main shadow-inner">
+                    {headerIds.map((id, j) => {
+                        const isMeasure = (chart.tableMeasures || []).includes(id);
+                        if (j === 0 && !isMeasure) {
+                            return <th key={j} className="px-3 py-2 text-left uppercase text-[10px]" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>Grand Total</th>;
+                        }
+                        return (
+                            <td key={j} className={`px-3 py-2 ${isMeasure ? 'text-right text-[12px]' : 'text-center uppercase text-[10px]'}`} style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
+                                {isMeasure ? formatMeasVal(totals[id] || 0, id) : (j === 0 ? "Grand Total" : "")}
+                            </td>
+                        );
+                    })}
+                </tr>
+            );
+        };
+
         return (
           <div className="overflow-auto h-full w-full t-border border bg-black/5" style={{ borderRadius: 'calc(var(--theme-radius-panel) / 2)' }}>
              <table className="w-full text-left text-xs border-collapse" style={{ fontFamily: 'inherit' }}>
@@ -452,6 +471,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                           <th key={i} className="px-3 py-3" style={{ whiteSpace: tWrap ? "normal" : "nowrap", border: '1px solid rgba(0,0,0,0.05)' }}>{h}</th>
                       ))}
                    </tr>
+                   {chart.showColTotals && chart.colTotalPosition === 'top' && renderTableTotals()}
                 </thead>
                 <tbody className="bg-[var(--theme-panel-bg)]">
                    {rows.map((r, i) => (
@@ -468,6 +488,11 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                       </tr>
                    ))}
                 </tbody>
+                {chart.showColTotals && chart.colTotalPosition === 'bottom' && (
+                    <tfoot className="sticky bottom-0 z-10 shadow-[0_-2px_4px_rgba(0,0,0,0.05)] bg-[var(--theme-header-bg)]">
+                        {renderTableTotals()}
+                    </tfoot>
+                )}
              </table>
           </div>
         );
@@ -512,6 +537,11 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                     {getDisplayLabel(r)}
                  </th>
               ))}
+              {levelIndex === 0 && chart.showRowTotals && chart.rowTotalPosition === 'start' && (chart.pivotMeasures || []).map((mId, idx) => (
+                 <th key={`rhts-${idx}`} rowSpan={headerDepth} className="px-3 py-2.5 font-bold t-text-main align-bottom text-[12px] bg-black/10" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
+                     Total {chart.pivotMeasures.length > 1 ? getDisplayLabel(mId) : ''}
+                 </th>
+              ))}
               {colKeys.map((ck, i) => {
                   const span = colSpans[levelIndex][i];
                   if (!span) return null;
@@ -523,14 +553,61 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                       </th>
                   );
               })}
+              {levelIndex === 0 && chart.showRowTotals && chart.rowTotalPosition === 'end' && (chart.pivotMeasures || []).map((mId, idx) => (
+                 <th key={`rhte-${idx}`} rowSpan={headerDepth} className="px-3 py-2.5 font-bold t-text-main align-bottom text-[12px] bg-black/10" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
+                     Total {chart.pivotMeasures.length > 1 ? getDisplayLabel(mId) : ''}
+                 </th>
+              ))}
            </tr>
         ));
+
+        // Row Total aggregator function
+        const getRowTotal = (rk, mId) => {
+            let sum = 0;
+            colKeys.forEach(ck => {
+                const parts = ck.split(' | ');
+                const cMeas = chart.pivotMeasures.length > 1 ? parts[parts.length - 1] : chart.pivotMeasures[0];
+                if (cMeas === mId) sum += Number(matrix[rk]?.[ck]) || 0;
+            });
+            return sum;
+        };
+
+        // Column Totals Aggregation
+        const colTotals = {};
+        colKeys.forEach(ck => colTotals[ck] = rowKeys.reduce((sum, rk) => sum + (Number(matrix[rk]?.[ck]) || 0), 0));
+
+        const renderPivotColTotals = () => {
+            if (!chart.showColTotals) return null;
+            return (
+                <tr className="font-bold bg-black/10 t-text-main shadow-inner text-xs">
+                   {chart.pivotRows.map((r, i) => (
+                       <td key={`pct-${i}`} className="px-3 py-2 uppercase text-[10px]" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
+                           {i === 0 ? "Grand Total" : ""}
+                       </td>
+                   ))}
+                   {chart.showRowTotals && chart.rowTotalPosition === 'start' && chart.pivotMeasures.map(mId => {
+                       const grandSum = rowKeys.reduce((sum, rk) => sum + getRowTotal(rk, mId), 0);
+                       return <td key={`pcts-${mId}`} className="px-3 py-2 text-right text-[12px]" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>{formatMeasVal(grandSum, mId)}</td>
+                   })}
+                   {colKeys.map(ck => {
+                       const parts = ck.split(' | ');
+                       const mId = chart.pivotMeasures.length > 1 ? parts[parts.length - 1] : chart.pivotMeasures[0];
+                       return <td key={`pct-${ck}`} className="px-3 py-2 text-right" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>{formatMeasVal(colTotals[ck] || 0, mId)}</td>
+                   })}
+                   {chart.showRowTotals && chart.rowTotalPosition === 'end' && chart.pivotMeasures.map(mId => {
+                       const grandSum = rowKeys.reduce((sum, rk) => sum + getRowTotal(rk, mId), 0);
+                       return <td key={`pcte-${mId}`} className="px-3 py-2 text-right text-[12px]" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>{formatMeasVal(grandSum, mId)}</td>
+                   })}
+                </tr>
+            );
+        };
 
          return (
            <div className="overflow-auto h-full w-full t-border border bg-black/5" style={{ borderRadius: 'calc(var(--theme-radius-panel) / 2)' }}>
               <table className="w-full text-xs text-left">
                  <thead className="t-panel sticky top-0 z-10">
                     {headerRows}
+                    {chart.showColTotals && chart.colTotalPosition === 'top' && renderPivotColTotals()}
                  </thead>
                   <tbody className="bg-[var(--theme-panel-bg)]">
                     {rowKeys.map(rk => {
@@ -539,6 +616,11 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                           <tr key={rk} className="hover:bg-black/5 transition-colors text-xs">
                              {rkVals.map((rv, idx) => (
                                  <td key={idx} className="px-3 py-1.5 font-bold t-text-main whitespace-nowrap" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>{formatDimVal(rv, chart.pivotRows[idx])}</td>
+                             ))}
+                             {chart.showRowTotals && chart.rowTotalPosition === 'start' && chart.pivotMeasures.map(mId => (
+                                 <td key={`rts-${mId}`} className="px-3 py-1.5 font-bold t-text-main text-right bg-black/10 shadow-inner" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
+                                     {formatMeasVal(getRowTotal(rk, mId), mId)}
+                                 </td>
                              ))}
                              {colKeys.map(ck => {
                                  const val = matrix[rk]?.[ck];
@@ -551,10 +633,20 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                                      </td>
                                  );
                              })}
+                             {chart.showRowTotals && chart.rowTotalPosition === 'end' && chart.pivotMeasures.map(mId => (
+                                 <td key={`rte-${mId}`} className="px-3 py-1.5 font-bold t-text-main text-right bg-black/10 shadow-inner" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
+                                     {formatMeasVal(getRowTotal(rk, mId), mId)}
+                                 </td>
+                             ))}
                           </tr>
                        )
                     })}
                  </tbody>
+                 {chart.showColTotals && chart.colTotalPosition === 'bottom' && (
+                     <tfoot className="sticky bottom-0 z-10 shadow-[0_-2px_4px_rgba(0,0,0,0.05)] bg-[var(--theme-header-bg)]">
+                         {renderPivotColTotals()}
+                     </tfoot>
+                 )}
               </table>
            </div>
          );
