@@ -141,6 +141,167 @@ const shouldRenderLabel = (index, totalLength) => {
   return index % step === 0;
 };
 
+// =============================== SUNBURST CHART COMPONENT ===============================
+const SunburstArc = ({ segment, fill, onMouseEnter, onMouseLeave, opacity, isAnimated }) => {
+  const { startAngle, endAngle, innerRadius, outerRadius } = segment;
+  
+  const getArcPath = (start, end, ir, or) => {
+    const s1 = (start * Math.PI) / 180;
+    const e1 = (end * Math.PI) / 180;
+    const x1 = Math.cos(s1) * or;
+    const y1 = Math.sin(s1) * or;
+    const x2 = Math.cos(e1) * or;
+    const y2 = Math.sin(e1) * or;
+    const x3 = Math.cos(e1) * ir;
+    const y3 = Math.sin(e1) * ir;
+    const x4 = Math.cos(s1) * ir;
+    const y4 = Math.sin(s1) * ir;
+    const largeArc = end - start > 180 ? 1 : 0;
+    return `M ${x1} ${y1} A ${or} ${or} 0 ${largeArc} 1 ${x2} ${y2} L ${x3} ${y3} A ${ir} ${ir} 0 ${largeArc} 0 ${x4} ${y4} Z`;
+  };
+
+  const path = getArcPath(startAngle, endAngle, innerRadius, outerRadius);
+
+  return (
+    <path
+      d={path}
+      fill={fill}
+      opacity={opacity}
+      className={`transition-all duration-500 ease-out cursor-pointer hover:brightness-110 ${isAnimated ? 'animate-sweep' : ''}`}
+      onMouseEnter={(e) => onMouseEnter(segment, e)}
+      onMouseLeave={onMouseLeave}
+      stroke="var(--theme-panel-bg)"
+      strokeWidth={1}
+    />
+  );
+};
+
+const SunburstChart = ({ data, colors, width, height, formatMeasVal, measureId }) => {
+  const [hovered, setHovered] = React.useState(null);
+  const [tooltipPos, setTooltipPos] = React.useState({ x: 0, y: 0 });
+  const [isReady, setIsReady] = React.useState(false);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => setIsReady(true), 50);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const totalValue = React.useMemo(() => data.reduce((sum, d) => sum + (d.value || 0), 0), [data]);
+  
+  const processedData = React.useMemo(() => {
+    const segments = [];
+    const levelWidth = Math.min(width, height) / (2 * 4.5); // 4 levels max for good spacing
+    
+    const processLevel = (nodes, currentStart, currentEnd, level, path = []) => {
+      let start = currentStart;
+      const totalInRange = nodes.reduce((sum, n) => sum + (n.value || 0), 0);
+      const angleRange = currentEnd - currentStart;
+
+      nodes.forEach((node, i) => {
+        const nodeAngle = (node.value / totalValue) * 360;
+        const end = start + nodeAngle;
+        
+        segments.push({
+          ...node,
+          startAngle: start,
+          endAngle: end,
+          innerRadius: level === 0 ? levelWidth * 1.2 : levelWidth * (level + 1.2),
+          outerRadius: levelWidth * (level + 2.2),
+          level,
+          path: [...path, node.name],
+          colorIdx: i
+        });
+
+        if (node.children?.length > 0) {
+          processLevel(node.children, start, end, level + 1, [...path, node.name]);
+        }
+        start = end;
+      });
+    };
+
+    processLevel(data, 0, 360, 0);
+    return segments;
+  }, [data, width, height, totalValue]);
+
+  const cx = width / 2;
+  const cy = height / 2;
+
+  return (
+    <div className="relative w-full h-full flex items-center justify-center">
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="overflow-visible">
+        <g transform={`translate(${cx}, ${cy})`}>
+          {/* Center Circle (Total) */}
+          <circle r={(processedData[0]?.innerRadius || 40) * 0.9} fill="var(--theme-accent)" fillOpacity={0.05} />
+          <text textAnchor="middle" dy="-5" className="fill-[var(--theme-text-muted)] text-[9px] font-black uppercase tracking-tighter opacity-60">Grand Total</text>
+          <text textAnchor="middle" dy="15" className="fill-[var(--theme-text-main)] text-[14px] font-bold">{formatMeasVal(totalValue, measureId)}</text>
+          
+          {/* Arcs */}
+          {processedData.map((seg, idx) => {
+            const fill = colors[(seg.colorIdx + seg.level) % colors.length];
+            const isDimmed = hovered && !seg.path.join('|').startsWith(hovered.path.join('|')) && !hovered.path.join('|').startsWith(seg.path.join('|'));
+            
+            return (
+              <SunburstArc 
+                key={idx} 
+                segment={seg} 
+                fill={fill} 
+                opacity={isDimmed ? 0.3 : 0.8}
+                isAnimated={isReady}
+                onMouseEnter={(s, e) => {
+                  setHovered(s);
+                  setTooltipPos({ x: e.clientX, y: e.clientY });
+                }}
+                onMouseLeave={() => setHovered(null)}
+              />
+            );
+          })}
+        </g>
+      </svg>
+
+      {hovered && (
+        <div 
+          className="fixed pointer-events-none z-[100] p-3 t-panel shadow-2xl border t-border flex flex-col gap-1 min-w-[140px]"
+          style={{ 
+            left: tooltipPos.x + 15, 
+            top: tooltipPos.y + 15,
+            borderRadius: 'var(--theme-radius-panel)'
+          }}
+        >
+          <div className="flex items-center gap-1.5 mb-1 opacity-60 text-[9px] font-bold uppercase tracking-wider t-text-muted">
+            {hovered.path.map((p, i) => (
+              <React.Fragment key={i}>
+                <span className="truncate max-w-[60px]">{p}</span>
+                {i < hovered.path.length - 1 && <span className="opacity-40">/</span>}
+              </React.Fragment>
+            ))}
+          </div>
+          <p className="text-[12px] font-bold t-text-main">{hovered.name}</p>
+          <div className="h-px bg-black/5 w-full my-0.5" />
+          <p className="text-[11px] font-black t-accent flex items-center justify-between">
+            <span className="opacity-60 uppercase text-[8px]">Value</span>
+            {formatMeasVal(hovered.value, measureId)}
+          </p>
+          <p className="text-[9px] t-text-muted font-bold flex items-center justify-between">
+             <span className="opacity-60 uppercase text-[8px]">Prop.</span>
+             {((hovered.value / totalValue) * 100).toFixed(1)}%
+          </p>
+        </div>
+      )}
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes sweep {
+          from { stroke-dasharray: 0 1000; opacity: 0; }
+          to { stroke-dasharray: 1000 1000; opacity: 0.8; }
+        }
+        .animate-sweep {
+          animation: sweep 1s ease-out forwards;
+        }
+      `}} />
+    </div>
+  );
+};
+
+
 const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilter, handlePinChart, isViewer = false }) => {
   const {
       semanticModels, theme, activePageId, setDashboards, 
@@ -248,7 +409,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
           // matrix type is handled by its own useEffect below
           setLoading(false);
           return;
-        } else if (chart.type === 'treemap') {
+        } else if (chart.type === 'treemap' || chart.type === 'sunburst') {
           res = await getHierarchicalData(chart.datasetId, chart.treeDimensions || [], chart.measure, chart.filters || []);
         } else {
           res = await getAggregatedData(chart.datasetId, chart.dimension, chart.measure, chart.legend, chart.filters || []);
@@ -831,6 +992,15 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                <RechartsTooltip contentStyle={{ borderRadius: 'var(--theme-radius-panel)', border: 'none', boxShadow: 'var(--theme-shadow)', background: 'var(--theme-panel-bg)', color: 'var(--theme-text-main)' }} formatter={(v, n) => [formatMeasVal(v, chart.measure), n]} />
             </Treemap>
             </React.Fragment>
+          ) : chart.type === 'sunburst' ? (
+             <SunburstChart 
+                data={Array.isArray(chartData) ? chartData : (chartData?.data || [])}
+                colors={tColors}
+                width={800}
+                height={500}
+                formatMeasVal={formatMeasVal}
+                measureId={chart.measure}
+             />
           ) : (
             <LineChart data={data} margin={{ top: 45, right: 20, left: 10, bottom: 20 }}>
               <XAxis dataKey="name" tick={chart.showXAxisLabels === false ? false : <WrappedTick textWrap={tWrap} fontSize={10} fill="var(--theme-text-muted)" />} axisLine={false} tickLine={false} tickFormatter={(v) => formatDimVal(v, chart.dimension)} />
