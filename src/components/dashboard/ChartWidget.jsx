@@ -580,8 +580,11 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
              Object.keys(cleanRow).forEach(k => {
                 if (k !== 'name' && k !== 'children' && cleanRow[k] !== null && typeof cleanRow[k] !== 'number') {
                    const str = String(cleanRow[k]).replace(/^["']|["']$/g, '').replace(/\\"/g, '"').replace(/"/g, '');
-                   const num = Number(str.replace(/[^0-9.-]/g, ''));
-                   if (!isNaN(num) && str.trim() !== '') cleanRow[k] = num;
+                   const stripped = str.replace(/[^0-9.-]/g, '');
+                   // Only cast to number if stripping leaves a non-empty numeric string.
+                   // This prevents text values like "January" (stripped → "") from becoming 0.
+                   const num = Number(stripped);
+                   if (stripped !== '' && !isNaN(num)) cleanRow[k] = num;
                 }
              });
              if (Array.isArray(cleanRow.children)) {
