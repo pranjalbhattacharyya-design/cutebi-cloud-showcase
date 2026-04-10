@@ -371,9 +371,9 @@ const DecompositionTree = ({ data, colors, formatMeasVal, measureId }) => {
   };
 
   return (
-    <div className="w-full h-full relative p-4 overflow-auto scrollbar-hide flex items-center bg-[var(--theme-panel-bg)]" ref={containerRef}>
+    <div className="w-full h-full relative p-4 overflow-auto flex items-start bg-[var(--theme-panel-bg)]" ref={containerRef}>
       {/* SVG Layer for connectors */}
-      <svg className="absolute inset-0 pointer-events-none z-0 w-full h-full min-w-[2000px] min-h-[1000px]">
+      <svg className="absolute inset-0 pointer-events-none z-0 w-full h-full min-w-[3000px] min-h-[2000px]">
         {Object.entries(coords).map(([path, start]) => {
           const children = Object.entries(coords).filter(([p]) => {
             const parts = p.split('|');
@@ -404,11 +404,11 @@ const DecompositionTree = ({ data, colors, formatMeasVal, measureId }) => {
         })}
       </svg>
 
-      <div className="flex gap-24 relative z-10 transition-all duration-500 min-h-full items-center">
+      <div className="flex gap-24 relative z-10 transition-all duration-500 min-h-full items-start pt-8 pb-20 pr-20">
         {/* Root Node */}
         <div 
           data-tree-path="root"
-          className="p-5 rounded-2xl bg-white border t-border shadow-xl flex flex-col gap-3 min-w-[180px] relative z-20 overflow-hidden"
+          className="p-5 rounded-2xl bg-white border t-border shadow-xl flex flex-col gap-3 min-w-[180px] relative z-20 overflow-hidden mt-4"
         >
           <div className="absolute inset-0 bg-[var(--theme-accent)] opacity-[0.03] pointer-events-none" />
           <div className="flex items-center gap-2 mb-1">
