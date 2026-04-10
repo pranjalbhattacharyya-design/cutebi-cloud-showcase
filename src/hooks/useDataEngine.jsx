@@ -584,7 +584,13 @@ export const useDataEngine = () => {
       return filteredData;
   }, [globalFilters, semanticModels]);
 
-  const getAggregatedData = useCallback(async (datasetId, dimensionId, measureId, legendId, filters = [], overrideGlobalFilters = null) => {
+  const getAggregatedData = useCallback(async (chart, overrideGlobalFilters = null) => {
+    const datasetId = chart?.datasetId;
+    const dimensionId = chart?.dimension;
+    const measureId = chart?.measure;
+    const legendId = chart?.legend;
+    const filters = chart?.filters || [];
+    
     if (!datasetId || !dimensionId || !measureId) return { data: [], legendKeys: [] };
     const dimensions = [dimensionId];
     if (legendId) dimensions.push(legendId);
@@ -610,7 +616,12 @@ export const useDataEngine = () => {
     } catch (e) { console.error("Agg Error:", e); throw e; }
   }, [generateSQL]);
 
-  const getHierarchicalData = useCallback(async (datasetId, dimensions, measureId, filters = [], overrideGlobalFilters = null) => {
+  const getHierarchicalData = useCallback(async (chart, overrideGlobalFilters = null) => {
+    const datasetId = chart?.datasetId;
+    const dimensions = chart?.treeDimensions || [];
+    const measureId = chart?.measure;
+    const filters = chart?.filters || [];
+    
     if (!datasetId || !dimensions || dimensions.length === 0 || !measureId) return [];
     
     // We group by all dimensions in the hierarchy
@@ -661,82 +672,95 @@ export const useDataEngine = () => {
     }
   }, [generateSQL]);
 
-   const getTableData = useCallback(async (datasetId, dimensions, measures, totalMode = 'calculated', filters = [], overrideGlobalFilters = null) => {
-      if (!datasetId || (!dimensions?.length && !measures?.length)) return { headers: [], headerIds: [], rows: [] };
-      const { headers, headerIds } = getTableHeaders(measures, dimensions);
-      const factTablesInGroup = getFactTablesInGroup(activeDatasetId || datasetId);
-      const isMultiFactModel = factTablesInGroup.length > 1;
-      const measuresByFact = groupMeasuresByFact(measures, factTablesInGroup);
+    const getTableData = useCallback(async (chart, overrideGlobalFilters = null) => {
+       const datasetId = chart?.datasetId;
+       const dimensions = chart?.tableDimensions || [];
+       const measures = chart?.tableMeasures || [];
+       const totalMode = chart?.totalMode || 'calculated';
+       const filters = chart?.filters || [];
+       
+       if (!datasetId || (!dimensions.length && !measures.length)) return { headers: [], headerIds: [], rows: [] };
+       const { headers, headerIds } = getTableHeaders(measures, dimensions);
+       const factTablesInGroup = getFactTablesInGroup(activeDatasetId || datasetId);
+       const isMultiFactModel = factTablesInGroup.length > 1;
+       const measuresByFact = groupMeasuresByFact(measures, factTablesInGroup);
 
-      try {
-        if (isMultiFactModel) {
-          const mergedByKey = new Map();
-          const mergeStats = [];
-          let grandTotals = {};
-          
-          const factTasks = Array.from(measuresByFact.entries()).map(async ([factId, factMeasures]) => {
-            const sql = generateSQL(datasetId, dimensions, factMeasures, filters, null, factId, overrideGlobalFilters);
-            const totalsSql = totalMode === 'sum' 
-              ? `WITH base AS (${sql}) SELECT ${factMeasures.map(m => `SUM(\`${m}\`) as \`${m}\``).join(', ')} FROM base`
-              : generateSQL(datasetId, [], factMeasures, filters, null, factId, overrideGlobalFilters);
-            
-            const [rows, totalsResp] = await Promise.all([
-              queryDuckDB(`${sql} LIMIT 500`),
-              queryDuckDB(totalsSql)
-            ]);
-            
-            const tRow = (totalsResp && totalsResp[0]) || {};
-            factMeasures.forEach(mId => grandTotals[mId] = tRow[mId] !== undefined ? tRow[mId] : 0);
+       try {
+         if (isMultiFactModel) {
+           const mergedByKey = new Map();
+           const mergeStats = [];
+           let grandTotals = {};
+           
+           const factTasks = Array.from(measuresByFact.entries()).map(async ([factId, factMeasures]) => {
+             const sql = generateSQL(datasetId, dimensions, factMeasures, filters, null, factId, overrideGlobalFilters);
+             const totalsSql = totalMode === 'sum' 
+               ? `WITH base AS (${sql}) SELECT ${factMeasures.map(m => `SUM(\`${m}\`) as \`${m}\``).join(', ')} FROM base`
+               : generateSQL(datasetId, [], factMeasures, filters, null, factId, overrideGlobalFilters);
+             
+             const [rows, totalsResp] = await Promise.all([
+               queryDuckDB(`${sql} LIMIT 500`),
+               queryDuckDB(totalsSql)
+             ]);
+             
+             const tRow = (totalsResp && totalsResp[0]) || {};
+             factMeasures.forEach(mId => grandTotals[mId] = tRow[mId] !== undefined ? tRow[mId] : 0);
 
-            return { factId, factMeasures, rows: rows || [] };
-          });
+             return { factId, factMeasures, rows: rows || [] };
+           });
 
-          const results = await Promise.all(factTasks);
+           const results = await Promise.all(factTasks);
 
-          for (const { factId, rows } of results) {
-            mergeStats.push(`${factId}: ${rows.length} rows`);
-            rows.forEach(row => {
-              const dimKey = (dimensions || []).map(d => {
-                const val = row[d];
-                return val === null || val === undefined ? '' : String(val).trim();
-              }).join('\x00');
+           for (const { factId, rows } of results) {
+             mergeStats.push(`${factId}: ${rows.length} rows`);
+             rows.forEach(row => {
+               const dimKey = (dimensions || []).map(d => {
+                 const val = row[d];
+                 return val === null || val === undefined ? '' : String(val).trim();
+               }).join('\x00');
 
-              if (!mergedByKey.has(dimKey)) {
-                mergedByKey.set(dimKey, { ...Object.fromEntries((dimensions || []).map(d => [d, row[d]])) });
-              }
-              const targetRow = mergedByKey.get(dimKey);
-              Object.assign(targetRow, row);
-            });
-          }
+               if (!mergedByKey.has(dimKey)) {
+                 mergedByKey.set(dimKey, { ...Object.fromEntries((dimensions || []).map(d => [d, row[d]])) });
+               }
+               const targetRow = mergedByKey.get(dimKey);
+               Object.assign(targetRow, row);
+             });
+           }
 
-          if (totalMode === 'calculated') {
-            const grandSql = generateSQL(datasetId, [], measures, filters, null, null, overrideGlobalFilters);
-            const gRes = await queryDuckDB(grandSql);
-            if (gRes && gRes[0]) Object.assign(grandTotals, gRes[0]);
-          }
+           if (totalMode === 'calculated') {
+             const grandSql = generateSQL(datasetId, [], measures, filters, null, null, overrideGlobalFilters);
+             const gRes = await queryDuckDB(grandSql);
+             if (gRes && gRes[0]) Object.assign(grandTotals, gRes[0]);
+           }
 
-          window.dispatchEvent(new CustomEvent('mvantage-debug', { 
-            detail: { type: 'success', category: 'Merge', message: `Table merge complete: ${mergedByKey.size} rows`, details: { stats: mergeStats.join(' | ') } } 
-          }));
-          return { headers, headerIds, rows: Array.from(mergedByKey.values()), totals: grandTotals };
-        }
+           window.dispatchEvent(new CustomEvent('mvantage-debug', { 
+             detail: { type: 'success', category: 'Merge', message: `Table merge complete: ${mergedByKey.size} rows`, details: { stats: mergeStats.join(' | ') } } 
+           }));
+           return { headers, headerIds, rows: Array.from(mergedByKey.values()), totals: grandTotals };
+         }
 
-        const sql = generateSQL(datasetId, dimensions, measures, filters, 1500, null, overrideGlobalFilters);
-        const totalsSql = totalMode === 'sum' 
-            ? `WITH base AS (${sql}) SELECT ${measures.map(m => `SUM(\`${m}\`) as \`${m}\``).join(', ')} FROM base`
-            : generateSQL(datasetId, [], measures, filters, null, null, overrideGlobalFilters);
-        
-        const [rows, totalsResp] = await Promise.all([
-           queryDuckDB(`${sql} LIMIT 500`),
-           (measures && measures.length > 0) ? queryDuckDB(totalsSql) : Promise.resolve([])
-        ]);
-        
-        return { headers, headerIds, rows: rows || [], totals: (totalsResp && totalsResp[0]) || {} };
-      } catch (e) { console.error("Table Error:", e); throw e; }
-   }, [generateSQL, getFactTablesInGroup, resolveMeasureOrigin, activeDatasetId, semanticModels, datasets, groupMeasuresByFact, getTableHeaders]);
+         const sql = generateSQL(datasetId, dimensions, measures, filters, 1500, null, overrideGlobalFilters);
+         const totalsSql = totalMode === 'sum' 
+             ? `WITH base AS (${sql}) SELECT ${measures.map(m => `SUM(\`${m}\`) as \`${m}\``).join(', ')} FROM base`
+             : generateSQL(datasetId, [], measures, filters, null, null, overrideGlobalFilters);
+         
+         const [rows, totalsResp] = await Promise.all([
+            queryDuckDB(`${sql} LIMIT 500`),
+            (measures && measures.length > 0) ? queryDuckDB(totalsSql) : Promise.resolve([])
+         ]);
+         
+         return { headers, headerIds, rows: rows || [], totals: (totalsResp && totalsResp[0]) || {} };
+       } catch (e) { console.error("Table Error:", e); throw e; }
+    }, [generateSQL, getFactTablesInGroup, resolveMeasureOrigin, activeDatasetId, semanticModels, datasets, groupMeasuresByFact, getTableHeaders]);
 
 
-  const getPivotData = useCallback(async (datasetId, rowDims, colDims, measureIds, totalMode = 'calculated', filters = [], overrideGlobalFilters = null) => {
+  const getPivotData = useCallback(async (chart, overrideGlobalFilters = null) => {
+     const datasetId = chart?.datasetId;
+     const rowDims = chart?.pivotRows || [];
+     const colDims = chart?.pivotCols || [];
+     const measureIds = chart?.pivotMeasures || [];
+     const totalMode = chart?.totalMode || 'calculated';
+     const filters = chart?.filters || [];
+     
      if (!datasetId || (rowDims.length === 0 && colDims.length === 0)) return { rowKeys: [], colKeys: [], matrix: {} };
 
      const allDims = [...(rowDims || []), ...(colDims || [])];
@@ -846,7 +870,15 @@ export const useDataEngine = () => {
    }, [generateSQL, getFactTablesInGroup, resolveMeasureOrigin, activeDatasetId, semanticModels, datasets, groupMeasuresByFact]);
 
 
-  const getScatterData = useCallback(async (datasetId, dimensionId, xMeas, yMeas, cMeas, sMeas, filters = [], overrideGlobalFilters = null) => {
+  const getScatterData = useCallback(async (chart, overrideGlobalFilters = null) => {
+    const datasetId = chart?.datasetId;
+    const dimensionId = chart?.dimension;
+    const xMeas = chart?.xMeasure;
+    const yMeas = chart?.yMeasure;
+    const cMeas = chart?.colorMeasure;
+    const sMeas = chart?.sizeMeasure;
+    const filters = chart?.filters || [];
+    
     if (!datasetId || !dimensionId || !xMeas || !yMeas) return [];
     const measures = [xMeas, yMeas];
     if (cMeas) measures.push(cMeas);
