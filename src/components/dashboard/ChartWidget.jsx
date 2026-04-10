@@ -386,43 +386,50 @@ const DecompositionTree = ({ data, colors, formatMeasVal, measureId }) => {
   };
 
   return (
-    <div className="w-full h-full relative p-4 overflow-auto flex items-start bg-[var(--theme-panel-bg)]" ref={containerRef}>
-      <svg className="absolute inset-0 pointer-events-none z-0 w-full h-full min-w-[4000px] min-h-[3000px]">
-        {Object.entries(coords).map(([path, start]) => {
-          const children = Object.entries(coords).filter(([p]) => {
-            const pParts = p.split('|');
-            const targetParts = path.split('|');
-            return p.startsWith(path + '|') && pParts.length === targetParts.length + 1;
-          });
-          
-          return children.map(([childPath, end]) => {
-            const x1 = start.x + start.w;
-            const y1 = start.y + (start.h / 2);
-            const x2 = end.x;
-            const y2 = end.y + (end.h / 2);
-            const cp1x = x1 + (x2 - x1) * 0.5;
-            const cp2x = x2 - (x2 - x1) * 0.5;
+    <div 
+        className="w-full h-full relative p-4 overflow-auto flex items-start bg-[var(--theme-panel-bg)] [transform:rotateX(180deg)]" 
+        ref={containerRef}
+        style={{ scrollbarWidth: 'thin' }}
+    >
+      <div className="[transform:rotateX(180deg)] w-full h-full min-h-full">
+        {/* SVG Layer for connectors */}
+        <svg className="absolute inset-0 pointer-events-none z-0 w-full h-full min-w-[4000px] min-h-[3000px]">
+          {Object.entries(coords).map(([path, start]) => {
+            const children = Object.entries(coords).filter(([p]) => {
+              const pParts = p.split('|');
+              const targetParts = path.split('|');
+              return p.startsWith(path + '|') && pParts.length === targetParts.length + 1;
+            });
             
-            return (
-              <path 
-                key={`${path}->${childPath}`}
-                d={`M ${x1} ${y1} C ${cp1x} ${y1}, ${cp2x} ${y2}, ${x2} ${y2}`}
-                fill="none"
-                stroke="var(--theme-accent)"
-                strokeWidth="2"
-                opacity="0.25"
-                className="transition-all duration-300"
-              />
-            );
-          });
-        })}
-      </svg>
+            return children.map(([childPath, end]) => {
+              const x1 = start.x + start.w;
+              const y1 = start.y + (start.h / 2);
+              const x2 = end.x;
+              const y2 = end.y + (end.h / 2);
+              const cp1x = x1 + (x2 - x1) * 0.5;
+              const cp2x = x2 - (x2 - x1) * 0.5;
+              
+              return (
+                <path 
+                  key={`${path}->${childPath}`}
+                  d={`M ${x1} ${y1} C ${cp1x} ${y1}, ${cp2x} ${y2}, ${x2} ${y2}`}
+                  fill="none"
+                  stroke="var(--theme-accent)"
+                  strokeWidth="2"
+                  opacity="0.25"
+                  className="transition-all duration-300"
+                />
+              );
+            });
+          })}
+        </svg>
 
-      <div className="flex gap-24 relative z-10 transition-all duration-500 min-h-full items-start pt-8 pb-32 pr-32">
-        <div 
-          ref={el => nodeRefs.current['root'] = el}
-          className="p-5 rounded-2xl bg-white border t-border shadow-xl flex flex-col gap-3 min-w-[180px] relative z-20 overflow-hidden mt-4"
-        >
+        <div className="flex gap-24 relative z-10 transition-all duration-500 min-h-full items-start pt-16 pb-32 pr-32">
+          {/* Root Node */}
+          <div 
+            ref={el => nodeRefs.current['root'] = el}
+            className="p-5 rounded-2xl bg-white border t-border shadow-xl flex flex-col gap-3 min-w-[180px] relative z-20 overflow-hidden mt-4"
+          >
           <div className="absolute inset-0 bg-[var(--theme-accent)] opacity-[0.03] pointer-events-none" />
           <div className="flex items-center gap-2 mb-1">
              <LayoutTemplate size={14} className="t-accent opacity-60" />
