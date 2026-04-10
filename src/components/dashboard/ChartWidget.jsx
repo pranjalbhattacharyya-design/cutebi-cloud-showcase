@@ -2,7 +2,7 @@ import React from 'react';
 import { useAppState } from '../../contexts/AppStateContext';
 import { useChartData } from '../../hooks/useChartData';
 import { THEMES } from '../../utils/themeEngine';
-import { ArrowUpDown, Maximize2, X, Pencil, Pin, LayoutTemplate, ChevronRight, ChevronDown } from 'lucide-react';
+import { ArrowUpDown, Maximize2, X, Pencil, Pin, LayoutTemplate, ChevronRight, ChevronDown, Plus, Trash2 } from 'lucide-react';
 import { 
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
   Tooltip as RechartsTooltip, Legend, LabelList, LineChart, Line, 
@@ -274,6 +274,160 @@ const SunburstChart = ({ data, colors, formatMeasVal, measureId }) => {
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+const DecompositionTree = ({ data, colors, formatMeasVal, measureId }) => {
+  const [expandedPaths, setExpandedPaths] = React.useState(['root']);
+  const containerRef = React.useRef(null);
+  const [coords, setCoords] = React.useState({}); // { path: { x, y } }
+
+  const totalValue = React.useMemo(() => (data || []).reduce((sum, d) => sum + (d.value || 0), 0), [data]);
+
+  const toggleNode = (path) => {
+    setExpandedPaths(prev => prev.includes(path) ? prev.filter(p => !p.startsWith(path)) : [...prev, path]);
+  };
+
+  // Tracking coordinates for SVG connectors
+  React.useEffect(() => {
+    const update = () => {
+      const newCoords = {};
+      const els = containerRef.current?.querySelectorAll('[data-tree-path]');
+      els?.forEach(el => {
+        const path = el.getAttribute('data-tree-path');
+        const rect = el.getBoundingClientRect();
+        const parentRect = containerRef.current.getBoundingClientRect();
+        newCoords[path] = {
+          x: rect.left - parentRect.left,
+          y: rect.top - parentRect.top,
+          w: rect.width,
+          h: rect.height
+        };
+      });
+      setCoords(newCoords);
+    };
+    update();
+    window.addEventListener('resize', update);
+    const observer = new MutationObserver(update);
+    if (containerRef.current) observer.observe(containerRef.current, { childList: true, subtree: true });
+    return () => {
+      window.removeEventListener('resize', update);
+      observer.disconnect();
+    };
+  }, [expandedPaths, data]);
+
+  const renderLevel = (nodes, level = 0, parentPath = 'root') => {
+    if (!nodes || nodes.length === 0) return null;
+    
+    // Sort nodes to show largest on top
+    const sorted = [...nodes].sort((a,b) => (b.value||0) - (a.value||0));
+    
+    return (
+      <div className="flex flex-col gap-4 min-w-[200px] py-4 relative z-10">
+        {sorted.map((node, i) => {
+          const path = `${parentPath}|${node.name}`;
+          const isExpanded = expandedPaths.includes(path);
+          const hasChildren = node.children && node.children.length > 0;
+          const share = (node.value / totalValue) * 100;
+          const parentShare = parentPath === 'root' ? 100 : (node.value / nodes.reduce((s,n)=>s+n.value,0)) * 100;
+
+          return (
+            <React.Fragment key={path}>
+              <div 
+                data-tree-path={path}
+                className={`p-3 rounded-xl border t-border transition-all duration-300 flex flex-col gap-2 relative group overflow-hidden ${isExpanded ? 'bg-[var(--theme-accent)]/5 border-[var(--theme-accent)] shadow-lg' : 'bg-white hover:shadow-md'}`}
+              >
+                {/* Visual indicator bar */}
+                <div className="absolute left-0 bottom-0 h-1 bg-[var(--theme-accent)] opacity-20" style={{ width: `${share}%` }} />
+                
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[10px] font-black t-text-muted uppercase tracking-wider truncate" title={node.name}>{node.name}</span>
+                  {hasChildren && (
+                    <button 
+                      onClick={() => toggleNode(path)}
+                      className={`w-5 h-5 rounded-full flex items-center justify-center border t-border transition-all ${isExpanded ? 't-accent-bg text-white border-transparent' : 'bg-black/5 t-text-muted hover:t-accent'}`}
+                    >
+                      {isExpanded ? <Trash2 size={10} className="rotate-45"/> : <Plus size={10}/>}
+                    </button>
+                  )}
+                </div>
+                
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-sm font-black t-text-main">{formatMeasVal(node.value, measureId)}</span>
+                  <span className="text-[9px] font-bold t-text-muted opacity-60">{share.toFixed(1)}%</span>
+                </div>
+              </div>
+              {isExpanded && hasChildren && (
+                <div className="flex absolute left-full top-0 h-full">
+                   {renderLevel(node.children, level + 1, path)}
+                </div>
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
+    );
+  };
+
+  return (
+    <div className="w-full h-full relative p-4 overflow-auto scrollbar-hide flex items-center bg-[var(--theme-panel-bg)]" ref={containerRef}>
+      {/* SVG Layer for connectors */}
+      <svg className="absolute inset-0 pointer-events-none z-0 w-full h-full min-w-[2000px] min-h-[1000px]">
+        {Object.entries(coords).map(([path, start]) => {
+          const children = Object.entries(coords).filter(([p]) => {
+            const parts = p.split('|');
+            const parentParts = path.split('|');
+            return parts.length === parentParts.length + 1 && p.startsWith(path);
+          });
+          
+          return children.map(([childPath, end]) => {
+            const x1 = start.x + start.w;
+            const y1 = start.y + (start.h / 2);
+            const x2 = end.x;
+            const y2 = end.y + (end.h / 2);
+            const cp1x = x1 + (x2 - x1) / 2;
+            const cp2x = x2 - (x2 - x1) / 2;
+            
+            return (
+              <path 
+                key={`${path}->${childPath}`}
+                d={`M ${x1} ${y1} C ${cp1x} ${y1}, ${cp2x} ${y2}, ${x2} ${y2}`}
+                fill="none"
+                stroke="var(--theme-accent)"
+                strokeWidth="1.5"
+                opacity="0.15"
+                className="transition-all duration-500"
+              />
+            );
+          });
+        })}
+      </svg>
+
+      <div className="flex gap-24 relative z-10 transition-all duration-500 min-h-full items-center">
+        {/* Root Node */}
+        <div 
+          data-tree-path="root"
+          className="p-5 rounded-2xl bg-white border t-border shadow-xl flex flex-col gap-3 min-w-[180px] relative z-20 overflow-hidden"
+        >
+          <div className="absolute inset-0 bg-[var(--theme-accent)] opacity-[0.03] pointer-events-none" />
+          <div className="flex items-center gap-2 mb-1">
+             <LayoutTemplate size={14} className="t-accent opacity-60" />
+             <span className="text-[10px] font-black t-text-muted uppercase tracking-widest">Grand Total</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-2xl font-black t-text-main tracking-tighter">{formatMeasVal(totalValue, measureId)}</span>
+            <div className="h-1 bg-[var(--theme-accent)] w-full rounded-full mt-2 opacity-20" />
+          </div>
+          <div className="flex items-center gap-2 mt-1">
+             <div className="w-2 h-2 rounded-full t-accent-bg animate-pulse" />
+             <span className="text-[9px] font-black t-accent uppercase tracking-wider">Root Engine</span>
+          </div>
+        </div>
+
+        {/* Dynamic Branches */}
+        {renderLevel(data)}
+      </div>
     </div>
   );
 };
@@ -901,6 +1055,17 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
       if (chart.type === 'sunburst') {
           return (
               <SunburstChart 
+                 data={Array.isArray(chartData) ? chartData : (chartData?.data || [])}
+                 colors={tColors}
+                 formatMeasVal={formatMeasVal}
+                 measureId={chart.measure}
+              />
+          );
+      }
+
+      if (chart.type === 'decomptree') {
+          return (
+              <DecompositionTree 
                  data={Array.isArray(chartData) ? chartData : (chartData?.data || [])}
                  colors={tColors}
                  formatMeasVal={formatMeasVal}

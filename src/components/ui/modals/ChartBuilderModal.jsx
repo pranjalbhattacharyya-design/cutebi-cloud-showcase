@@ -307,7 +307,8 @@ export default function ChartBuilderModal() {
                  <option value="pivot">Pivot Table</option>
                  <option value="matrix">KPI Matrix</option>
                  <option value="treemap">Treemap</option>
-                  <option value="sunburst">Sunburst Chart</option>
+                 <option value="sunburst">Sunburst Chart</option>
+                 <option value="decomptree">Decomposition Tree</option>
               </select>
            </div>
         </div>
@@ -361,7 +362,7 @@ export default function ChartBuilderModal() {
            </div>
         )}
 
-        {builderForm.type !== 'pivot' && builderForm.type !== 'scatter' && builderForm.type !== 'table' && builderForm.type !== 'matrix' && builderForm.type !== 'treemap' && builderForm.type !== 'sunburst' && (
+        {builderForm.type !== 'pivot' && builderForm.type !== 'scatter' && builderForm.type !== 'table' && builderForm.type !== 'matrix' && builderForm.type !== 'treemap' && builderForm.type !== 'sunburst' && builderForm.type !== 'decomptree' && (
            <div className="grid grid-cols-2 gap-6 mb-6">
               <div>
                  <label className="text-[10px] font-black t-text-muted uppercase tracking-widest mb-2 block">X-Axis (Dimension)</label>
@@ -495,7 +496,7 @@ export default function ChartBuilderModal() {
             </div>
         )}
 
-        {(builderForm.type === 'treemap' || builderForm.type === 'sunburst') && (
+        {(builderForm.type === 'treemap' || builderForm.type === 'sunburst' || builderForm.type === 'decomptree') && (
            <div className="grid grid-cols-2 gap-6 mb-6">
               <div>
                  <label className="text-[10px] font-black t-text-muted uppercase tracking-widest mb-2 block">Hierarchy Dimensions (Order matters)</label>
@@ -683,6 +684,7 @@ export default function ChartBuilderModal() {
             if (builderForm.type === 'scatter' && (!builderForm.dimension || !builderForm.xMeasure || !builderForm.yMeasure)) return showToast('Scatter needs Detail, X-Axis, and Y-Axis');
             if (['bar', 'line', 'pie'].includes(builderForm.type) && (!builderForm.dimension || !builderForm.measure)) return showToast('Please select Dimension and Measure');
             if (builderForm.type === 'sunburst' && ((builderForm.treeDimensions || []).length === 0 || !builderForm.measure)) return showToast('Sunburst needs Hierarchy Dimensions and a Measure');
+            if (builderForm.type === 'decomptree' && ((builderForm.treeDimensions || []).length === 0 || !builderForm.measure)) return showToast('Decomposition Tree needs Hierarchy Dimensions and a Measure');
             if (builderForm.type === 'matrix' && (builderForm.matrixMeasures||[]).length === 0) return showToast('KPI Matrix needs at least 1 measure');
             if (builderForm.type === 'matrix' && (builderForm.matrixColumns||[]).filter(c=>c.type==='scope').length === 0) return showToast('KPI Matrix needs at least 1 Scope Column');
 
