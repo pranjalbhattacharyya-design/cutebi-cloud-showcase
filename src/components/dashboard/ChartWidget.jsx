@@ -1125,32 +1125,32 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                 data={Array.isArray(chartData) ? chartData : (chartData?.data || [])}
                 dataKey="value"
                 stroke="var(--theme-panel-bg)"
-                border={2}
+                paddingInner={2}
+                aspectRatio={4/3}
                 content={(props) => {
                    const { depth, x, y, width, height, name, value, rootIndex, children, index } = props;
-                   if (width < 5 || height < 5) return null;
+                   if (width < 3 || height < 3) return null;
                    
                    const colorIdx = rootIndex !== undefined ? rootIndex : index;
                    const baseColor = tColors[Math.max(0, colorIdx) % tColors.length] || tColors[0];
                    
-                   // Level 1: Group Headers (Parents)
+                   // Level 1: Category Headers (Parents)
                    if (depth === 1) {
                      return (
                        <g>
                          <rect 
                            x={x} y={y} width={width} height={height} 
                            fill={baseColor} 
-                           opacity={0.15}
+                           opacity={0.1}
                            stroke={baseColor} 
-                           strokeWidth={1}
-                           className="transition-all duration-300"
+                           strokeWidth={2}
                          />
-                         {/* Category Header Bar */}
-                         {width > 40 && height > 20 && (
-                           <rect x={x} y={y} width={width} height={22} fill={baseColor} opacity={0.6} />
+                         {/* Solid Header Bar for maximum contrast */}
+                         {width > 20 && height > 20 && (
+                           <rect x={x} y={y} width={width} height={26} fill={baseColor} />
                          )}
-                         {width > 40 && height > 20 && (
-                           <text x={x + 8} y={y + 15} fill="#fff" fontSize={10} fontWeight="900" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                         {width > 20 && height > 20 && (
+                           <text x={x + 10} y={y + 17} fill="#fff" fontSize={11} fontWeight="900" style={{ textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                              {name}
                            </text>
                          )}
@@ -1158,10 +1158,15 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                      );
                    }
 
-                   // Level 2+: Leaf Nodes (Segments)
+                   // Level 2+: Data Blocks (Segments)
                    const isLeaf = !children || children.length === 0;
-                   if (!isLeaf) return null; // We already handled parents above
+                   if (!isLeaf) return null;
 
+                   // Important: If we are a leaf, and we have a parent (depth > 1),
+                   // we need to be careful about not overlapping the parent's header at the TOP of the parent area.
+                   // However, Recharts calculates coordinates. 
+                   // To make it look "professional", we add a slight top padding to the rect if it's high up.
+                   
                    const fill = baseColor;
                    const labelColor = getContrastYIQ(fill);
                    
@@ -1171,10 +1176,10 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                            x={x} y={y} width={width} height={height} 
                            fill={fill} 
                            stroke="var(--theme-panel-bg)" 
-                           strokeWidth={1}
-                           style={{ fillOpacity: 0.9 }}
+                           strokeWidth={1.5}
+                           style={{ fillOpacity: 1 }}
                          />
-                         {width > 35 && height > 25 && (
+                         {width > 30 && height > 20 && (
                             <foreignObject x={x} y={y} width={width} height={height} style={{ pointerEvents: 'none' }}>
                                <div className="p-2 h-full w-full overflow-hidden flex flex-col justify-center">
                                   <div style={{ 
@@ -1184,10 +1189,10 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                                      lineHeight: '1.2',
                                      display: 'flex',
                                      flexDirection: 'column',
-                                     gap: '1px'
+                                     gap: '2px'
                                   }}>
-                                     <div style={{ fontWeight: '800', opacity: 1, textTransform: 'uppercase', fontSize: '9px', tracking: '0.02em' }}>{name}</div>
-                                     <div style={{ fontWeight: '400', opacity: 0.9, fontSize: '12px', letterSpacing: '-0.02em' }}>{formatMeasVal(value, chart.measure, false)}</div>
+                                     <div style={{ fontWeight: '900', opacity: 0.9, textTransform: 'uppercase', fontSize: '10px' }}>{name}</div>
+                                     <div style={{ fontWeight: '500', opacity: 1, fontSize: '12px' }}>{formatMeasVal(value, chart.measure, false)}</div>
                                   </div>
                                </div>
                             </foreignObject>
