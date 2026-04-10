@@ -1125,37 +1125,70 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                 data={Array.isArray(chartData) ? chartData : (chartData?.data || [])}
                 dataKey="value"
                 stroke="var(--theme-panel-bg)"
+                border={2}
                 content={(props) => {
-                   const { depth, x, y, width, height, name, value, rootIndex, children } = props;
-                   if (width < 10 || height < 10 || depth < 1) return null;
+                   const { depth, x, y, width, height, name, value, rootIndex, children, index } = props;
+                   if (width < 5 || height < 5) return null;
                    
-                   const colorIdx = rootIndex !== undefined ? rootIndex : props.index;
-                   const fill = tColors[Math.max(0, colorIdx) % tColors.length] || tColors[0];
+                   const colorIdx = rootIndex !== undefined ? rootIndex : index;
+                   const baseColor = tColors[Math.max(0, colorIdx) % tColors.length] || tColors[0];
                    
+                   // Level 1: Group Headers (Parents)
+                   if (depth === 1) {
+                     return (
+                       <g>
+                         <rect 
+                           x={x} y={y} width={width} height={height} 
+                           fill={baseColor} 
+                           opacity={0.15}
+                           stroke={baseColor} 
+                           strokeWidth={1}
+                           className="transition-all duration-300"
+                         />
+                         {/* Category Header Bar */}
+                         {width > 40 && height > 20 && (
+                           <rect x={x} y={y} width={width} height={22} fill={baseColor} opacity={0.6} />
+                         )}
+                         {width > 40 && height > 20 && (
+                           <text x={x + 8} y={y + 15} fill="#fff" fontSize={10} fontWeight="900" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                             {name}
+                           </text>
+                         )}
+                       </g>
+                     );
+                   }
+
+                   // Level 2+: Leaf Nodes (Segments)
                    const isLeaf = !children || children.length === 0;
+                   if (!isLeaf) return null; // We already handled parents above
+
+                   const fill = baseColor;
                    const labelColor = getContrastYIQ(fill);
                    
                    return (
-                      <g>
-                         <rect x={x} y={y} width={width} height={height} fill={fill} stroke="var(--theme-panel-bg)" strokeWidth={1} style={{ fillOpacity: depth === 1 ? 0.9 : 0.7 }} />
-                         {isLeaf && width > 30 && height > 20 && (
-                            <foreignObject x={x + 4} y={y + 4} width={width - 8} height={height - 8} style={{ pointerEvents: 'none' }}>
-                               <div style={{ 
-                                  color: labelColor, 
-                                  fontFamily: 'var(--theme-font, inherit)',
-                                  fontSize: '11px',
-                                  lineHeight: '1.2',
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  gap: '2px',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'normal',
-                                  WebkitFontSmoothing: 'antialiased',
-                                  MozOsxFontSmoothing: 'grayscale'
-                               }}>
-                                  <div style={{ fontWeight: '600', opacity: 1, letterSpacing: '-0.01em' }}>{name}</div>
-                                  <div style={{ fontWeight: '400', opacity: 0.85, fontSize: '10px' }}>{formatMeasVal(value, chart.measure, false)}</div>
+                      <g className="transition-all duration-300 hover:brightness-110 cursor-pointer">
+                         <rect 
+                           x={x} y={y} width={width} height={height} 
+                           fill={fill} 
+                           stroke="var(--theme-panel-bg)" 
+                           strokeWidth={1}
+                           style={{ fillOpacity: 0.9 }}
+                         />
+                         {width > 35 && height > 25 && (
+                            <foreignObject x={x} y={y} width={width} height={height} style={{ pointerEvents: 'none' }}>
+                               <div className="p-2 h-full w-full overflow-hidden flex flex-col justify-center">
+                                  <div style={{ 
+                                     color: labelColor, 
+                                     fontFamily: 'var(--theme-font, inherit)',
+                                     fontSize: '11px',
+                                     lineHeight: '1.2',
+                                     display: 'flex',
+                                     flexDirection: 'column',
+                                     gap: '1px'
+                                  }}>
+                                     <div style={{ fontWeight: '800', opacity: 1, textTransform: 'uppercase', fontSize: '9px', tracking: '0.02em' }}>{name}</div>
+                                     <div style={{ fontWeight: '400', opacity: 0.9, fontSize: '12px', letterSpacing: '-0.02em' }}>{formatMeasVal(value, chart.measure, false)}</div>
+                                  </div>
                                </div>
                             </foreignObject>
                          )}
