@@ -286,36 +286,55 @@ const DecompositionTree = ({ data, colors, formatMeasVal, measureId }) => {
   const totalValue = React.useMemo(() => (data || []).reduce((sum, d) => sum + (d.value || 0), 0), [data]);
 
   const toggleNode = (path) => {
-    setExpandedPaths(prev => prev.includes(path) ? prev.filter(p => !p.startsWith(path)) : [...prev, path]);
+    setExpandedPaths(prev => {
+      if (prev.includes(path)) {
+        // Collapsing: remove this path and all its descendants
+        return prev.filter(p => !p.startsWith(path));
+      } else {
+        // Expanding: keep root, keep parents, but clear siblings at this level
+        const parts = path.split('|');
+        const level = parts.length;
+        const parentPath = parts.slice(0, -1).join('|');
+        
+        // Filter out siblings (paths with same parent and same level)
+        const filtered = prev.filter(p => {
+          const pParts = p.split('|');
+          if (pParts.length >= level && p.startsWith(parentPath) && p !== parentPath) return false;
+          return true;
+        });
+        
+        return [...filtered, path];
+      }
+    });
   };
 
   // Tracking coordinates for SVG connectors
+  const updateCoords = React.useCallback(() => {
+    const newCoords = {};
+    const els = containerRef.current?.querySelectorAll('[data-tree-path]');
+    els?.forEach(el => {
+      const path = el.getAttribute('data-tree-path');
+      const rect = el.getBoundingClientRect();
+      const parentRect = containerRef.current.getBoundingClientRect();
+      newCoords[path] = {
+        x: rect.left - parentRect.left,
+        y: rect.top - parentRect.top,
+        w: rect.width,
+        h: rect.height
+      };
+    });
+    setCoords(newCoords);
+  }, []);
+
   React.useEffect(() => {
-    const update = () => {
-      const newCoords = {};
-      const els = containerRef.current?.querySelectorAll('[data-tree-path]');
-      els?.forEach(el => {
-        const path = el.getAttribute('data-tree-path');
-        const rect = el.getBoundingClientRect();
-        const parentRect = containerRef.current.getBoundingClientRect();
-        newCoords[path] = {
-          x: rect.left - parentRect.left,
-          y: rect.top - parentRect.top,
-          w: rect.width,
-          h: rect.height
-        };
-      });
-      setCoords(newCoords);
-    };
-    update();
-    window.addEventListener('resize', update);
-    const observer = new MutationObserver(update);
-    if (containerRef.current) observer.observe(containerRef.current, { childList: true, subtree: true });
+    updateCoords();
+    const interval = setInterval(updateCoords, 500); // Fail-safe for layout shifts
+    window.addEventListener('resize', updateCoords);
     return () => {
-      window.removeEventListener('resize', update);
-      observer.disconnect();
+      clearInterval(interval);
+      window.removeEventListener('resize', updateCoords);
     };
-  }, [expandedPaths, data]);
+  }, [updateCoords, expandedPaths, data]);
 
   const renderLevel = (nodes, level = 0, parentPath = 'root') => {
     if (!nodes || nodes.length === 0) return null;
