@@ -155,7 +155,8 @@ export const AppStateProvider = ({ children }) => {
      matrixColumns: [], // [{ id, label, type: 'scope'|'variance', filters, filterLogic, timeConfig } | { id, label, type: 'variance', colAId, colBId, varianceMode: '#'|'%' }]
      // Visual-Level Context Filters (Static)
      filters: [], // [{ dimensionId, operator, value }]
-     filterLogic: 'AND'
+     filterLogic: 'AND',
+     drillThroughTargetPageId: ''
   };
   const [builderForm, setBuilderForm] = useState(initBuilderForm);
   const [relForm, setRelForm] = useState({ fromColumn: '', toDatasetId: '', toColumn: '', direction: 'left' });
@@ -171,8 +172,28 @@ export const AppStateProvider = ({ children }) => {
   const [editingMeasureId, setEditingMeasureId] = useState(null);
 
   // --- Pages State ---
-  const [pages, setPages] = useState([{ id: 'page_1', name: 'Page 1' }]);
+  const [pages, setPages] = useState([{ id: 'page_1', name: 'Page 1', isDrillThrough: false }]);
   const [activePageId, setActivePageId] = useState('page_1');
+
+  // --- Drill Through State ---
+  const [drillThroughState, setDrillThroughState] = useState({ 
+    active: false, 
+    sourcePageId: null, 
+    filters: {} // { dimensionId: [values] }
+  });
+
+  const triggerDrillThrough = (targetPageId, contextFilters) => {
+    setDrillThroughState({
+      active: true,
+      sourcePageId: activePageId,
+      filters: contextFilters
+    });
+    setActivePageId(targetPageId);
+  };
+
+  const clearDrillThrough = () => {
+    setDrillThroughState({ active: false, sourcePageId: null, filters: {} });
+  };
 
   const [pendingRestore, setPendingRestore] = useState(null);
   const [currentTemplateId, setCurrentTemplateId] = useState(null);
@@ -680,6 +701,8 @@ export const AppStateProvider = ({ children }) => {
     cFilterLogic, setCFilterLogic, cTime, setCTime, editingMeasureId, setEditingMeasureId,
     // Pages
     pages, setPages, activePageId, setActivePageId,
+    drillThroughState, setDrillThroughState, 
+    triggerDrillThrough, clearDrillThrough,
     // Cloud
     savedReports, setSavedReports, pendingRestore, setPendingRestore, currentTemplateId, setCurrentTemplateId,
     hiddenDatasetIds, setHiddenDatasetIds,

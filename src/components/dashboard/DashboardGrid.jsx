@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   MessageSquare, Loader2, X, Filter, ChevronUp, ChevronDown, Check, 
-  Sparkles, Plus, LayoutTemplate, MessageCircleHeart, Menu, Pencil
+  Sparkles, Plus, LayoutTemplate, MessageCircleHeart, Menu, Pencil, ArrowLeft
 } from 'lucide-react';
 import { useAppState } from '../../contexts/AppStateContext';
 import { useDataEngine } from '../../hooks/useDataEngine';
@@ -110,8 +110,12 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
       setBuilderForm, initBuilderForm, setShowBuilder,
       isFilterPaneOpen, setIsFilterPaneOpen,
       pageFilters, authoredReportFilters,
-      userRole
+      userRole,
+      drillThroughState, clearDrillThrough
   } = useAppState();
+
+  const activePage = pages.find(p => p.id === activePageId);
+  const isDrillThroughPage = activePage?.isDrillThrough;
 
   const { getUniqueValuesForDim, globalSemanticFields, datesReady } = useDataEngine();
 
@@ -211,10 +215,14 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
             )}
             <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-2 rounded-xl border t-border">
                 <div className="flex items-center gap-4">
-                    <button onClick={() => setShowSlicerPane(!showSlicerPane)} className="flex items-center gap-2 t-text-main font-bold text-xs group">
-                      <Filter size={12} className="t-accent"/>
+                    <button 
+                      onClick={() => !isDrillThroughPage && setShowSlicerPane(!showSlicerPane)} 
+                      className={`flex items-center gap-2 t-text-main font-bold text-xs group ${isDrillThroughPage ? 'opacity-40 cursor-not-allowed' : ''}`}
+                      title={isDrillThroughPage ? "Filters isolated on Drill-Through page" : "Toggle Slicers"}
+                    >
+                      <Filter size={12} className={isDrillThroughPage ? 't-text-muted' : 't-accent'}/>
                       <span>Slicers ({slicers.length})</span>
-                      {showSlicerPane ? <ChevronUp size={12} className="t-text-muted group-hover:t-text-main"/> : <ChevronDown size={12} className="t-text-muted group-hover:t-text-main"/>}
+                      {!isDrillThroughPage && (showSlicerPane ? <ChevronUp size={12} className="t-text-muted group-hover:t-text-main"/> : <ChevronDown size={12} className="t-text-muted group-hover:t-text-main"/>)}
                     </button>
                     {!isViewer && (
                       <div className="relative group">
@@ -256,6 +264,18 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
                 
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-1 bg-black/5 p-1 border t-border" style={{ borderRadius: 'var(--theme-radius-button)' }}>
+                    {drillThroughState.active && (
+                       <button 
+                         onClick={() => {
+                           setActivePageId(drillThroughState.sourcePageId);
+                           clearDrillThrough();
+                         }} 
+                         className="px-3 py-1 text-[10px] font-black t-accent bg-white shadow-sm hover:shadow transition-all flex items-center gap-1.5 mr-1"
+                         style={{ borderRadius: 'var(--theme-radius-button)' }}
+                       >
+                         <ArrowLeft size={12}/> Back
+                       </button>
+                    )}
                     {pages.map((p) => (
                         <div key={p.id} className="flex items-center group/page relative">
                             {editingPageId === p.id && !isViewer ? (
@@ -269,14 +289,26 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
                                   style={{ borderRadius: 'var(--theme-radius-button)' }}
                               />
                             ) : (
-                              <button 
-                                onClick={() => setActivePageId(p.id)} 
-                                onDoubleClick={() => { if(!isViewer) {setEditingPageId(p.id); setEditingPageName(p.name); }}} 
-                                className={`px-4 py-1 text-[10px] font-black tracking-wide transition-all ${activePageId === p.id ? 't-panel t-text-main shadow-sm' : 't-text-muted hover:t-text-main'}`} 
-                                style={{ borderRadius: 'var(--theme-radius-button)' }}
-                              >
-                                  {p.name}
-                              </button>
+                                <button 
+                                  onClick={() => setActivePageId(p.id)} 
+                                  onDoubleClick={() => { if(!isViewer) {setEditingPageId(p.id); setEditingPageName(p.name); }}} 
+                                  className={`px-4 py-1 text-[10px] font-black tracking-wide transition-all flex items-center gap-1.5 ${activePageId === p.id ? 't-panel t-text-main shadow-sm' : 't-text-muted hover:t-text-main'}`} 
+                                  style={{ borderRadius: 'var(--theme-radius-button)' }}
+                                >
+                                    {p.name}
+                                    {!isViewer && (
+                                      <span 
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setPages(pages.map(pg => pg.id === p.id ? { ...pg, isDrillThrough: !pg.isDrillThrough } : pg));
+                                        }}
+                                        className={`px-1 rounded-[4px] text-[8px] border transition-all ${p.isDrillThrough ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-black/5 t-text-muted border-transparent hover:border-black/10'}`}
+                                        title="Toggle Drill-Through Page"
+                                      >
+                                        DT
+                                      </span>
+                                    )}
+                                </button>
                             )}
                         </div>
                     ))}
@@ -340,6 +372,7 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
                       chart={chart} 
                       handlePinChart={handlePinChart} 
                       isViewer={isViewer}
+                      overrideFilters={isDrillThroughPage && drillThroughState.active ? drillThroughState.filters : null}
                   />
               ))}
             </div>

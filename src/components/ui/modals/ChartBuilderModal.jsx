@@ -645,20 +645,35 @@ export default function ChartBuilderModal() {
            )}
         </div>
 
-        <div className="flex gap-6 mt-6 pt-4 border-t t-border items-center">
-           <div className="flex flex-col gap-1.5">
-               <label className="text-xs font-bold t-text-muted uppercase tracking-wide">Chart Width</label>
-               <select 
-                   value={builderForm.size || 'half'} 
-                   onChange={e => setBuilderForm({...builderForm, size: e.target.value})}
-                   className="t-panel border t-border px-3 py-1.5 text-sm font-bold focus:outline-none"
-                   style={{ borderRadius: 'var(--theme-radius-button)' }}
-               >
-                   <option value="third">Third Width</option>
-                   <option value="half">Half Width</option>
-                   <option value="full">Full Width</option>
-               </select>
-           </div>
+         <div className="flex gap-6 mt-6 pt-4 border-t t-border items-center">
+            <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold t-text-muted uppercase tracking-wide">Chart Layout & Drill Through</label>
+                <select 
+                    value={builderForm.size || 'half'} 
+                    onChange={e => setBuilderForm({...builderForm, size: e.target.value})}
+                    className="t-panel border t-border px-3 py-1.5 text-sm font-bold focus:outline-none"
+                    style={{ borderRadius: 'var(--theme-radius-button)' }}
+                >
+                    <option value="third">Third Width</option>
+                    <option value="half">Half Width</option>
+                    <option value="full">Full Width</option>
+                </select>
+            </div>
+
+            <div className="flex flex-col gap-1.5 flex-1">
+                <label className="text-xs font-bold t-text-muted uppercase tracking-wide">Drill Through Target</label>
+                <select 
+                    value={builderForm.drillThroughTargetPageId || ''} 
+                    onChange={e => setBuilderForm({...builderForm, drillThroughTargetPageId: e.target.value})}
+                    className="t-panel border t-border px-3 py-1.5 text-sm font-bold focus:outline-none"
+                    style={{ borderRadius: 'var(--theme-radius-button)' }}
+                >
+                    <option value="">None (Interaction Filter Only)</option>
+                    {pages.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}{p.isDrillThrough ? ' (DT)' : ''}</option>
+                    ))}
+                </select>
+            </div>
            
            <div className="flex flex-wrap gap-5 mt-5">
               <label className="flex items-center gap-2 text-sm font-bold t-text-main cursor-pointer">

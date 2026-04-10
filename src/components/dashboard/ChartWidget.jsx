@@ -136,13 +136,151 @@ const getIntelligentLabelVisibility = (index, data, dataKey) => {
  * Enterprise-Grade Data Label Thinning (Automatic Step-Rendering)
  */
 const shouldRenderLabel = (index, totalLength) => {
+import React from 'react';
+import { useAppState } from '../../contexts/AppStateContext';
+import { useChartData } from '../../hooks/useChartData';
+import { THEMES } from '../../utils/themeEngine';
+import { ArrowUpDown, Maximize2, X, Pencil, Pin, LayoutTemplate, ChevronRight, ChevronDown, Plus, Trash2 } from 'lucide-react';
+import { 
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
+  Tooltip as RechartsTooltip, Legend, LabelList, LineChart, Line, 
+  ScatterChart, Scatter, ZAxis, PieChart as RechartsPieChart, Pie, Cell, Text, Treemap
+} from 'recharts';
+
+/**
+ * Dynamic Contrast Resolver
+ * Determines whether black or white text is more readable for a given background
+ */
+const getContrastYIQ = (hex) => {
+  if (!hex || hex.startsWith('var')) return '#fff';
+  const cleanHex = hex.replace('#', '');
+  const r = parseInt(cleanHex.substring(0, 2), 16);
+  const g = parseInt(cleanHex.substring(2, 4), 16);
+  const b = parseInt(cleanHex.substring(4, 6), 16);
+  const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+  return (yiq >= 128) ? 'rgba(0,0,0,0.85)' : '#fff';
+};
+
+/**
+ * Enterprise-Grade SVG Multi-line Wrapping
+ * Uses Recharts <Text /> but ensures it drops logic into <tspan> based on context
+ */
+const WrappedTick = (props) => {
+  const { x, y, payload, textWrap, fontSize, fill, textAnchor = 'middle' } = props;
+  const val = payload.value;
+  
+  if (!textWrap || typeof val !== 'string' || val.length < 12) {
+    return (
+      <text x={x} y={y} dy={16} fill={fill} fontSize={fontSize} textAnchor={textAnchor} className="recharts-text recharts-cartesian-axis-tick-value">
+        {val}
+      </text>
+    );
+  }
+
+  // Split logic: split by spaces, ensuring each tspan line is roughly balanced
+  const words = val.split(' ');
+  const mid = Math.ceil(words.length / 2);
+  const line1 = words.slice(0, mid).join(' ');
+  const line2 = words.slice(mid).join(' ');
+
+  return (
+    <text x={x} y={y} dy={12} fill={fill} fontSize={fontSize} textAnchor={textAnchor}>
+      <tspan x={x} dy="0.3em">{line1}</tspan>
+      <tspan x={x} dy="1.1em">{line2}</tspan>
+    </text>
+  );
+};
+
+/**
+ * Enterprise-Grade SVG Multi-line Labeling
+ * Custom content renderer for Recharts <LabelList />
+ */
+const WrappedLabel = (props) => {
+  const { x, y, width, height, value, textWrap, fontSize, fill, fontWeight, disableHalo, topLabel } = props;
+  const haloStyle = disableHalo ? {} : { stroke: 'var(--theme-panel-bg)', strokeWidth: 3, paintOrder: 'stroke' };
+
+  // For Bar Charts: Calculate boundaries based on label position
+  const isBBox = width !== undefined && height !== undefined;
+  const lx = isBBox ? x + width / 2 : x;
+  const ly = isBBox ? (topLabel ? y : y + height / 2) : y;
+  const baseline = (isBBox && !topLabel) ? 'middle' : 'auto';
+  // Increase dy for line charts to move them further 'away' from the lines/markers
+  const dy = topLabel ? (isBBox ? -14 : -22) : (isBBox ? 0 : 22);
+
+  if (!textWrap || typeof value !== 'string' || value.length < 12) {
+    return <text x={lx} y={ly} dy={dy} fill={fill} fontSize={fontSize} fontWeight={fontWeight} textAnchor="middle" dominantBaseline={baseline} style={haloStyle}>{value}</text>;
+  }
+  const words = value.split(' ');
+  const mid = Math.ceil(words.length / 2);
+  const line1 = words.slice(0, mid).join(' ');
+  const line2 = words.slice(mid).join(' ');
+  return (
+    <text x={lx} y={ly} dy={dy} fill={fill} fontSize={fontSize} fontWeight={fontWeight} textAnchor="middle" dominantBaseline={baseline} style={haloStyle}>
+      <tspan x={lx} dy="0">{line1}</tspan>
+      <tspan x={lx} dy="1.1em">{line2}</tspan>
+    </text>
+  );
+};
+
+/**
+ * Intelligent Sparse Rendering for Dense Series
+ * Only render for First, Last, Local Max, and Local Min if points > 6
+ */
+const getIntelligentLabelVisibility = (index, data, dataKey) => {
+  if (!data || data.length === 0) return true;
+  const val = data[index][dataKey];
+  if (typeof val !== 'number') return false;
+
+  const allMetricKeys = Object.keys(data[index]).filter(k => k !== 'name' && typeof data[index][k] === 'number');
+  if (allMetricKeys.length > 1) {
+      let globalMax = -Infinity;
+      let globalMin = Infinity;
+      for (let d of data) {
+          for (let k of allMetricKeys) {
+              if (d[k] > globalMax) globalMax = d[k];
+              if (d[k] < globalMin) globalMin = d[k];
+          }
+      }
+      const range = globalMax - globalMin || 1;
+      const collisionThreshold = range * 0.16; // Even more aggressive to ensure no overlays
+
+      for (let k of allMetricKeys) {
+          if (k !== dataKey) {
+              const otherVal = data[index][k];
+              if (Math.abs(val - otherVal) < collisionThreshold) {
+                  if (val < otherVal || (val === otherVal && dataKey < k)) return false;
+              }
+          }
+      }
+  }
+
+  if (data.length <= 12) return true;
+  if (index === 0 || index === data.length - 1) return true;
+  
+  const allVals = data.map(d => d[dataKey]).filter(v => typeof v === 'number');
+  if (allVals.length === 0) return true;
+  
+  const max = Math.max(...allVals);
+  const min = Math.min(...allVals);
+  if (val === max || val === min) return true;
+  
+  const step = Math.ceil(data.length / 8);
+  if (index % step === 0) return true;
+  
+  return false;
+};
+
+/**
+ * Enterprise-Grade Data Label Thinning (Automatic Step-Rendering)
+ */
+const shouldRenderLabel = (index, totalLength) => {
   if (totalLength <= 12) return true;
   const step = Math.ceil(totalLength / 10); // Aim for ~10 labels max
   return index % step === 0;
 };
 
 // =============================== SUNBURST CHART COMPONENT ===============================
-const SunburstArc = ({ segment, fill, onMouseEnter, onMouseLeave, opacity, isAnimated }) => {
+const SunburstArc = ({ segment, fill, onMouseEnter, onMouseLeave, opacity, isAnimated, onClick }) => {
   const { startAngle, endAngle, innerRadius, outerRadius } = segment;
   
   const getArcPath = (start, end, ir, or) => {
@@ -170,13 +308,14 @@ const SunburstArc = ({ segment, fill, onMouseEnter, onMouseLeave, opacity, isAni
       className="transition-all duration-300 ease-out cursor-pointer hover:brightness-110"
       onMouseEnter={(e) => onMouseEnter(segment, e)}
       onMouseLeave={onMouseLeave}
+      onClick={() => onClick && onClick(segment)}
       stroke="var(--theme-panel-bg)"
       strokeWidth={0.5}
     />
   );
 };
 
-const SunburstChart = ({ data, colors, formatMeasVal, measureId }) => {
+const SunburstChart = ({ data, colors, formatMeasVal, measureId, onSegmentClick }) => {
   const [hovered, setHovered] = React.useState(null);
   const [tooltipPos, setTooltipPos] = React.useState({ x: 0, y: 0 });
 
@@ -239,6 +378,7 @@ const SunburstChart = ({ data, colors, formatMeasVal, measureId }) => {
                   setTooltipPos({ x: e.clientX, y: e.clientY });
                 }}
                 onMouseLeave={() => setHovered(null)}
+                onClick={onSegmentClick}
               />
             );
           })}
@@ -278,7 +418,7 @@ const SunburstChart = ({ data, colors, formatMeasVal, measureId }) => {
   );
 };
 
-const DecompositionTree = ({ data, colors, formatMeasVal, measureId }) => {
+const DecompositionTree = ({ data, colors, formatMeasVal, measureId, onNodeClick }) => {
   const [expandedPaths, setExpandedPaths] = React.useState(['root']);
   const containerRef = React.useRef(null);
   const [coords, setCoords] = React.useState({}); // { path: { x, y } }
@@ -354,14 +494,15 @@ const DecompositionTree = ({ data, colors, formatMeasVal, measureId }) => {
             <React.Fragment key={path}>
               <div 
                 ref={el => nodeRefs.current[path] = el}
-                className={`p-3 rounded-xl border t-border transition-all duration-300 flex flex-col gap-2 relative group overflow-hidden min-h-[70px] ${isExpanded ? 'bg-[var(--theme-accent)]/5 border-[var(--theme-accent)] shadow-lg' : 'bg-white hover:shadow-md'}`}
+                onClick={() => onNodeClick && onNodeClick(node, level)}
+                className={`p-3 rounded-xl border t-border transition-all duration-300 flex flex-col gap-2 relative group overflow-hidden min-h-[70px] cursor-pointer ${isExpanded ? 'bg-[var(--theme-accent)]/5 border-[var(--theme-accent)] shadow-lg' : 'bg-white hover:shadow-md'}`}
               >
                 <div className="absolute left-0 bottom-0 h-1 bg-[var(--theme-accent)] opacity-20" style={{ width: `${share}%` }} />
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-[10px] font-black t-text-muted uppercase tracking-wider break-words line-clamp-2" title={node.name}>{node.name}</span>
                   {hasChildren && (
                     <button 
-                      onClick={() => toggleNode(path)}
+                      onClick={(e) => { e.stopPropagation(); toggleNode(path); }}
                       className={`w-5 h-5 rounded-full flex items-center justify-center border t-border transition-all ${isExpanded ? 't-accent-bg text-white border-transparent' : 'bg-black/5 t-text-muted hover:t-accent'}`}
                     >
                       {isExpanded ? <Trash2 size={10} className="rotate-45"/> : <Plus size={10}/>}
@@ -453,13 +594,31 @@ const DecompositionTree = ({ data, colors, formatMeasVal, measureId }) => {
 );
 };
 
-
 const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilter, handlePinChart, isViewer = false }) => {
   const {
       semanticModels, theme, activePageId, setDashboards, 
       setBuilderForm, initBuilderForm, setShowBuilder,
-      globalFilters, joinGroupIds, fontScale, textWrap
+      globalFilters, joinGroupIds, fontScale, textWrap,
+      triggerDrillThrough, drillThroughState, pages
   } = useAppState();
+
+  const handleChartClick = React.useCallback((dimKey, dimValue, additionalContext = {}) => {
+    if (isExploreMode) return;
+    
+    // Capture context
+    const context = { ...globalFilters };
+    if (dimKey) context[dimKey] = [String(dimValue)];
+    
+    Object.entries(additionalContext).forEach(([k, v]) => {
+      context[k] = [String(v)];
+    });
+
+    if (chart.drillThroughTargetPageId) {
+      triggerDrillThrough(chart.drillThroughTargetPageId, context);
+    } else if (dimKey && toggleGlobalFilter) {
+      toggleGlobalFilter(dimKey, dimValue);
+    }
+  }, [chart.drillThroughTargetPageId, globalFilters, toggleGlobalFilter, triggerDrillThrough, isExploreMode]);
   
   const { getAggregatedData, getPivotData, getTableData, getScatterData, getMatrixData, getHierarchicalData, datesReady } = useChartData();
 
@@ -535,6 +694,8 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
     const fetchData = async () => {
       if (!chartDependencyReady) return;
       
+      const overrideFilters = drillThroughState.active ? (drillThroughState.filters || {}) : null;
+
       setLoading(true);
       try {
         let res = null;
@@ -547,24 +708,25 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                     id: chart.id,
                     datasetId: chart.datasetId,
                     dimensions: chart.dimension || chart.tableDimensions || chart.treeDimensions || chart.pivotRows || [],
-                    measures: chart.measure || chart.tableMeasures || chart.pivotMeasures || []
+                    measures: chart.measure || chart.tableMeasures || chart.pivotMeasures || [],
+                    isDrillThrough: !!overrideFilters
                 }
             } 
         }));
         if (chart.type === 'table') {
-          res = await getTableData(chart.datasetId, chart.tableDimensions || [], chart.tableMeasures || [], chart.totalMode, chart.filters || []);
+          res = await getTableData(chart.datasetId, chart.tableDimensions || [], chart.tableMeasures || [], chart.totalMode, chart.filters || [], overrideFilters);
         } else if (chart.type === 'pivot') {
-          res = await getPivotData(chart.datasetId, chart.pivotRows || [], chart.pivotCols || [], chart.pivotMeasures || [], chart.totalMode, chart.filters || []);
+          res = await getPivotData(chart.datasetId, chart.pivotRows || [], chart.pivotCols || [], chart.pivotMeasures || [], chart.totalMode, chart.filters || [], overrideFilters);
         } else if (chart.type === 'scatter') {
-          res = await getScatterData(chart.datasetId, chart.dimension, chart.xMeasure, chart.yMeasure, chart.colorMeasure, chart.sizeMeasure, chart.filters || []);
+          res = await getScatterData(chart.datasetId, chart.dimension, chart.xMeasure, chart.yMeasure, chart.colorMeasure, chart.sizeMeasure, chart.filters || [], overrideFilters);
         } else if (chart.type === 'matrix') {
           // matrix type is handled by its own useEffect below
           setLoading(false);
           return;
         } else if (chart.type === 'treemap' || chart.type === 'sunburst' || chart.type === 'decomptree') {
-          res = await getHierarchicalData(chart.datasetId, chart.treeDimensions || [], chart.measure, chart.filters || []);
+          res = await getHierarchicalData(chart.datasetId, chart.treeDimensions || [], chart.measure, chart.filters || [], overrideFilters);
         } else {
-          res = await getAggregatedData(chart.datasetId, chart.dimension, chart.measure, chart.legend, chart.filters || []);
+          res = await getAggregatedData(chart.datasetId, chart.dimension, chart.measure, chart.legend, chart.filters || [], overrideFilters);
         }
         
         const count = Array.isArray(res) ? res.length : (res?.data?.length || res?.rows?.length || (res?.matrix ? Object.keys(res.matrix).length : 0));
@@ -618,14 +780,15 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
 
     fetchData();
     // React 18 strict mode rapid fires effects, so we don't block the state update
-  }, [chart, globalFilters, chartDependencyReady, getAggregatedData, getPivotData, getTableData, getScatterData]);
+  }, [chart, globalFilters, drillThroughState.active, drillThroughState.filters, chartDependencyReady, getAggregatedData, getPivotData, getTableData, getScatterData]);
 
   // --- Dedicated KPI Matrix data fetch effect ---
   React.useEffect(() => {
     if (chart.type !== 'matrix' || !datesReady) return;
     let active = true;
     setMatrixLoading(true);
-    getMatrixData(chart).then(row => {
+    const overrideFilters = drillThroughState.active ? (drillThroughState.filters || {}) : null;
+    getMatrixData(chart, overrideFilters).then(row => {
       if (active) {
         setMatrixRawRow(row);
         setMatrixLoading(false);
@@ -643,7 +806,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
       }
     }).catch(e => { console.error('[Matrix] fetch failed', e); if (active) setMatrixLoading(false); });
     return () => { active = false; };
-  }, [chart, globalFilters, datesReady, getMatrixData]);
+  }, [chart, globalFilters, drillThroughState.active, drillThroughState.filters, datesReady, getMatrixData]);
 
   const getOriginKey = React.useCallback((datasetId, fieldId) => {
     if (!fieldId) return '';
@@ -826,7 +989,25 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                               const isMeasure = (chart.tableMeasures || []).includes(id);
                               const val = r[id];
                               return (
-                                  <td key={j} className={`px-3 py-2 align-top ${isMeasure ? 'font-medium t-text-main text-right' : 't-text-muted'}`} style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
+                                  <td 
+                                      key={j} 
+                                      onClick={() => {
+                                          if (isMeasure) {
+                                              const rowContext = {};
+                                              headerIds.forEach(hId => {
+                                                  if (!(chart.tableMeasures || []).includes(hId)) {
+                                                      rowContext[getOriginKey(chart.datasetId, hId)] = r[hId];
+                                                  }
+                                              });
+                                              const firstDim = (chart.tableDimensions || [])[0];
+                                              handleChartClick(getOriginKey(chart.datasetId, firstDim), r[firstDim], rowContext);
+                                          } else {
+                                              handleChartClick(getOriginKey(chart.datasetId, id), val);
+                                          }
+                                      }}
+                                      className={`px-3 py-2 align-top cursor-pointer hover:bg-black/5 transition-colors ${isMeasure ? 'font-medium t-text-main text-right' : 't-text-muted'}`} 
+                                      style={{ border: '1px solid rgba(0,0,0,0.05)' }}
+                                  >
                                       {isMeasure ? formatMeasVal(val, id) : formatDimVal(val, id)}
                                   </td>
                               );
@@ -982,7 +1163,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                       return (
                          <tr key={rk} className="hover:bg-black/5 transition-colors text-xs">
                             {rkVals.map((rv, idx) => (
-                                <td key={idx} className="px-3 py-1.5 font-bold t-text-main whitespace-nowrap" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>{formatDimVal(rv, chart.pivotRows[idx])}</td>
+                                <td key={idx} className="px-3 py-1.5 font-bold t-text-main whitespace-nowrap cursor-pointer hover:underline" onClick={() => handleChartClick(getOriginKey(chart.datasetId, chart.pivotRows[idx]), rv)} style={{ border: '1px solid rgba(0,0,0,0.05)' }}>{formatDimVal(rv, chart.pivotRows[idx])}</td>
                             ))}
                             {chart.showRowTotals && chart.rowTotalPosition === 'start' && chart.pivotMeasures.map(mId => (
                                 <td key={`rts-${mId}`} className="px-3 py-1.5 font-bold t-text-main text-right bg-black/10 shadow-inner" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
@@ -994,225 +1175,27 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                                 const parts = ck.split(' | ');
                                 const mId = chart.pivotMeasures.length > 1 ? parts[parts.length - 1] : chart.pivotMeasures[0];
                                 return (
-                                    <td key={ck} className="px-3 py-1.5 t-text-muted text-right" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
-                                        {val !== undefined && val !== null ? formatMeasVal(val, mId) : '-'}
-                                    </td>
-                                );
-                            })}
-                            {chart.showRowTotals && chart.rowTotalPosition === 'end' && chart.pivotMeasures.map(mId => (
-                                <td key={`rte-${mId}`} className="px-3 py-1.5 font-bold t-text-main text-right bg-black/10 shadow-inner" style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
-                                    {formatMeasVal(getRowTotal(rk, mId), mId)}
-                                </td>
-                            ))}
-                         </tr>
-                      )
-                   })}
-                </tbody>
-                {chart.showColTotals && chart.colTotalPosition === 'bottom' && (
-                    <tfoot className="sticky bottom-0 z-10 shadow-[0_-2px_4px_rgba(0,0,0,0.05)] bg-[var(--theme-header-bg)]">
-                        {renderPivotColTotals()}
-                    </tfoot>
-                )}
-             </table>
-          </div>
-        );
-      }
-
-     if (chart.type === 'scatter') {
-         const scatterData = Array.isArray(chartData) ? chartData : (chartData?.data || []);
-         const dimOriginKey = getOriginKey(chart.datasetId, chart.dimension);
-         const activeFilterVal = globalFilters[dimOriginKey] || [];
-         
-         const CustomScatterTooltip = ({ active, payload }) => {
-            if (active && payload && payload.length) {
-                const data = payload[0].payload;
-                return (
-                    <div className="t-panel p-3 rounded-xl shadow-lg t-border border text-xs">
-                        <p className="font-bold t-text-main mb-1">{data.name}</p>
-                        <p><span className="font-semibold t-text-muted">{semanticModel.find(m => m.id === chart.xMeasure)?.label}:</span> {formatMeasVal(data.x, chart.xMeasure)}</p>
-                        <p><span className="font-semibold t-text-muted">{semanticModel.find(m => m.id === chart.yMeasure)?.label}:</span> {formatMeasVal(data.y, chart.yMeasure)}</p>
-                        {chart.colorMeasure && data.color !== null && <p><span className="font-semibold t-text-muted">{semanticModel.find(m => m.id === chart.colorMeasure)?.label}:</span> {formatMeasVal(data.color, chart.colorMeasure)}</p>}
-                        {chart.sizeMeasure && data.size !== null && <p><span className="font-semibold t-text-muted">{semanticModel.find(m => m.id === chart.sizeMeasure)?.label}:</span> {formatMeasVal(data.size, chart.sizeMeasure)}</p>}
-                    </div>
-                );
-            }
-            return null;
-         };
-
-         const colorMin = chart.colorMeasure ? Math.min(...scatterData.map(d => d.color || 0)) : 0;
-         const colorMax = chart.colorMeasure ? Math.max(...scatterData.map(d => d.color || 0)) : 0;
-
-         return (
-            <ResponsiveContainer width="100%" height="100%">
-               <ScatterChart margin={{ top: 45, right: 20, bottom: 20, left: 0 }}>
-                  <CartesianGrid vertical={false} stroke="var(--theme-border)" />
-                  <XAxis type="number" dataKey="x" name={semanticModel.find(m => m.id === chart.xMeasure)?.label || 'X'} tick={chart.showXAxisLabels === false ? false : <WrappedTick textWrap={tWrap} fontSize={10} fill="var(--theme-text-muted)" />} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.xMeasure, true)} />
-                  <YAxis type="number" dataKey="y" name={semanticModel.find(m => m.id === chart.yMeasure)?.label || 'Y'} tick={chart.showYAxisLabels === false ? false : {fill: 'var(--theme-text-muted)', fontSize: 10}} width={chart.showYAxisLabels === false ? 10 : 65} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.yMeasure, true)} domain={[0, (max) => max * 1.25]} />
-                  {chart.sizeMeasure && <ZAxis type="number" dataKey="size" range={[60, 400]} name={semanticModel.find(m => m.id === chart.sizeMeasure)?.label || 'Size'} />}
-                  <RechartsTooltip cursor={{strokeDasharray: '3 3'}} content={CustomScatterTooltip} />
-                  {chart.legend && <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} formatter={(v) => <span style={{ color: 'var(--theme-text-main)' }}>{v}</span>} />}
-                  <Scatter name="Bubbles" data={scatterData} onClick={(d) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, d.name);}} className={isExploreMode ? "" : "cursor-pointer transition-all duration-300"}>
-                     {scatterData.map((e, idx) => {
-                        let fill = tColors[idx % tColors.length];
-                        if (chart.colorMeasure && e.color !== null) {
-                           const ratio = colorMax === colorMin ? 1 : (e.color - colorMin) / (colorMax - colorMin);
-                           const cIndex = Math.min(tColors.length - 1, Math.floor(ratio * tColors.length));
-                           fill = tColors[cIndex];
-                        }
-                        return <Cell key={idx} fill={fill} opacity={!isExploreMode && activeFilterVal.length > 0 && !activeFilterVal.includes(String(e.name)) ? 0.3 : 0.8} />;
-                     })}
-                     {chart.showDataLabels && <LabelList dataKey="name" position="top" fill="var(--theme-text-muted)" fontSize={10} fontWeight="normal" content={(props) => getIntelligentLabelVisibility(props.index, scatterData, 'name') ? <WrappedLabel {...props} value={props.value} fill="var(--theme-text-muted)" fontWeight="normal" textWrap={textWrap} disableHalo={false} topLabel={true} /> : null} />}
-                  </Scatter>
-               </ScatterChart>
-            </ResponsiveContainer>
-         );
-     }
-
-     // Standard Aggregation (Bar, Pie, Line)
-      const { data, legendKeys } = chartData;
-      const dimOriginKey = getOriginKey(chart.datasetId, chart.dimension);
-      const activeFilterVal = globalFilters[dimOriginKey] || [];
-      
-      if (chart.type === 'sunburst') {
-          return (
-              <SunburstChart 
-                 data={Array.isArray(chartData) ? chartData : (chartData?.data || [])}
-                 colors={tColors}
-                 formatMeasVal={formatMeasVal}
-                 measureId={chart.measure}
-              />
-          );
-      }
-
-      if (chart.type === 'decomptree') {
-          return (
-              <DecompositionTree 
-                 data={Array.isArray(chartData) ? chartData : (chartData?.data || [])}
-                 colors={tColors}
-                 formatMeasVal={formatMeasVal}
-                 measureId={chart.measure}
-              />
-          );
-      }
-
-      return (
-         <ResponsiveContainer width="100%" height="100%">
-           {chart.type === 'bar' ? (
-             <BarChart data={data} margin={{ top: 45, right: 20, left: 10, bottom: 20 }}>
-               <XAxis dataKey="name" tick={chart.showXAxisLabels === false ? false : <WrappedTick textWrap={tWrap} fontSize={10} fill="var(--theme-text-muted)" />} axisLine={false} tickLine={false} tickFormatter={(v) => formatDimVal(v, chart.dimension)} />
-               <YAxis domain={[0, (max) => max * 1.25]} tick={chart.showYAxisLabels === false ? false : {fill: 'var(--theme-text-muted)', fontSize: 10}} width={chart.showYAxisLabels === false ? 10 : 65} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.measure, true)} />
-               <RechartsTooltip cursor={{fill: 'var(--theme-border)', opacity: 0.5}} contentStyle={{ borderRadius: 'var(--theme-radius-panel)', border: 'none', boxShadow: 'var(--theme-shadow)', background: 'var(--theme-panel-bg)', color: 'var(--theme-text-main)' }} labelFormatter={(v) => formatDimVal(v, chart.dimension)} formatter={(val, name) => [formatMeasVal(val, chart.measure), chart.legend ? name : (getDisplayLabel(chart.measure) || 'Value')]} />
-               {chart.legend && <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} formatter={(v) => <span style={{ color: 'var(--theme-text-main)' }}>{v}</span>} />}
-               {legendKeys.map((k, i) => (
-                  <Bar key={k} dataKey={k} name={k === 'value' ? (getDisplayLabel(chart.measure) || 'Value') : k} fill={tColors[i % tColors.length]} onClick={(d) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, d.name);}} className={isExploreMode ? "" : "cursor-pointer transition-all duration-300"}>
-                    {data.map((e, idx) => <Cell key={idx} opacity={!isExploreMode && activeFilterVal.length > 0 && !activeFilterVal.includes(String(e.name)) ? 0.3 : 1} />)}
-                    {chart.showDataLabels && <LabelList dataKey={k} position="top" fill="var(--theme-text-muted)" fontSize={10} fontWeight="normal" formatter={(v) => formatMeasVal(v, chart.measure, true)} content={(props) => <WrappedLabel {...props} value={formatMeasVal(props.value, chart.measure, true)} fill="var(--theme-text-muted)" fontWeight="normal" textWrap={textWrap} disableHalo={false} topLabel={true} />} />}
-                  </Bar>
-               ))}
-             </BarChart>
-           ) : chart.type === 'pie' ? (
-             <RechartsPieChart>
-               <RechartsTooltip contentStyle={{ borderRadius: 'var(--theme-radius-panel)', border: 'none', boxShadow: 'var(--theme-shadow)', background: 'var(--theme-panel-bg)', color: 'var(--theme-text-main)' }} formatter={(v, n) => [formatMeasVal(v, chart.measure), formatDimVal(n, chart.dimension)]} />
-               <Pie data={data} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" onClick={(d) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, d.name);}} className={isExploreMode ? "" : "cursor-pointer"} label={chart.showDataLabels ? (props) => <text x={props.x} y={props.y} fill="var(--theme-text-muted)" fontSize={10} fontWeight="normal" textAnchor={props.textAnchor} dominantBaseline="central">{`${formatDimVal(props.name, chart.dimension)}: ${formatMeasVal(props.value, chart.measure, true)} (${(props.percent * 100).toFixed(0)}%)`}</text> : false} labelLine={false}>
-                 {data.map((e, i) => <Cell key={i} fill={tColors[i % tColors.length]} opacity={!isExploreMode && activeFilterVal.length > 0 && !activeFilterVal.includes(String(e.name)) ? 0.3 : 1} style={{ outline: 'none' }} />)}
-               </Pie>
-               <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} formatter={(v) => <span style={{ color: 'var(--theme-text-main)' }}>{v}</span>} />
-             </RechartsPieChart>
-           ) : chart.type === 'treemap' ? (
-            <React.Fragment>
-            {console.log('TREEMAP DATA:', Array.isArray(chartData) ? chartData : chartData?.data)}
-            <Treemap
-                data={Array.isArray(chartData) ? chartData : (chartData?.data || [])}
-                dataKey="value"
-                stroke="var(--theme-panel-bg)"
-                paddingInner={2}
-                aspectRatio={4/3}
-                content={(props) => {
-                   const { depth, x, y, width, height, name, value, rootIndex, children, index } = props;
-                   if (width < 3 || height < 3) return null;
-                   
-                   const colorIdx = rootIndex !== undefined ? rootIndex : index;
-                   const baseColor = tColors[Math.max(0, colorIdx) % tColors.length] || tColors[0];
-                   
-                   // Level 1: Category Headers (Parents)
-                   if (depth === 1) {
-                     return (
-                       <g>
-                         <rect 
-                           x={x} y={y} width={width} height={height} 
-                           fill={baseColor} 
-                           opacity={0.1}
-                           stroke={baseColor} 
-                           strokeWidth={2}
-                         />
-                         {/* Solid Header Bar for maximum contrast */}
-                         {width > 20 && height > 20 && (
-                           <rect x={x} y={y} width={width} height={26} fill={baseColor} />
-                         )}
-                         {width > 20 && height > 20 && (
-                           <text x={x + 10} y={y + 17} fill="#fff" fontSize={11} fontWeight="900" style={{ textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                             {name}
-                           </text>
-                         )}
-                       </g>
-                     );
-                   }
-
-                   // Level 2+: Data Blocks (Segments)
-                   const isLeaf = !children || children.length === 0;
-                   if (!isLeaf) return null;
-
-                   // Important: If we are a leaf, and we have a parent (depth > 1),
-                   // we need to be careful about not overlapping the parent's header at the TOP of the parent area.
-                   // However, Recharts calculates coordinates. 
-                   // To make it look "professional", we add a slight top padding to the rect if it's high up.
-                   
-                   const fill = baseColor;
-                   const labelColor = getContrastYIQ(fill);
-                   
-                   return (
-                      <g className="transition-all duration-300 hover:brightness-110 cursor-pointer">
-                         <rect 
-                           x={x} y={y} width={width} height={height} 
-                           fill={fill} 
-                           stroke="var(--theme-panel-bg)" 
-                           strokeWidth={1.5}
-                           style={{ fillOpacity: 1 }}
-                         />
-                         {width > 30 && height > 20 && (
-                            <foreignObject x={x} y={y} width={width} height={height} style={{ pointerEvents: 'none' }}>
-                               <div className="p-2 h-full w-full overflow-hidden flex flex-col justify-center">
-                                  <div style={{ 
-                                     color: labelColor, 
-                                     fontFamily: 'var(--theme-font, inherit)',
-                                     fontSize: '11px',
-                                     lineHeight: '1.2',
-                                     display: 'flex',
-                                     flexDirection: 'column',
-                                     gap: '2px'
-                                  }}>
-                                     <div style={{ fontWeight: '900', opacity: 0.9, textTransform: 'uppercase', fontSize: '10px' }}>{name}</div>
-                                     <div style={{ fontWeight: '500', opacity: 1, fontSize: '12px' }}>{formatMeasVal(value, chart.measure, false)}</div>
-                                  </div>
-                               </div>
-                            </foreignObject>
-                         )}
-                      </g>
-                   );
-                }}
-            >
-               <RechartsTooltip contentStyle={{ borderRadius: 'var(--theme-radius-panel)', border: 'none', boxShadow: 'var(--theme-shadow)', background: 'var(--theme-panel-bg)', color: 'var(--theme-text-main)' }} formatter={(v, n) => [formatMeasVal(v, chart.measure), n]} />
-            </Treemap>
-            </React.Fragment>
-
-          ) : (
+                                    <td 
+                                         key={ck} 
+                                         className="px-3 py-1.5 t-text-muted text-right cursor-pointer hover:bg-black/5" 
+                                         onClick={() => {
+                                             const context = {};
+                                             const rParts = rk.split(' | ');
+                                             (chart.pivotRows || []).forEach((dimId, ridx) => context[getOriginKey(chart.datasetId, dimId)] = rParts[ridx]);
+                                             const cParts = ck.split(' | ');
+                                             (chart.pivotCols || []).forEach((dimId, cidx) => context[getOriginKey(chart.datasetId, dimId)] = cParts[cidx]);
+                                             handleChartClick(getOriginKey(chart.datasetId, chart.pivotRows[0]), rParts[0], context);
+                                         }}
+                                         style={{ border: '1px solid rgba(0,0,0,0.05)' }}
+                                     >
+                                         {val !== undefined && val !== null ? formatMeasVal(val, mId) : '-'}
             <LineChart data={data} margin={{ top: 45, right: 20, left: 10, bottom: 20 }}>
               <XAxis dataKey="name" tick={chart.showXAxisLabels === false ? false : <WrappedTick textWrap={tWrap} fontSize={10} fill="var(--theme-text-muted)" />} axisLine={false} tickLine={false} tickFormatter={(v) => formatDimVal(v, chart.dimension)} />
               <YAxis domain={[0, (max) => max * 1.25]} tick={chart.showYAxisLabels === false ? false : {fill: 'var(--theme-text-muted)', fontSize: 10}} width={chart.showYAxisLabels === false ? 10 : 65} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.measure, true)} />
               <RechartsTooltip contentStyle={{ borderRadius: 'var(--theme-radius-panel)', border: 'none', boxShadow: 'var(--theme-shadow)', background: 'var(--theme-panel-bg)', color: 'var(--theme-text-main)' }} labelFormatter={(v) => formatDimVal(v, chart.dimension)} formatter={(val, name) => [formatMeasVal(val, chart.measure), chart.legend ? name : (getDisplayLabel(chart.measure) || 'Value')]} />
               {chart.legend && <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} formatter={(v) => <span style={{ color: 'var(--theme-text-main)' }}>{v}</span>} />}
                {legendKeys.map((k, i) => (
-                 <Line key={k} type="linear" name={k === 'value' ? (getDisplayLabel(chart.measure) || 'Value') : k} dataKey={k} stroke={tColors[i % tColors.length]} strokeWidth={1.5} dot={{ r: 3, fill: tColors[i % tColors.length], strokeWidth: 0 }} activeDot={{ r: 5, onClick: (e, p) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, p.payload.name); } }} className={isExploreMode ? "" : "cursor-pointer"}>
+                 <Line key={k} type="linear" name={k === 'value' ? (getDisplayLabel(chart.measure) || 'Value') : k} dataKey={k} stroke={tColors[i % tColors.length]} strokeWidth={1.5} dot={{ r: 3, fill: tColors[i % tColors.length], strokeWidth: 0 }} activeDot={{ r: 5, onClick: (e, p) => handleChartClick(dimOriginKey, p.payload.name) }} className={isExploreMode ? "" : "cursor-pointer"}>
                 {chart.showDataLabels && (
                   <LabelList 
                     dataKey={k} 
@@ -1435,12 +1418,26 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                             const val = isVar ? computeVariance(col, m.id) : getValue(m.id, col.id);
                             const isNeg = val != null && val < 0;
                             return (
-                              <td key={col.id} className="text-right px-3 py-1.5 tabular-nums transition-all" style={{
-                                fontSize: '11px',
-                                border: '1px solid rgba(0,0,0,0.05)',
-                                color: isVar ? (val == null ? 'var(--theme-text-muted)' : isNeg ? '#e03131' : '#2f9e44') : 'var(--theme-text-main)',
-                                fontWeight: isVar ? 600 : 400
-                              }}>
+                              <td 
+                                 key={col.id} 
+                                 onClick={() => {
+                                   if (isVar) return;
+                                   const context = { ...globalFilters };
+                                   if (col.filters) {
+                                     col.filters.forEach(f => {
+                                       context[getOriginKey(chart.datasetId, f.dimensionId)] = Array.isArray(f.value) ? f.value : [String(f.value)];
+                                     });
+                                   }
+                                   handleChartClick(null, null, context);
+                                 }}
+                                 className={`text-right px-3 py-1.5 tabular-nums transition-all ${!isVar ? 'cursor-pointer hover:bg-black/5' : ''}`} 
+                                 style={{
+                                   fontSize: '11px',
+                                   border: '1px solid rgba(0,0,0,0.05)',
+                                   color: isVar ? (val == null ? 'var\(--theme-text-muted\)' : isNeg ? '#e03131' : '#2f9e44') : 'var\(--theme-text-main\)',
+                                   fontWeight: isVar ? 600 : 400
+                                 }}
+                               >
                                 {fmtVal(val, m.format, isVar && col?.varianceMode === '%')}
                               </td>
                             );
@@ -1546,3 +1543,5 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
 });
 
 export default ChartWidget;
+
+
