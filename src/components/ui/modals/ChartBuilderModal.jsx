@@ -361,7 +361,7 @@ export default function ChartBuilderModal() {
            </div>
         )}
 
-        {builderForm.type !== 'pivot' && builderForm.type !== 'scatter' && builderForm.type !== 'table' && builderForm.type !== 'matrix' && builderForm.type !== 'treemap' && (
+        {builderForm.type !== 'pivot' && builderForm.type !== 'scatter' && builderForm.type !== 'table' && builderForm.type !== 'matrix' && builderForm.type !== 'treemap' && builderForm.type !== 'sunburst' && (
            <div className="grid grid-cols-2 gap-6 mb-6">
               <div>
                  <label className="text-[10px] font-black t-text-muted uppercase tracking-widest mb-2 block">X-Axis (Dimension)</label>
