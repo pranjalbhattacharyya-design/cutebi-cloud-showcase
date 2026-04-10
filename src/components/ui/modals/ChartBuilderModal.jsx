@@ -728,7 +728,8 @@ export default function ChartBuilderModal() {
                 pivotCols: builderForm.pivotCols.map(mapIdToLocal).filter(Boolean),
                 pivotMeasures: builderForm.pivotMeasures.map(mapIdToLocal).filter(Boolean),
                 tableDimensions: (builderForm.tableDimensions || []).map(mapIdToLocal).filter(Boolean),
-                tableMeasures: (builderForm.tableMeasures || []).map(mapIdToLocal).filter(Boolean)
+                tableMeasures: (builderForm.tableMeasures || []).map(mapIdToLocal).filter(Boolean),
+                treeDimensions: (builderForm.treeDimensions || []).map(mapIdToLocal).filter(Boolean)
             };
 
             setDashboards(prev => {

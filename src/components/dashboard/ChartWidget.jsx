@@ -181,24 +181,26 @@ const SunburstChart = ({ data, colors, width, height, formatMeasVal, measureId }
   const [tooltipPos, setTooltipPos] = React.useState({ x: 0, y: 0 });
   const [isReady, setIsReady] = React.useState(false);
 
+  // Auto-fill width/height if missing (fallback for ResponsiveContainer timing)
+  const finalWidth = width || 400;
+  const finalHeight = height || 400;
+
   React.useEffect(() => {
-    const timer = setTimeout(() => setIsReady(true), 50);
+    const timer = setTimeout(() => setIsReady(true), 150);
     return () => clearTimeout(timer);
   }, []);
 
-  if (!width || !height) return <div className="w-full h-full" />;
-
-  const totalValue = React.useMemo(() => data.reduce((sum, d) => sum + (d.value || 0), 0), [data]);
+  const totalValue = React.useMemo(() => (data || []).reduce((sum, d) => sum + (d.value || 0), 0), [data]);
   
   const processedData = React.useMemo(() => {
+    if (!data || data.length === 0 || totalValue === 0) return [];
+    
     const segments = [];
-    const levelWidth = Math.min(width, height) / (2 * 4.5); // 4 levels max for good spacing
+    const minDim = Math.min(finalWidth, finalHeight);
+    const levelWidth = minDim / (2 * 4.5); 
     
     const processLevel = (nodes, currentStart, currentEnd, level, path = []) => {
       let start = currentStart;
-      const totalInRange = nodes.reduce((sum, n) => sum + (n.value || 0), 0);
-      const angleRange = currentEnd - currentStart;
-
       nodes.forEach((node, i) => {
         const nodeAngle = (node.value / totalValue) * 360;
         const end = start + nodeAngle;
@@ -223,14 +225,17 @@ const SunburstChart = ({ data, colors, width, height, formatMeasVal, measureId }
 
     processLevel(data, 0, 360, 0);
     return segments;
-  }, [data, width, height, totalValue]);
+  }, [data, finalWidth, finalHeight, totalValue]);
 
-  const cx = width / 2;
-  const cy = height / 2;
+  const cx = finalWidth / 2;
+  const cy = finalHeight / 2;
+
+  if (!data || data.length === 0) return <div className="w-full h-full flex items-center justify-center text-[10px] t-text-muted italic">Processing chart...</div>;
+  if (totalValue === 0) return <div className="w-full h-full flex items-center justify-center text-[10px] text-red-400 font-bold uppercase tracking-widest">No data values found</div>;
 
   return (
-    <div className="relative w-full h-full flex items-center justify-center">
-      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="overflow-visible">
+    <div className="relative w-full h-full flex items-center justify-center" style={{ minHeight: '150px' }}>
+      <svg width="100%" height="100%" viewBox={`0 0 ${finalWidth} ${finalHeight}`} className="overflow-visible" preserveAspectRatio="xMidYMid meet">
         <g transform={`translate(${cx}, ${cy})`}>
           {/* Center Circle (Total) */}
           <circle r={(processedData[0]?.innerRadius || 40) * 0.9} fill="var(--theme-accent)" fillOpacity={0.05} />
