@@ -759,7 +759,8 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
      const activeFilterVal = globalFilters[dimOriginKey] || [];
 
      return (
-        <ResponsiveContainer width="100%" height="100%           {chart.type === 'bar' ? (
+        <ResponsiveContainer width="100%" height="100%">
+          {chart.type === 'bar' ? (
             <BarChart data={data} margin={{ top: 45, right: 20, left: 10, bottom: 20 }}>
               <CartesianGrid vertical={false} stroke="var(--theme-border)" />
               <XAxis dataKey="name" tick={<WrappedTick textWrap={tWrap} fontSize={10} fill="var(--theme-text-muted)" />} axisLine={false} tickLine={false} tickFormatter={(v) => formatDimVal(v, chart.dimension)} />
