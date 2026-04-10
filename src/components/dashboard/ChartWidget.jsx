@@ -176,7 +176,7 @@ const SunburstArc = ({ segment, fill, onMouseEnter, onMouseLeave, opacity, isAni
   );
 };
 
-const SunburstChart = ({ data, colors, formatMeasVal, measureId }) => {
+const FinalSunburstVisual = ({ data, colors, formatMeasVal, measureId }) => {
   const [hovered, setHovered] = React.useState(null);
   const [tooltipPos, setTooltipPos] = React.useState({ x: 0, y: 0 });
 
