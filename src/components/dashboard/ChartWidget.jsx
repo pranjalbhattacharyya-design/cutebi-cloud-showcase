@@ -737,6 +737,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                   <YAxis type="number" dataKey="y" name={semanticModel.find(m => m.id === chart.yMeasure)?.label || 'Y'} tick={chart.showYAxisLabels === false ? false : {fill: 'var(--theme-text-muted)', fontSize: 10}} width={chart.showYAxisLabels === false ? 10 : 65} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.yMeasure, true)} domain={[0, (max) => max * 1.25]} />
                   {chart.sizeMeasure && <ZAxis type="number" dataKey="size" range={[60, 400]} name={semanticModel.find(m => m.id === chart.sizeMeasure)?.label || 'Size'} />}
                   <RechartsTooltip cursor={{strokeDasharray: '3 3'}} content={CustomScatterTooltip} />
+                  {chart.legend && <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} formatter={(v) => <span style={{ color: 'var(--theme-text-main)' }}>{v}</span>} />}
                   <Scatter name="Bubbles" data={scatterData} onClick={(d) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, d.name);}} className={isExploreMode ? "" : "cursor-pointer transition-all duration-300"}>
                      {scatterData.map((e, idx) => {
                         let fill = tColors[idx % tColors.length];
@@ -766,7 +767,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
               <XAxis dataKey="name" tick={chart.showXAxisLabels === false ? false : <WrappedTick textWrap={tWrap} fontSize={10} fill="var(--theme-text-muted)" />} axisLine={false} tickLine={false} tickFormatter={(v) => formatDimVal(v, chart.dimension)} />
               <YAxis domain={[0, (max) => max * 1.25]} tick={chart.showYAxisLabels === false ? false : {fill: 'var(--theme-text-muted)', fontSize: 10}} width={chart.showYAxisLabels === false ? 10 : 65} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.measure, true)} />
               <RechartsTooltip cursor={{fill: 'var(--theme-border)', opacity: 0.5}} contentStyle={{ borderRadius: 'var(--theme-radius-panel)', border: 'none', boxShadow: 'var(--theme-shadow)', background: 'var(--theme-panel-bg)', color: 'var(--theme-text-main)' }} labelFormatter={(v) => formatDimVal(v, chart.dimension)} formatter={(val, name) => [formatMeasVal(val, chart.measure), chart.legend ? name : (getDisplayLabel(chart.measure) || 'Value')]} />
-              {chart.legend && <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', color: 'var(--theme-text-main)' }} />}
+              {chart.legend && <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} formatter={(v) => <span style={{ color: 'var(--theme-text-main)' }}>{v}</span>} />}
               {legendKeys.map((k, i) => (
                  <Bar key={k} dataKey={k} name={k === 'value' ? (getDisplayLabel(chart.measure) || 'Value') : k} fill={tColors[i % tColors.length]} onClick={(d) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, d.name);}} className={isExploreMode ? "" : "cursor-pointer transition-all duration-300"}>
                    {data.map((e, idx) => <Cell key={idx} opacity={!isExploreMode && activeFilterVal.length > 0 && !activeFilterVal.includes(String(e.name)) ? 0.3 : 1} />)}
@@ -780,7 +781,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
               <Pie data={data} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" onClick={(d) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, d.name);}} className={isExploreMode ? "" : "cursor-pointer"} label={chart.showDataLabels ? (props) => <text x={props.x} y={props.y} fill="var(--theme-text-muted)" fontSize={10} fontWeight="normal" textAnchor={props.textAnchor} dominantBaseline="central">{`${formatDimVal(props.name, chart.dimension)}: ${formatMeasVal(props.value, chart.measure, true)} (${(props.percent * 100).toFixed(0)}%)`}</text> : false} labelLine={false}>
                 {data.map((e, i) => <Cell key={i} fill={tColors[i % tColors.length]} opacity={!isExploreMode && activeFilterVal.length > 0 && !activeFilterVal.includes(String(e.name)) ? 0.3 : 1} style={{ outline: 'none' }} />)}
               </Pie>
-              <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', color: 'var(--theme-text-main)' }} />
+              <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} formatter={(v) => <span style={{ color: 'var(--theme-text-main)' }}>{v}</span>} />
             </RechartsPieChart>
           ) : chart.type === 'treemap' ? (
             <React.Fragment>
@@ -835,7 +836,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
               <XAxis dataKey="name" tick={chart.showXAxisLabels === false ? false : <WrappedTick textWrap={tWrap} fontSize={10} fill="var(--theme-text-muted)" />} axisLine={false} tickLine={false} tickFormatter={(v) => formatDimVal(v, chart.dimension)} />
               <YAxis domain={[0, (max) => max * 1.25]} tick={chart.showYAxisLabels === false ? false : {fill: 'var(--theme-text-muted)', fontSize: 10}} width={chart.showYAxisLabels === false ? 10 : 65} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.measure, true)} />
               <RechartsTooltip contentStyle={{ borderRadius: 'var(--theme-radius-panel)', border: 'none', boxShadow: 'var(--theme-shadow)', background: 'var(--theme-panel-bg)', color: 'var(--theme-text-main)' }} labelFormatter={(v) => formatDimVal(v, chart.dimension)} formatter={(val, name) => [formatMeasVal(val, chart.measure), chart.legend ? name : (getDisplayLabel(chart.measure) || 'Value')]} />
-              {chart.legend && <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', color: 'var(--theme-text-main)' }} />}
+              {chart.legend && <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} formatter={(v) => <span style={{ color: 'var(--theme-text-main)' }}>{v}</span>} />}
                {legendKeys.map((k, i) => (
                  <Line key={k} type="linear" name={k === 'value' ? (getDisplayLabel(chart.measure) || 'Value') : k} dataKey={k} stroke={tColors[i % tColors.length]} strokeWidth={1.5} dot={{ r: 3, fill: tColors[i % tColors.length], strokeWidth: 0 }} activeDot={{ r: 5, onClick: (e, p) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, p.payload.name); } }} className={isExploreMode ? "" : "cursor-pointer"}>
                 {chart.showDataLabels && (
