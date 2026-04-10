@@ -308,17 +308,19 @@ const DecompositionTree = ({ data, colors, formatMeasVal, measureId }) => {
     });
   };
 
-  // Tracking coordinates for SVG connectors
+  const nodeRefs = React.useRef({}); // { path: HTMLElement }
+
   const updateCoords = React.useCallback(() => {
     const newCoords = {};
-    const els = containerRef.current?.querySelectorAll('[data-tree-path]');
-    els?.forEach(el => {
-      const path = el.getAttribute('data-tree-path');
+    const parentRect = containerRef.current?.getBoundingClientRect();
+    if (!parentRect) return;
+
+    Object.entries(nodeRefs.current).forEach(([path, el]) => {
+      if (!el) return;
       const rect = el.getBoundingClientRect();
-      const parentRect = containerRef.current.getBoundingClientRect();
       newCoords[path] = {
-        x: rect.left - parentRect.left,
-        y: rect.top - parentRect.top,
+        x: rect.left - parentRect.left + containerRef.current.scrollLeft,
+        y: rect.top - parentRect.top + containerRef.current.scrollTop,
         w: rect.width,
         h: rect.height
       };
@@ -328,7 +330,7 @@ const DecompositionTree = ({ data, colors, formatMeasVal, measureId }) => {
 
   React.useEffect(() => {
     updateCoords();
-    const interval = setInterval(updateCoords, 500); // Fail-safe for layout shifts
+    const interval = setInterval(updateCoords, 300);
     window.addEventListener('resize', updateCoords);
     return () => {
       clearInterval(interval);
@@ -338,28 +340,23 @@ const DecompositionTree = ({ data, colors, formatMeasVal, measureId }) => {
 
   const renderLevel = (nodes, level = 0, parentPath = 'root') => {
     if (!nodes || nodes.length === 0) return null;
-    
-    // Sort nodes to show largest on top
     const sorted = [...nodes].sort((a,b) => (b.value||0) - (a.value||0));
     
     return (
-      <div className="flex flex-col gap-4 min-w-[200px] py-4 relative z-10">
+      <div className="flex flex-col gap-4 min-w-[220px] py-4 relative z-10">
         {sorted.map((node, i) => {
           const path = `${parentPath}|${node.name}`;
           const isExpanded = expandedPaths.includes(path);
           const hasChildren = node.children && node.children.length > 0;
           const share = (node.value / totalValue) * 100;
-          const parentShare = parentPath === 'root' ? 100 : (node.value / nodes.reduce((s,n)=>s+n.value,0)) * 100;
 
           return (
             <React.Fragment key={path}>
               <div 
-                data-tree-path={path}
+                ref={el => nodeRefs.current[path] = el}
                 className={`p-3 rounded-xl border t-border transition-all duration-300 flex flex-col gap-2 relative group overflow-hidden min-h-[70px] ${isExpanded ? 'bg-[var(--theme-accent)]/5 border-[var(--theme-accent)] shadow-lg' : 'bg-white hover:shadow-md'}`}
               >
-                {/* Visual indicator bar */}
                 <div className="absolute left-0 bottom-0 h-1 bg-[var(--theme-accent)] opacity-20" style={{ width: `${share}%` }} />
-                
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-[10px] font-black t-text-muted uppercase tracking-wider break-words line-clamp-2" title={node.name}>{node.name}</span>
                   {hasChildren && (
@@ -371,14 +368,13 @@ const DecompositionTree = ({ data, colors, formatMeasVal, measureId }) => {
                     </button>
                   )}
                 </div>
-                
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="text-sm font-black t-text-main">{formatMeasVal(node.value, measureId)}</span>
                   <span className="text-[9px] font-bold t-text-muted opacity-60">{share.toFixed(1)}%</span>
                 </div>
               </div>
               {isExpanded && hasChildren && (
-                <div className="flex absolute left-full top-0 h-full">
+                <div className="flex absolute left-full top-0 h-full pl-24">
                    {renderLevel(node.children, level + 1, path)}
                 </div>
               )}
@@ -391,13 +387,12 @@ const DecompositionTree = ({ data, colors, formatMeasVal, measureId }) => {
 
   return (
     <div className="w-full h-full relative p-4 overflow-auto flex items-start bg-[var(--theme-panel-bg)]" ref={containerRef}>
-      {/* SVG Layer for connectors */}
-      <svg className="absolute inset-0 pointer-events-none z-0 w-full h-full min-w-[3000px] min-h-[2000px]">
+      <svg className="absolute inset-0 pointer-events-none z-0 w-full h-full min-w-[4000px] min-h-[3000px]">
         {Object.entries(coords).map(([path, start]) => {
           const children = Object.entries(coords).filter(([p]) => {
-            const parts = p.split('|');
-            const parentParts = path.split('|');
-            return parts.length === parentParts.length + 1 && p.startsWith(path);
+            const pParts = p.split('|');
+            const targetParts = path.split('|');
+            return p.startsWith(path + '|') && pParts.length === targetParts.length + 1;
           });
           
           return children.map(([childPath, end]) => {
@@ -405,8 +400,8 @@ const DecompositionTree = ({ data, colors, formatMeasVal, measureId }) => {
             const y1 = start.y + (start.h / 2);
             const x2 = end.x;
             const y2 = end.y + (end.h / 2);
-            const cp1x = x1 + (x2 - x1) / 2;
-            const cp2x = x2 - (x2 - x1) / 2;
+            const cp1x = x1 + (x2 - x1) * 0.5;
+            const cp2x = x2 - (x2 - x1) * 0.5;
             
             return (
               <path 
@@ -414,19 +409,18 @@ const DecompositionTree = ({ data, colors, formatMeasVal, measureId }) => {
                 d={`M ${x1} ${y1} C ${cp1x} ${y1}, ${cp2x} ${y2}, ${x2} ${y2}`}
                 fill="none"
                 stroke="var(--theme-accent)"
-                strokeWidth="1.5"
-                opacity="0.15"
-                className="transition-all duration-500"
+                strokeWidth="2"
+                opacity="0.25"
+                className="transition-all duration-300"
               />
             );
           });
         })}
       </svg>
 
-      <div className="flex gap-24 relative z-10 transition-all duration-500 min-h-full items-start pt-8 pb-20 pr-20">
-        {/* Root Node */}
+      <div className="flex gap-24 relative z-10 transition-all duration-500 min-h-full items-start pt-8 pb-32 pr-32">
         <div 
-          data-tree-path="root"
+          ref={el => nodeRefs.current['root'] = el}
           className="p-5 rounded-2xl bg-white border t-border shadow-xl flex flex-col gap-3 min-w-[180px] relative z-20 overflow-hidden mt-4"
         >
           <div className="absolute inset-0 bg-[var(--theme-accent)] opacity-[0.03] pointer-events-none" />
