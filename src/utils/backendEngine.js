@@ -44,8 +44,11 @@ async function flushQueryQueue() {
         const dataArray = results.data || results;
 
         // Resolve each promise with its respective data
+        // Defensively unwrap in case the backend returns { data: [...] } instead of a raw array
         currentQueue.forEach((q, i) => {
-            q.resolve(dataArray[i] || []);
+            const raw = dataArray[i];
+            const resolved = Array.isArray(raw) ? raw : (raw?.data || raw?.rows || []);
+            q.resolve(resolved);
         });
 
         window.dispatchEvent(new CustomEvent('mvantage-debug', { 

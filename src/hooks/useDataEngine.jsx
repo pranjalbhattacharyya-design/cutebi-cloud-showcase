@@ -698,7 +698,7 @@ export const useDataEngine = () => {
                : generateSQL(datasetId, [], factMeasures, filters, null, factId, overrideGlobalFilters);
              
              const [rows, totalsResp] = await Promise.all([
-               queryDuckDB(`${sql} LIMIT 500`),
+               queryDuckDB(sql),
                queryDuckDB(totalsSql)
              ]);
              
@@ -744,7 +744,7 @@ export const useDataEngine = () => {
              : generateSQL(datasetId, [], measures, filters, null, null, overrideGlobalFilters);
          
          const [rows, totalsResp] = await Promise.all([
-            queryDuckDB(`${sql} LIMIT 500`),
+            queryDuckDB(sql),
             (measures && measures.length > 0) ? queryDuckDB(totalsSql) : Promise.resolve([])
          ]);
          
