@@ -871,14 +871,15 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                   </Scatter>
                </ScatterChart>
             </ResponsiveContainer>
-          )}
          );
      }
 
      // Standard Aggregation (Bar, Pie, Line)
       const { data, legendKeys } = chartData;
       const dimOriginKey = getOriginKey(chart.datasetId, chart.dimension);
-      const activeFilterVal = globalFilters[dimOriginKey] || [];      if (chart.type === 'sunburst') {
+      const activeFilterVal = globalFilters[dimOriginKey] || [];
+      
+      if (chart.type === 'sunburst') {
           return (
               <FinalSunburstVisual 
                  data={Array.isArray(chartData) ? chartData : (chartData?.data || [])}
@@ -887,7 +888,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                  measureId={chart.measure}
               />
           );
-      }   }
+      }
 
       return (
          <ResponsiveContainer width="100%" height="100%">
