@@ -466,9 +466,11 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
     globalFilters, 
     drillThroughState,
     triggerDrillThrough,
+    pages,
+    joinGroupIds,
     fontScale, 
     textWrap
-  } = React.useContext(AppStateContext);
+  } = useAppState();
   
   const { getAggregatedData, getPivotData, getTableData, getScatterData, getMatrixData, getHierarchicalData, datesReady } = useChartData();
 
