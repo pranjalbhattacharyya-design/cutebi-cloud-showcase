@@ -66,8 +66,8 @@ const WrappedLabel = (props) => {
   const lx = isBBox ? x + width / 2 : x;
   const ly = isBBox ? (topLabel ? y : y + height / 2) : y;
   const baseline = (isBBox && !topLabel) ? 'middle' : 'auto';
-  // Adjust dy: top labels go up (-), bottom labels go down (+)
-  const dy = topLabel ? -14 : (isBBox ? 0 : 18);
+  // Increase dy for line charts to move them further 'away' from the lines/markers
+  const dy = topLabel ? (isBBox ? -14 : -22) : (isBBox ? 0 : 22);
 
   if (!textWrap || typeof value !== 'string' || value.length < 12) {
     return <text x={lx} y={ly} dy={dy} fill={fill} fontSize={fontSize} fontWeight={fontWeight} textAnchor="middle" dominantBaseline={baseline} style={haloStyle}>{value}</text>;
@@ -104,7 +104,7 @@ const getIntelligentLabelVisibility = (index, data, dataKey) => {
           }
       }
       const range = globalMax - globalMin || 1;
-      const collisionThreshold = range * 0.12;
+      const collisionThreshold = range * 0.16; // Even more aggressive to ensure no overlays
 
       for (let k of allMetricKeys) {
           if (k !== dataKey) {
@@ -841,7 +841,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                 {chart.showDataLabels && (
                   <LabelList 
                     dataKey={k} 
-                    position={i % 2 === 0 ? "top" : "bottom"} 
+                    position="top" 
                     fill="var(--theme-text-muted)" 
                     fontSize={10} 
                     fontWeight="normal" 
@@ -854,7 +854,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                         fontWeight="normal" 
                         textWrap={textWrap} 
                         disableHalo={false} 
-                        topLabel={i % 2 === 0} 
+                        topLabel={true} 
                       />
                     ) : null} 
                   />
