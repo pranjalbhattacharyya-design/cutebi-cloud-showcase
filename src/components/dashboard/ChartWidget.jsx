@@ -1355,9 +1355,9 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
       setShowBuilder(true);
     };
     return (
-      <div key={chart.id} className={`${isExploreMode ? 'bg-black/5 w-full mt-2' : 't-panel'} shadow-sm border t-border flex flex-col hover:shadow-md transition-all duration-300 ${
+      <div key={chart.id + (matrixLoading ? '_l' : '_d')} className={`${isExploreMode ? 'bg-black/5 w-full mt-2' : 't-panel'} shadow-sm border t-border flex flex-col hover:shadow-md transition-all duration-300 ${
         !isExploreMode ? (chart.size === 'full' ? 'md:col-span-6' : (chart.size === 'third' ? 'md:col-span-2' : 'md:col-span-3')) : ''
-      } overflow-hidden`} style={{ borderRadius: 'var(--theme-radius-panel)' }}>
+      } overflow-hidden chart-enter`} style={{ borderRadius: 'var(--theme-radius-panel)' }}>
 
         {/* Header bar — matches legacy style */}
         <div className="flex justify-between items-center px-4 py-3 border-b t-border shrink-0">
@@ -1493,7 +1493,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
 
   if (chart.type === 'infographic') {
       return (
-         <div key={chart.id} className={`${isExploreMode ? 'bg-black/5 w-full mt-2' : 't-panel'} shadow-sm border t-border flex flex-col hover:shadow-md transition-all duration-300 ${!isExploreMode ? (chart.size === 'full' ? 'md:col-span-6' : (chart.size === 'third' ? 'md:col-span-2' : 'md:col-span-3')) : ''} overflow-hidden`} style={{ borderRadius: 'var(--theme-radius-panel)' }}>
+         <div key={chart.id} className={`${isExploreMode ? 'bg-black/5 w-full mt-2' : 't-panel'} shadow-sm border t-border flex flex-col hover:shadow-md transition-all duration-300 ${!isExploreMode ? (chart.size === 'full' ? 'md:col-span-6' : (chart.size === 'third' ? 'md:col-span-2' : 'md:col-span-3')) : ''} overflow-hidden chart-enter`} style={{ borderRadius: 'var(--theme-radius-panel)' }}>
             <div className="flex justify-between items-start p-4 mb-0 bg-black/5 border-b t-border shrink-0">
                <h4 className="t-text-main" style={{ fontSize: '1.1rem', fontWeight: 600, whiteSpace: tWrap ? "normal" : "nowrap", color: 'var(--theme-text-main)' }}>{chart.title}</h4>
                <div className="flex gap-2 t-text-muted">
@@ -1566,8 +1566,10 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
         </div>
       </div>
      
-      <div className="w-full flex items-center justify-center transition-all duration-300" style={{ height: getWidgetHeight() }}>
-         {content}
+      <div className="w-full flex items-center justify-center transition-all duration-300 overflow-hidden" style={{ height: getWidgetHeight() }}>
+         <div key={loading ? 'loading' : 'content'} className={!loading ? "w-full h-full chart-enter" : "w-full h-full flex items-center justify-center"}>
+            {content}
+         </div>
       </div>
     </div>
   );
