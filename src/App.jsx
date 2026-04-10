@@ -629,17 +629,6 @@ function AppContent() {
 
   return (
     <div className="flex h-screen font-sans overflow-hidden selection:bg-black/10 t-app" style={THEMES[theme]}>
-      {/* 🚨 CACHE-BUSTER DIAGNOSTIC BANNER 🚨 */}
-      <div style={{ 
-        position: 'fixed', top: 0, left: 0, width: '100vw', 
-        zIndex: 10000, background: '#ef4444', color: 'white', 
-        textAlign: 'center', padding: '12px', fontWeight: '900', 
-        fontSize: '20px', borderBottom: '4px solid #b91c1c',
-        boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
-        pointerEvents: 'none'
-      }}>
-        FORCE RELOAD ACTIVE - V5 ALPHA - IF YOU SEE THIS, CODE IS SYNCED
-      </div>
 
       
       {/* Global Dashboard Navigation / Footer Controls (Now in Sidebar for Developer, Header for Viewer) */}
@@ -867,9 +856,6 @@ function AppContent() {
       )}
 
       {/* Red Banner Injection */}
-      <div className="fixed top-0 left-0 w-full bg-red-600 text-white text-center py-1 text-[10px] font-black uppercase tracking-widest z-[100] shadow-md">
-        System Maintenance: Data Integrity Mode Active
-      </div>
 
       <LibraryModal 
         isOpen={isLibraryOpen}

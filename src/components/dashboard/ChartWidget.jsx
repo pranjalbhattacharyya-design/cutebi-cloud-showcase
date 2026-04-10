@@ -176,42 +176,26 @@ const SunburstArc = ({ segment, fill, onMouseEnter, onMouseLeave, opacity, isAni
   );
 };
 
-const FinalSunburstVisual = ({ data, colors, formatMeasVal, measureId }) => {
+const SunburstChart = ({ data, colors, formatMeasVal, measureId }) => {
   const [hovered, setHovered] = React.useState(null);
   const [tooltipPos, setTooltipPos] = React.useState({ x: 0, y: 0 });
 
   const totalValue = React.useMemo(() => (data || []).reduce((sum, d) => sum + (d.value || 0), 0), [data]);
   
-  // Robust Scaling: Fixed virtual size (500x500) that fills its parent via CSS
   const V_SIZE = 500;
   const V_CENTER = V_SIZE / 2;
 
   const processedData = React.useMemo(() => {
     if (!data || data.length === 0 || totalValue === 0) return [];
-    
     const segments = [];
     const levelWidth = V_SIZE / (2 * 5.5); 
-    
     const processLevel = (nodes, currentStart, currentEnd, level, path = []) => {
       let start = currentStart;
       nodes.forEach((node, i) => {
         const nodeAngle = (node.value / totalValue) * 360;
         const end = start + nodeAngle;
-        
-        segments.push({
-          ...node,
-          startAngle: start,
-          endAngle: end,
-          innerRadius: level === 0 ? levelWidth * 1.5 : levelWidth * (level + 1.5),
-          outerRadius: levelWidth * (level + 2.5),
-          level,
-          path: [...path, node.name],
-          colorIdx: i
-        });
-
-        if (node.children?.length > 0) {
-          processLevel(node.children, start, end, level + 1, [...path, node.name]);
-        }
+        segments.push({ ...node, startAngle: start, endAngle: end, innerRadius: level === 0 ? levelWidth * 1.5 : levelWidth * (level + 1.5), outerRadius: levelWidth * (level + 2.5), level, path: [...path, node.name], colorIdx: i });
+        if (node.children?.length > 0) processLevel(node.children, start, end, level + 1, [...path, node.name]);
         start = end;
       });
     };
@@ -219,32 +203,37 @@ const FinalSunburstVisual = ({ data, colors, formatMeasVal, measureId }) => {
     return segments;
   }, [data, totalValue]);
 
-  if (!data || data.length === 0) return <div className="w-full h-[300px] flex items-center justify-center text-red-500 font-bold bg-black/5">V5: WAITING FOR DATA...</div>;
+  if (!data || data.length === 0) return <div className="w-full h-full flex items-center justify-center text-[11px] t-text-muted italic opacity-40">Building hierarchy...</div>;
 
   return (
-    <div className="w-full h-full flex flex-col items-center justify-center relative min-h-[350px] bg-red-500/5">
-      <div className="absolute top-2 right-2 px-2 py-1 bg-red-600 text-white text-[10px] font-black rounded z-50 animate-bounce">V5 ACTIVE</div>
-      
+    <div className="w-full h-full flex flex-col items-center justify-center relative min-h-[300px]">
       <svg 
-        width="400" 
-        height="400" 
+        width="100%" 
+        height="100%" 
         viewBox={`0 0 ${V_SIZE} ${V_SIZE}`} 
-        className="overflow-visible shadow-2xl"
+        className="overflow-visible"
         preserveAspectRatio="xMidYMid meet"
-        style={{ background: 'white', borderRadius: '50%', border: '8px solid #ef4444' }}
       >
         <g transform={`translate(${V_CENTER}, ${V_CENTER})`}>
-          <circle r={V_SIZE/2.6} fill="var(--theme-accent)" opacity={0.1} stroke="#ef4444" strokeDasharray="10 10" />
-          <text textAnchor="middle" dy="12" className="fill-red-600 text-[24px] font-black">{formatMeasVal(totalValue, measureId)}</text>
+          {/* Subtle Center Glass Effect */}
+          <circle r={V_SIZE/6} fill="var(--theme-accent)" opacity={0.03} />
+          <circle r={V_SIZE/6} fill="none" stroke="var(--theme-accent)" opacity={0.1} strokeWidth={1} strokeDasharray="4 4" />
+          
+          <text textAnchor="middle" dy="-5" className="fill-[var(--theme-text-muted)] text-[10px] font-bold uppercase tracking-widest opacity-40">Total</text>
+          <text textAnchor="middle" dy="25" className="fill-[var(--theme-text-main)] text-[28px] font-black tracking-tighter" style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))' }}>
+            {formatMeasVal(totalValue, measureId)}
+          </text>
           
           {processedData.map((seg, idx) => {
             const fill = colors[(seg.colorIdx + seg.level) % (colors.length || 1)] || 'var(--theme-accent)';
+            const isDimmed = hovered && !seg.path.join('|').startsWith(hovered.path.join('|')) && !hovered.path.join('|').startsWith(seg.path.join('|'));
+            
             return (
               <SunburstArc 
                 key={`${seg.name}-${idx}`} 
                 segment={seg} 
                 fill={fill} 
-                opacity={0.8}
+                opacity={isDimmed ? 0.15 : 0.85}
                 onMouseEnter={(s, e) => {
                   setHovered(s);
                   setTooltipPos({ x: e.clientX, y: e.clientY });
@@ -255,6 +244,36 @@ const FinalSunburstVisual = ({ data, colors, formatMeasVal, measureId }) => {
           })}
         </g>
       </svg>
+
+      {hovered && (
+        <div 
+          className="fixed pointer-events-none z-[100] p-4 bg-white/95 backdrop-blur-md shadow-2xl border border-black/5 flex flex-col gap-1.5 min-w-[160px]"
+          style={{ 
+            left: tooltipPos.x + 20, 
+            top: tooltipPos.y + 20,
+            borderRadius: '16px'
+          }}
+        >
+          <div className="flex items-center gap-1.5 opacity-40 text-[9px] font-black uppercase tracking-widest">
+            {hovered.path.map((p, i) => (
+              <React.Fragment key={i}>
+                <span>{p}</span>
+                {i < hovered.path.length - 1 && <span>›</span>}
+              </React.Fragment>
+            ))}
+          </div>
+          <p className="text-[14px] font-black tracking-tight text-gray-900">{hovered.name}</p>
+          <div className="h-px bg-black/5 w-full my-0.5" />
+          <div className="flex items-center justify-between gap-4">
+             <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Share</span>
+             <span className="text-[11px] font-black t-accent">{((hovered.value / totalValue) * 100).toFixed(1)}%</span>
+          </div>
+          <div className="flex items-center justify-between gap-4">
+             <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Value</span>
+             <span className="text-[13px] font-black text-gray-900">{formatMeasVal(hovered.value, measureId)}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -881,7 +900,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
       
       if (chart.type === 'sunburst') {
           return (
-              <FinalSunburstVisual 
+              <SunburstChart 
                  data={Array.isArray(chartData) ? chartData : (chartData?.data || [])}
                  colors={tColors}
                  formatMeasVal={formatMeasVal}
