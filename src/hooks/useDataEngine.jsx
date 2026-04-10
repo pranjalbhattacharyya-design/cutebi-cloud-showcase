@@ -982,7 +982,9 @@ export const useDataEngine = () => {
       return parts.length > 0 ? parts.join(` ${col.filterLogic || 'AND'} `) : 'TRUE';
     };
 
-    const buildMeasureExpr = (measId, extraConditions = []) => {
+    const buildMeasureExpr = (measId, extraConditions = [], visited = new Set()) => {
+      if (visited.has(measId)) return 'NULL'; // cycle guard
+      visited.add(measId);
       let f = null;
       for (const dsId of localJoinGroup) {
         f = semanticModels[dsId]?.find(x => x.id === measId);
@@ -990,6 +992,19 @@ export const useDataEngine = () => {
       }
       if (!f) return `SUM(\`${sourceTable}\`.\`${measId}\`)`;
       const allConds = [...extraConditions];
+
+      if (f.isCalculated && f.expression) {
+        // Recursively resolve formula — e.g. [Sales] / [Units_Sold]
+        let evalStr = f.expression;
+        const matches = evalStr.match(/\[(.*?)\]/g) || [];
+        for (const match of matches) {
+          const innerId = match.slice(1, -1);
+          const innerSQL = buildMeasureExpr(innerId, allConds, new Set(visited));
+          evalStr = evalStr.replace(match, `COALESCE(CAST((${innerSQL}) AS FLOAT64), 0)`);
+        }
+        return `(${evalStr || 'NULL'})`;
+      }
+
       const col_ref = `\`${sourceTable}\`.\`${f.id}\``;
       const agg = f.aggType === 'countDistinct' ? 'COUNT(DISTINCT ' : (f.aggType === 'count' ? 'COUNT(' : `${(f.aggType || 'SUM').toUpperCase()}(`);
       if (allConds.length > 0) return `${agg}CASE WHEN ${allConds.join(' AND ')} THEN ${col_ref} ELSE NULL END)`;

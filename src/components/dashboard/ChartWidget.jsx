@@ -631,7 +631,8 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
     if (chart.type !== 'matrix' || !datesReady) return;
     let active = true;
     setMatrixLoading(true);
-    getMatrixData(chart).then(row => {
+    const overrideFilters = drillThroughState.active ? (drillThroughState.filters || {}) : null;
+    getMatrixData(chart, overrideFilters).then(row => {
       if (active) {
         setMatrixRawRow(row);
         setMatrixLoading(false);
@@ -648,7 +649,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
       }
     }).catch(e => { console.error('[Matrix] fetch failed', e); if (active) setMatrixLoading(false); });
     return () => { active = false; };
-  }, [chart, globalFilters, datesReady, getMatrixData]);
+  }, [chart, globalFilters, drillThroughState, datesReady, getMatrixData]);
 
   const getOriginKey = React.useCallback((datasetId, fieldId) => {
     if (!fieldId) return '';
