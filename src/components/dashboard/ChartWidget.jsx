@@ -176,28 +176,33 @@ const SunburstArc = ({ segment, fill, onMouseEnter, onMouseLeave, opacity, isAni
   );
 };
 
-const SunburstChart = ({ data, colors, width, height, formatMeasVal, measureId }) => {
+const SunburstChart = ({ data, colors, formatMeasVal, measureId }) => {
+  const containerRef = React.useRef(null);
+  const [size, setSize] = React.useState({ width: 0, height: 0 });
   const [hovered, setHovered] = React.useState(null);
   const [tooltipPos, setTooltipPos] = React.useState({ x: 0, y: 0 });
-  const [isReady, setIsReady] = React.useState(false);
 
-  // Auto-fill width/height if missing (fallback for ResponsiveContainer timing)
-  const finalWidth = width || 400;
-  const finalHeight = height || 400;
-
-  React.useEffect(() => {
-    const timer = setTimeout(() => setIsReady(true), 150);
-    return () => clearTimeout(timer);
+  React.useLayoutEffect(() => {
+    if (!containerRef.current) return;
+    const obs = new ResizeObserver((entries) => {
+      if (entries[0]) {
+        const { width, height } = entries[0].contentRect;
+        setSize({ width, height });
+      }
+    });
+    obs.observe(containerRef.current);
+    return () => obs.disconnect();
   }, []);
 
   const totalValue = React.useMemo(() => (data || []).reduce((sum, d) => sum + (d.value || 0), 0), [data]);
   
   const processedData = React.useMemo(() => {
     if (!data || data.length === 0 || totalValue === 0) return [];
+    if (size.width === 0 || size.height === 0) return [];
     
     const segments = [];
-    const minDim = Math.min(finalWidth, finalHeight);
-    const levelWidth = minDim / (2 * 4.5); 
+    const minDim = Math.min(size.width, size.height);
+    const levelWidth = minDim / (2 * 5); 
     
     const processLevel = (nodes, currentStart, currentEnd, level, path = []) => {
       let start = currentStart;
@@ -209,8 +214,8 @@ const SunburstChart = ({ data, colors, width, height, formatMeasVal, measureId }
           ...node,
           startAngle: start,
           endAngle: end,
-          innerRadius: level === 0 ? levelWidth * 1.2 : levelWidth * (level + 1.2),
-          outerRadius: levelWidth * (level + 2.2),
+          innerRadius: level === 0 ? levelWidth * 1.5 : levelWidth * (level + 1.5),
+          outerRadius: levelWidth * (level + 2.5),
           level,
           path: [...path, node.name],
           colorIdx: i
@@ -225,32 +230,34 @@ const SunburstChart = ({ data, colors, width, height, formatMeasVal, measureId }
 
     processLevel(data, 0, 360, 0);
     return segments;
-  }, [data, finalWidth, finalHeight, totalValue]);
+  }, [data, size, totalValue]);
 
-  const cx = finalWidth / 2;
-  const cy = finalHeight / 2;
+  const cx = size.width / 2;
+  const cy = size.height / 2;
 
-  if (!data || data.length === 0) return <div className="w-full h-full flex items-center justify-center text-[10px] t-text-muted italic">Processing chart...</div>;
-  if (totalValue === 0) return <div className="w-full h-full flex items-center justify-center text-[10px] text-red-400 font-bold uppercase tracking-widest">No data values found</div>;
+  if (!data || data.length === 0) return <div ref={containerRef} className="w-full h-full flex items-center justify-center text-[10px] t-text-muted italic">Processing...</div>;
+  if (totalValue === 0) return <div ref={containerRef} className="w-full h-full flex items-center justify-center text-[10px] text-red-400 font-bold uppercase">No data values</div>;
 
   return (
-    <div className="relative w-full h-full flex items-center justify-center p-4">
+    <div ref={containerRef} className="relative w-full h-full flex items-center justify-center overflow-hidden">
       <svg 
-        width={finalWidth} 
-        height={finalHeight} 
-        viewBox={`0 0 ${finalWidth} ${finalHeight}`} 
-        className="overflow-visible w-full h-full max-h-full"
-        style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.05))' }}
+        width={size.width} 
+        height={size.height} 
+        viewBox={`0 0 ${size.width} ${size.height}`} 
+        className="overflow-visible"
       >
         <g transform={`translate(${cx}, ${cy})`}>
+          {/* Debug Background for Arcs */}
+          <circle r={size.width > 0 ? (Math.min(size.width, size.height)/2.5) : 100} fill="currentColor" opacity={0.03} className="t-text-muted" />
+
           {/* Center Circle (Total) */}
-          <circle r={(processedData[0]?.innerRadius || 40) * 0.95} fill="var(--theme-accent)" fillOpacity={0.08} />
-          <text textAnchor="middle" dy="-8" className="fill-[var(--theme-text-muted)] text-[8px] font-black uppercase tracking-wider opacity-60">Total {measureId}</text>
-          <text textAnchor="middle" dy="12" className="fill-[var(--theme-text-main)] text-[16px] font-black" style={{ paintOrder: 'stroke', stroke: 'var(--theme-panel-bg)', strokeWidth: '2px', strokeLinejoin: 'round' }}>{formatMeasVal(totalValue, measureId)}</text>
+          <circle r={(processedData[0]?.innerRadius || 40) * 0.95} fill="var(--theme-accent)" fillOpacity={0.1} />
+          <text textAnchor="middle" dy="-8" className="fill-[var(--theme-text-muted)] text-[8px] font-black uppercase tracking-wider">Total {measureId}</text>
+          <text textAnchor="middle" dy="12" className="fill-[var(--theme-text-main)] text-[16px] font-bold">{formatMeasVal(totalValue, measureId)}</text>
           
           {/* Arcs */}
           {processedData.map((seg, idx) => {
-            const fill = colors[(seg.colorIdx + seg.level) % colors.length];
+            const fill = colors[(seg.colorIdx + seg.level) % (colors.length || 1)] || 'var(--theme-accent)';
             const isDimmed = hovered && !seg.path.join('|').startsWith(hovered.path.join('|')) && !hovered.path.join('|').startsWith(seg.path.join('|'));
             
             return (
@@ -258,7 +265,7 @@ const SunburstChart = ({ data, colors, width, height, formatMeasVal, measureId }
                 key={`${seg.name}-${idx}`} 
                 segment={seg} 
                 fill={fill} 
-                opacity={isDimmed ? 0.2 : 0.9}
+                opacity={isDimmed ? 0.15 : 0.85}
                 onMouseEnter={(s, e) => {
                   setHovered(s);
                   setTooltipPos({ x: e.clientX, y: e.clientY });
