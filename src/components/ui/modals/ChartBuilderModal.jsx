@@ -658,10 +658,20 @@ export default function ChartBuilderModal() {
                </select>
            </div>
            
-           <label className="flex items-center gap-2 text-sm font-bold t-text-main cursor-pointer mt-5">
-              <input type="checkbox" checked={builderForm.showDataLabels} onChange={e => setBuilderForm({...builderForm, showDataLabels: e.target.checked})} className="w-4 h-4 accent-[var(--theme-accent)]" />
-              Show Data Labels
-           </label>
+           <div className="flex flex-wrap gap-5 mt-5">
+              <label className="flex items-center gap-2 text-sm font-bold t-text-main cursor-pointer">
+                 <input type="checkbox" checked={builderForm.showDataLabels} onChange={e => setBuilderForm({...builderForm, showDataLabels: e.target.checked})} className="w-4 h-4 accent-[var(--theme-accent)]" />
+                 Show Data Labels
+              </label>
+              <label className="flex items-center gap-2 text-sm font-bold t-text-main cursor-pointer">
+                 <input type="checkbox" checked={builderForm.showXAxisLabels !== false} onChange={e => setBuilderForm({...builderForm, showXAxisLabels: e.target.checked})} className="w-4 h-4 accent-[var(--theme-accent)]" />
+                 X-Axis Labels
+              </label>
+              <label className="flex items-center gap-2 text-sm font-bold t-text-main cursor-pointer">
+                 <input type="checkbox" checked={builderForm.showYAxisLabels !== false} onChange={e => setBuilderForm({...builderForm, showYAxisLabels: e.target.checked})} className="w-4 h-4 accent-[var(--theme-accent)]" />
+                 Y-Axis Labels
+              </label>
+           </div>
         </div>
 
         <button onClick={() => {

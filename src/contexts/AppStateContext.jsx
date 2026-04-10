@@ -144,7 +144,8 @@ export const AppStateProvider = ({ children }) => {
      id: null, title: '', type: 'bar', dimension: '', measure: '', legend: '', size: 'half', verticalSize: 'normal',
      pivotRows: [], pivotCols: [], pivotMeasures: [],
      tableDimensions: [], tableMeasures: [],
-     xMeasure: '', yMeasure: '', colorMeasure: '', sizeMeasure: '', showDataLabels: false,
+     xMeasure: '', yMeasure: '', colorMeasure: '', sizeMeasure: '', 
+     showDataLabels: false, showXAxisLabels: true, showYAxisLabels: true,
      // Totals Configuration
      showColTotals: false, colTotalPosition: 'bottom',
      showRowTotals: false, rowTotalPosition: 'end',

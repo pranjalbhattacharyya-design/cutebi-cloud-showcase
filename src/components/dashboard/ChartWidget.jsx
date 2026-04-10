@@ -733,8 +733,8 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
             <ResponsiveContainer width="100%" height="100%">
                <ScatterChart margin={{ top: 45, right: 20, bottom: 20, left: 0 }}>
                   <CartesianGrid vertical={false} stroke="var(--theme-border)" />
-                  <XAxis type="number" dataKey="x" name={semanticModel.find(m => m.id === chart.xMeasure)?.label || 'X'} tick={<WrappedTick textWrap={tWrap} fontSize={10} fill="var(--theme-text-muted)" />} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.xMeasure, true)} />
-                  <YAxis type="number" dataKey="y" name={semanticModel.find(m => m.id === chart.yMeasure)?.label || 'Y'} tick={{fill: 'var(--theme-text-muted)', fontSize: 10}} width={65} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.yMeasure, true)} domain={[0, (max) => max * 1.25]} />
+                  <XAxis type="number" dataKey="x" name={semanticModel.find(m => m.id === chart.xMeasure)?.label || 'X'} tick={chart.showXAxisLabels === false ? false : <WrappedTick textWrap={tWrap} fontSize={10} fill="var(--theme-text-muted)" />} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.xMeasure, true)} />
+                  <YAxis type="number" dataKey="y" name={semanticModel.find(m => m.id === chart.yMeasure)?.label || 'Y'} tick={chart.showYAxisLabels === false ? false : {fill: 'var(--theme-text-muted)', fontSize: 10}} width={chart.showYAxisLabels === false ? 10 : 65} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.yMeasure, true)} domain={[0, (max) => max * 1.25]} />
                   {chart.sizeMeasure && <ZAxis type="number" dataKey="size" range={[60, 400]} name={semanticModel.find(m => m.id === chart.sizeMeasure)?.label || 'Size'} />}
                   <RechartsTooltip cursor={{strokeDasharray: '3 3'}} content={CustomScatterTooltip} />
                   <Scatter name="Bubbles" data={scatterData} onClick={(d) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, d.name);}} className={isExploreMode ? "" : "cursor-pointer transition-all duration-300"}>
@@ -763,8 +763,8 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
         <ResponsiveContainer width="100%" height="100%">
           {chart.type === 'bar' ? (
             <BarChart data={data} margin={{ top: 45, right: 20, left: 10, bottom: 20 }}>
-              <XAxis dataKey="name" tick={<WrappedTick textWrap={tWrap} fontSize={10} fill="var(--theme-text-muted)" />} axisLine={false} tickLine={false} tickFormatter={(v) => formatDimVal(v, chart.dimension)} />
-              <YAxis domain={[0, (max) => max * 1.25]} tick={{fill: 'var(--theme-text-muted)', fontSize: 10}} width={65} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.measure, true)} />
+              <XAxis dataKey="name" tick={chart.showXAxisLabels === false ? false : <WrappedTick textWrap={tWrap} fontSize={10} fill="var(--theme-text-muted)" />} axisLine={false} tickLine={false} tickFormatter={(v) => formatDimVal(v, chart.dimension)} />
+              <YAxis domain={[0, (max) => max * 1.25]} tick={chart.showYAxisLabels === false ? false : {fill: 'var(--theme-text-muted)', fontSize: 10}} width={chart.showYAxisLabels === false ? 10 : 65} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.measure, true)} />
               <RechartsTooltip cursor={{fill: 'var(--theme-border)', opacity: 0.5}} contentStyle={{ borderRadius: 'var(--theme-radius-panel)', border: 'none', boxShadow: 'var(--theme-shadow)', background: 'var(--theme-panel-bg)', color: 'var(--theme-text-main)' }} labelFormatter={(v) => formatDimVal(v, chart.dimension)} formatter={(val, name) => [formatMeasVal(val, chart.measure), chart.legend ? name : (getDisplayLabel(chart.measure) || 'Value')]} />
               {chart.legend && <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', color: 'var(--theme-text-main)' }} />}
               {legendKeys.map((k, i) => (
@@ -832,8 +832,8 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
             </React.Fragment>
           ) : (
             <LineChart data={data} margin={{ top: 45, right: 20, left: 10, bottom: 20 }}>
-              <XAxis dataKey="name" tick={<WrappedTick textWrap={tWrap} fontSize={10} fill="var(--theme-text-muted)" />} axisLine={false} tickLine={false} tickFormatter={(v) => formatDimVal(v, chart.dimension)} />
-              <YAxis domain={[0, (max) => max * 1.25]} tick={{fill: 'var(--theme-text-muted)', fontSize: 10}} width={65} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.measure, true)} />
+              <XAxis dataKey="name" tick={chart.showXAxisLabels === false ? false : <WrappedTick textWrap={tWrap} fontSize={10} fill="var(--theme-text-muted)" />} axisLine={false} tickLine={false} tickFormatter={(v) => formatDimVal(v, chart.dimension)} />
+              <YAxis domain={[0, (max) => max * 1.25]} tick={chart.showYAxisLabels === false ? false : {fill: 'var(--theme-text-muted)', fontSize: 10}} width={chart.showYAxisLabels === false ? 10 : 65} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.measure, true)} />
               <RechartsTooltip contentStyle={{ borderRadius: 'var(--theme-radius-panel)', border: 'none', boxShadow: 'var(--theme-shadow)', background: 'var(--theme-panel-bg)', color: 'var(--theme-text-main)' }} labelFormatter={(v) => formatDimVal(v, chart.dimension)} formatter={(val, name) => [formatMeasVal(val, chart.measure), chart.legend ? name : (getDisplayLabel(chart.measure) || 'Value')]} />
               {chart.legend && <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', color: 'var(--theme-text-main)' }} />}
                {legendKeys.map((k, i) => (
