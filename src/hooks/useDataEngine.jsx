@@ -674,7 +674,7 @@ const legendKeys = legendId ? [...new Set(results.map(r => r[legendId]))] : ['va
           
           if (!existingNode) {
             existingNode = { 
-                name: pathSoFar.join(' / '), 
+                name: val, 
                 origName: val,
                 value: 0, 
                 rootIndex: root.children.findIndex(c => c.origName === pathSoFar[0])

@@ -336,13 +336,13 @@ const DecompositionTree = ({ data, colors, formatMeasVal, measureId }) => {
             <React.Fragment key={path}>
               <div 
                 data-tree-path={path}
-                className={`p-3 rounded-xl border t-border transition-all duration-300 flex flex-col gap-2 relative group overflow-hidden ${isExpanded ? 'bg-[var(--theme-accent)]/5 border-[var(--theme-accent)] shadow-lg' : 'bg-white hover:shadow-md'}`}
+                className={`p-3 rounded-xl border t-border transition-all duration-300 flex flex-col gap-2 relative group overflow-hidden min-h-[70px] ${isExpanded ? 'bg-[var(--theme-accent)]/5 border-[var(--theme-accent)] shadow-lg' : 'bg-white hover:shadow-md'}`}
               >
                 {/* Visual indicator bar */}
                 <div className="absolute left-0 bottom-0 h-1 bg-[var(--theme-accent)] opacity-20" style={{ width: `${share}%` }} />
                 
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-[10px] font-black t-text-muted uppercase tracking-wider truncate" title={node.name}>{node.name}</span>
+                  <span className="text-[10px] font-black t-text-muted uppercase tracking-wider break-words line-clamp-2" title={node.name}>{node.name}</span>
                   {hasChildren && (
                     <button 
                       onClick={() => toggleNode(path)}
