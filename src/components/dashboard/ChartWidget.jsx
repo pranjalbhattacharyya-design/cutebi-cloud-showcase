@@ -762,7 +762,6 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
         <ResponsiveContainer width="100%" height="100%">
           {chart.type === 'bar' ? (
             <BarChart data={data} margin={{ top: 45, right: 20, left: 10, bottom: 20 }}>
-              <CartesianGrid vertical={false} stroke="var(--theme-border)" />
               <XAxis dataKey="name" tick={<WrappedTick textWrap={tWrap} fontSize={10} fill="var(--theme-text-muted)" />} axisLine={false} tickLine={false} tickFormatter={(v) => formatDimVal(v, chart.dimension)} />
               <YAxis domain={[0, (max) => max * 1.25]} tick={{fill: 'var(--theme-text-muted)', fontSize: 10}} width={65} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.measure, true)} />
               <RechartsTooltip cursor={{fill: 'var(--theme-border)', opacity: 0.5}} contentStyle={{ borderRadius: 'var(--theme-radius-panel)', border: 'none', boxShadow: 'var(--theme-shadow)', background: 'var(--theme-panel-bg)', color: 'var(--theme-text-main)' }} labelFormatter={(v) => formatDimVal(v, chart.dimension)} formatter={(val, name) => [formatMeasVal(val, chart.measure), chart.legend ? name : (getDisplayLabel(chart.measure) || 'Value')]} />
@@ -832,7 +831,6 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
             </React.Fragment>
           ) : (
             <LineChart data={data} margin={{ top: 45, right: 20, left: 10, bottom: 20 }}>
-              <CartesianGrid vertical={false} stroke="var(--theme-border)" />
               <XAxis dataKey="name" tick={<WrappedTick textWrap={tWrap} fontSize={10} fill="var(--theme-text-muted)" />} axisLine={false} tickLine={false} tickFormatter={(v) => formatDimVal(v, chart.dimension)} />
               <YAxis domain={[0, (max) => max * 1.25]} tick={{fill: 'var(--theme-text-muted)', fontSize: 10}} width={65} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.measure, true)} />
               <RechartsTooltip contentStyle={{ borderRadius: 'var(--theme-radius-panel)', border: 'none', boxShadow: 'var(--theme-shadow)', background: 'var(--theme-panel-bg)', color: 'var(--theme-text-main)' }} labelFormatter={(v) => formatDimVal(v, chart.dimension)} formatter={(val, name) => [formatMeasVal(val, chart.measure), chart.legend ? name : (getDisplayLabel(chart.measure) || 'Value')]} />
