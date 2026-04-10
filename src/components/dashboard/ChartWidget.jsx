@@ -165,13 +165,13 @@ const SunburstArc = ({ segment, fill, onMouseEnter, onMouseLeave, opacity, isAni
   return (
     <path
       d={path}
-      fill={fill}
-      opacity={opacity}
-      className={`transition-all duration-500 ease-out cursor-pointer hover:brightness-110 ${isAnimated ? 'animate-sweep' : ''}`}
+      fill={fill || 'var(--theme-accent)'}
+      fillOpacity={opacity}
+      className="transition-all duration-300 ease-out cursor-pointer hover:brightness-110"
       onMouseEnter={(e) => onMouseEnter(segment, e)}
       onMouseLeave={onMouseLeave}
       stroke="var(--theme-panel-bg)"
-      strokeWidth={1}
+      strokeWidth={0.5}
     />
   );
 };
@@ -234,13 +234,19 @@ const SunburstChart = ({ data, colors, width, height, formatMeasVal, measureId }
   if (totalValue === 0) return <div className="w-full h-full flex items-center justify-center text-[10px] text-red-400 font-bold uppercase tracking-widest">No data values found</div>;
 
   return (
-    <div className="relative w-full h-full flex items-center justify-center" style={{ minHeight: '150px' }}>
-      <svg width="100%" height="100%" viewBox={`0 0 ${finalWidth} ${finalHeight}`} className="overflow-visible" preserveAspectRatio="xMidYMid meet">
+    <div className="relative w-full h-full flex items-center justify-center p-4">
+      <svg 
+        width={finalWidth} 
+        height={finalHeight} 
+        viewBox={`0 0 ${finalWidth} ${finalHeight}`} 
+        className="overflow-visible w-full h-full max-h-full"
+        style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.05))' }}
+      >
         <g transform={`translate(${cx}, ${cy})`}>
           {/* Center Circle (Total) */}
-          <circle r={(processedData[0]?.innerRadius || 40) * 0.9} fill="var(--theme-accent)" fillOpacity={0.05} />
-          <text textAnchor="middle" dy="-5" className="fill-[var(--theme-text-muted)] text-[9px] font-black uppercase tracking-tighter opacity-60">Grand Total</text>
-          <text textAnchor="middle" dy="15" className="fill-[var(--theme-text-main)] text-[14px] font-bold">{formatMeasVal(totalValue, measureId)}</text>
+          <circle r={(processedData[0]?.innerRadius || 40) * 0.95} fill="var(--theme-accent)" fillOpacity={0.08} />
+          <text textAnchor="middle" dy="-8" className="fill-[var(--theme-text-muted)] text-[8px] font-black uppercase tracking-wider opacity-60">Total {measureId}</text>
+          <text textAnchor="middle" dy="12" className="fill-[var(--theme-text-main)] text-[16px] font-black" style={{ paintOrder: 'stroke', stroke: 'var(--theme-panel-bg)', strokeWidth: '2px', strokeLinejoin: 'round' }}>{formatMeasVal(totalValue, measureId)}</text>
           
           {/* Arcs */}
           {processedData.map((seg, idx) => {
@@ -249,11 +255,10 @@ const SunburstChart = ({ data, colors, width, height, formatMeasVal, measureId }
             
             return (
               <SunburstArc 
-                key={idx} 
+                key={`${seg.name}-${idx}`} 
                 segment={seg} 
                 fill={fill} 
-                opacity={isDimmed ? 0.3 : 0.8}
-                isAnimated={isReady}
+                opacity={isDimmed ? 0.2 : 0.9}
                 onMouseEnter={(s, e) => {
                   setHovered(s);
                   setTooltipPos({ x: e.clientX, y: e.clientY });
@@ -295,15 +300,7 @@ const SunburstChart = ({ data, colors, width, height, formatMeasVal, measureId }
         </div>
       )}
 
-      <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes sweep {
-          from { stroke-dasharray: 0 1000; opacity: 0; }
-          to { stroke-dasharray: 1000 1000; opacity: 0.8; }
-        }
-        .animate-sweep {
-          animation: sweep 1s ease-out forwards;
-        }
-      `}} />
+
     </div>
   );
 };
