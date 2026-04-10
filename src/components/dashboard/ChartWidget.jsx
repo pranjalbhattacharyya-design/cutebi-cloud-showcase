@@ -449,7 +449,8 @@ const DecompositionTree = ({ data, colors, formatMeasVal, measureId }) => {
         {renderLevel(data)}
       </div>
     </div>
-  );
+  </div>
+);
 };
 
 
