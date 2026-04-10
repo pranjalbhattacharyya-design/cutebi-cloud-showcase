@@ -206,7 +206,7 @@ const SunburstChart = ({ data, colors, formatMeasVal, measureId }) => {
   if (!data || data.length === 0) return <div className="w-full h-full flex items-center justify-center text-[11px] t-text-muted italic opacity-40">Building hierarchy...</div>;
 
   return (
-    <div className="w-full h-full flex flex-col items-center justify-center relative min-h-[300px]">
+    <div className="w-full h-full flex flex-col items-center justify-center relative">
       <svg 
         width="100%" 
         height="100%" 
@@ -1314,7 +1314,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
         </div>
       </div>
      
-      <div className="w-full flex items-center justify-center transition-all duration-300 overflow-visible min-h-[300px]" style={{ height: getWidgetHeight() }}>
+      <div className="w-full flex items-center justify-center transition-all duration-300" style={{ height: getWidgetHeight() }}>
          {content}
       </div>
     </div>
