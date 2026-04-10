@@ -920,9 +920,9 @@ export const useDataEngine = () => {
     const scopeCols = matrixColumns.filter(c => c.type === 'scope');
     if (!datasetId || matrixMeasures.length === 0 || scopeCols.length === 0) return null;
 
-    const factTablesInGroup = getFactTablesInGroup(activeDatasetId || datasetId);
+    const factTablesInGroup = getFactTablesInGroup(datasetId);
     const isMultiFactModel = factTablesInGroup.length > 1;
-    const activeJoinGroup = getJoinGroup(activeDatasetId);
+    const localJoinGroup = getJoinGroup(datasetId);
     const isMasterView = factTablesInGroup.length > 0;
     const activeDs = datasets.find(d => d.id === datasetId);
     const sourceTable = isMasterView ? 'ds_unified' : (activeDs?.tableName || datasetId);
@@ -984,7 +984,7 @@ export const useDataEngine = () => {
 
     const buildMeasureExpr = (measId, extraConditions = []) => {
       let f = null;
-      for (const dsId of activeJoinGroup) {
+      for (const dsId of localJoinGroup) {
         f = semanticModels[dsId]?.find(x => x.id === measId);
         if (f) break;
       }
@@ -1018,7 +1018,7 @@ export const useDataEngine = () => {
         } catch (err) { console.error(`Matrix Batch failed:`, err); }
     }
     return Object.keys(mergedResult).length > 0 ? mergedResult : null;
-  }, [activeDatasetId, datasets, semanticModels, globalFilters, getJoinGroup, generateUnifiedCTE, getFactTablesInGroup, resolveMeasureOrigin, authoredReportFilters]);
+  }, [datasets, semanticModels, globalFilters, authoredReportFilters, getJoinGroup, generateUnifiedCTE, getFactTablesInGroup, resolveMeasureOrigin]);
 
   return {
     datasets,
