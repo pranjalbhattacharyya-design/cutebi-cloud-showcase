@@ -210,7 +210,8 @@ export default function ChartBuilderModal() {
     builderForm, setBuilderForm, initBuilderForm,
     activePageId, setDashboards,
     showToast,
-    mergedSemanticModel, isUnified, joinGroupIds
+    mergedSemanticModel, isUnified, joinGroupIds,
+    pages
   } = useAppState();
 
   const { globalSemanticFields, getUniqueValuesForDim } = useDataEngine();
