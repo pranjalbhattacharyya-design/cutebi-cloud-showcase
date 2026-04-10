@@ -177,49 +177,20 @@ const SunburstArc = ({ segment, fill, onMouseEnter, onMouseLeave, opacity, isAni
 };
 
 const SunburstChart = ({ data, colors, formatMeasVal, measureId }) => {
-  const containerRef = React.useRef(null);
-  const [size, setSize] = React.useState({ width: 0, height: 0 });
   const [hovered, setHovered] = React.useState(null);
   const [tooltipPos, setTooltipPos] = React.useState({ x: 0, y: 0 });
 
-  React.useLayoutEffect(() => {
-    if (!containerRef.current) return;
-    const obs = new ResizeObserver((entries) => {
-      if (entries[0]) {
-        const { width, height } = entries[0].contentRect;
-        if (width > 0 && height > 0) {
-           setSize({ width, height });
-        }
-      }
-    });
-    obs.observe(containerRef.current);
-    
-    // Initial measure
-    const rect = containerRef.current.getBoundingClientRect();
-    if (rect.width > 0) setSize({ width: rect.width, height: rect.height });
-
-    return () => obs.disconnect();
-  }, []);
-
   const totalValue = React.useMemo(() => (data || []).reduce((sum, d) => sum + (d.value || 0), 0), [data]);
-
-  React.useEffect(() => {
-    window.dispatchEvent(new CustomEvent('mvantage-debug', { 
-      detail: { 
-        type: 'info', 
-        category: 'Sunburst', 
-        message: `Render State - Size: ${Math.round(size.width)}x${Math.round(size.height)}, Nodes: ${data?.length}, Total: ${totalValue}` 
-      } 
-    }));
-  }, [size, data, totalValue]);
   
+  // Robust Scaling: Fixed virtual size (500x500) that fills its parent via CSS
+  const V_SIZE = 500;
+  const V_CENTER = V_SIZE / 2;
+
   const processedData = React.useMemo(() => {
     if (!data || data.length === 0 || totalValue === 0) return [];
-    if (size.width === 0 || size.height === 0) return [];
     
     const segments = [];
-    const minDim = Math.min(size.width || 300, size.height || 300);
-    const levelWidth = minDim / (2 * 5); 
+    const levelWidth = V_SIZE / (2 * 5.5); 
     
     const processLevel = (nodes, currentStart, currentEnd, level, path = []) => {
       let start = currentStart;
@@ -244,50 +215,36 @@ const SunburstChart = ({ data, colors, formatMeasVal, measureId }) => {
         start = end;
       });
     };
-
     processLevel(data, 0, 360, 0);
     return segments;
-  }, [data, size, totalValue]);
+  }, [data, totalValue]);
 
-  const cx = size.width / 2;
-  const cy = size.height / 2;
-
-  if (!data || data.length === 0) return <div ref={containerRef} className="w-full h-full flex items-center justify-center text-[10px] t-text-muted italic">Processing...</div>;
-  if (totalValue === 0) return <div ref={containerRef} className="w-full h-full flex items-center justify-center text-[10px] text-red-400 font-bold uppercase">No data values</div>;
-
-  const renderWidth = size.width || 300;
-  const renderHeight = size.height || 300;
-  const renderCx = renderWidth / 2;
-  const renderCy = renderHeight / 2;
+  if (!data || data.length === 0) return <div className="w-full h-[300px] flex items-center justify-center text-red-500 font-bold bg-black/5">V5: WAITING FOR DATA...</div>;
 
   return (
-    <div ref={containerRef} className="relative w-full h-full min-h-[250px] flex items-center justify-center overflow-hidden">
+    <div className="w-full h-full flex flex-col items-center justify-center relative min-h-[350px] bg-red-500/5">
+      <div className="absolute top-2 right-2 px-2 py-1 bg-red-600 text-white text-[10px] font-black rounded z-50 animate-bounce">V5 ACTIVE</div>
+      
       <svg 
-        width={renderWidth} 
-        height={renderHeight} 
-        viewBox={`0 0 ${renderWidth} ${renderHeight}`} 
-        className="overflow-visible"
+        width="400" 
+        height="400" 
+        viewBox={`0 0 ${V_SIZE} ${V_SIZE}`} 
+        className="overflow-visible shadow-2xl"
+        preserveAspectRatio="xMidYMid meet"
+        style={{ background: 'white', borderRadius: '50%', border: '8px solid #ef4444' }}
       >
-        <g transform={`translate(${renderCx}, ${renderCy})`}>
-          {/* Debug Background for Arcs */}
-          <circle r={size.width > 0 ? (Math.min(size.width, size.height)/2.5) : 100} fill="currentColor" opacity={0.03} className="t-text-muted" />
-
-          {/* Center Circle (Total) */}
-          <circle r={(processedData[0]?.innerRadius || 40) * 0.95} fill="var(--theme-accent)" fillOpacity={0.1} />
-          <text textAnchor="middle" dy="-8" className="fill-[var(--theme-text-muted)] text-[8px] font-black uppercase tracking-wider">Total {measureId}</text>
-          <text textAnchor="middle" dy="12" className="fill-[var(--theme-text-main)] text-[16px] font-bold">{formatMeasVal(totalValue, measureId)}</text>
+        <g transform={`translate(${V_CENTER}, ${V_CENTER})`}>
+          <circle r={V_SIZE/2.6} fill="var(--theme-accent)" opacity={0.1} stroke="#ef4444" strokeDasharray="10 10" />
+          <text textAnchor="middle" dy="12" className="fill-red-600 text-[24px] font-black">{formatMeasVal(totalValue, measureId)}</text>
           
-          {/* Arcs */}
           {processedData.map((seg, idx) => {
             const fill = colors[(seg.colorIdx + seg.level) % (colors.length || 1)] || 'var(--theme-accent)';
-            const isDimmed = hovered && !seg.path.join('|').startsWith(hovered.path.join('|')) && !hovered.path.join('|').startsWith(seg.path.join('|'));
-            
             return (
               <SunburstArc 
                 key={`${seg.name}-${idx}`} 
                 segment={seg} 
                 fill={fill} 
-                opacity={isDimmed ? 0.15 : 0.85}
+                opacity={0.8}
                 onMouseEnter={(s, e) => {
                   setHovered(s);
                   setTooltipPos({ x: e.clientX, y: e.clientY });
@@ -298,38 +255,6 @@ const SunburstChart = ({ data, colors, formatMeasVal, measureId }) => {
           })}
         </g>
       </svg>
-
-      {hovered && (
-        <div 
-          className="fixed pointer-events-none z-[100] p-3 t-panel shadow-2xl border t-border flex flex-col gap-1 min-w-[140px]"
-          style={{ 
-            left: tooltipPos.x + 15, 
-            top: tooltipPos.y + 15,
-            borderRadius: 'var(--theme-radius-panel)'
-          }}
-        >
-          <div className="flex items-center gap-1.5 mb-1 opacity-60 text-[9px] font-bold uppercase tracking-wider t-text-muted">
-            {hovered.path.map((p, i) => (
-              <React.Fragment key={i}>
-                <span className="truncate max-w-[60px]">{p}</span>
-                {i < hovered.path.length - 1 && <span className="opacity-40">/</span>}
-              </React.Fragment>
-            ))}
-          </div>
-          <p className="text-[12px] font-bold t-text-main">{hovered.name}</p>
-          <div className="h-px bg-black/5 w-full my-0.5" />
-          <p className="text-[11px] font-black t-accent flex items-center justify-between">
-            <span className="opacity-60 uppercase text-[8px]">Value</span>
-            {formatMeasVal(hovered.value, measureId)}
-          </p>
-          <p className="text-[9px] t-text-muted font-bold flex items-center justify-between">
-             <span className="opacity-60 uppercase text-[8px]">Prop.</span>
-             {((hovered.value / totalValue) * 100).toFixed(1)}%
-          </p>
-        </div>
-      )}
-
-
     </div>
   );
 };
@@ -946,38 +871,48 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                   </Scatter>
                </ScatterChart>
             </ResponsiveContainer>
+          )}
          );
      }
 
      // Standard Aggregation (Bar, Pie, Line)
-     const { data, legendKeys } = chartData;
-     const dimOriginKey = getOriginKey(chart.datasetId, chart.dimension);
-     const activeFilterVal = globalFilters[dimOriginKey] || [];
+      const { data, legendKeys } = chartData;
+      const dimOriginKey = getOriginKey(chart.datasetId, chart.dimension);
+      const activeFilterVal = globalFilters[dimOriginKey] || [];      if (chart.type === 'sunburst') {
+          return (
+              <FinalSunburstVisual 
+                 data={Array.isArray(chartData) ? chartData : (chartData?.data || [])}
+                 colors={tColors}
+                 formatMeasVal={formatMeasVal}
+                 measureId={chart.measure}
+              />
+          );
+      }   }
 
-     return (
-        <ResponsiveContainer width="100%" height="100%">
-          {chart.type === 'bar' ? (
-            <BarChart data={data} margin={{ top: 45, right: 20, left: 10, bottom: 20 }}>
-              <XAxis dataKey="name" tick={chart.showXAxisLabels === false ? false : <WrappedTick textWrap={tWrap} fontSize={10} fill="var(--theme-text-muted)" />} axisLine={false} tickLine={false} tickFormatter={(v) => formatDimVal(v, chart.dimension)} />
-              <YAxis domain={[0, (max) => max * 1.25]} tick={chart.showYAxisLabels === false ? false : {fill: 'var(--theme-text-muted)', fontSize: 10}} width={chart.showYAxisLabels === false ? 10 : 65} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.measure, true)} />
-              <RechartsTooltip cursor={{fill: 'var(--theme-border)', opacity: 0.5}} contentStyle={{ borderRadius: 'var(--theme-radius-panel)', border: 'none', boxShadow: 'var(--theme-shadow)', background: 'var(--theme-panel-bg)', color: 'var(--theme-text-main)' }} labelFormatter={(v) => formatDimVal(v, chart.dimension)} formatter={(val, name) => [formatMeasVal(val, chart.measure), chart.legend ? name : (getDisplayLabel(chart.measure) || 'Value')]} />
-              {chart.legend && <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} formatter={(v) => <span style={{ color: 'var(--theme-text-main)' }}>{v}</span>} />}
-              {legendKeys.map((k, i) => (
-                 <Bar key={k} dataKey={k} name={k === 'value' ? (getDisplayLabel(chart.measure) || 'Value') : k} fill={tColors[i % tColors.length]} onClick={(d) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, d.name);}} className={isExploreMode ? "" : "cursor-pointer transition-all duration-300"}>
-                   {data.map((e, idx) => <Cell key={idx} opacity={!isExploreMode && activeFilterVal.length > 0 && !activeFilterVal.includes(String(e.name)) ? 0.3 : 1} />)}
-                   {chart.showDataLabels && <LabelList dataKey={k} position="top" fill="var(--theme-text-muted)" fontSize={10} fontWeight="normal" formatter={(v) => formatMeasVal(v, chart.measure, true)} content={(props) => <WrappedLabel {...props} value={formatMeasVal(props.value, chart.measure, true)} fill="var(--theme-text-muted)" fontWeight="normal" textWrap={textWrap} disableHalo={false} topLabel={true} />} />}
-                 </Bar>
-              ))}
-            </BarChart>
-          ) : chart.type === 'pie' ? (
-            <RechartsPieChart>
-              <RechartsTooltip contentStyle={{ borderRadius: 'var(--theme-radius-panel)', border: 'none', boxShadow: 'var(--theme-shadow)', background: 'var(--theme-panel-bg)', color: 'var(--theme-text-main)' }} formatter={(v, n) => [formatMeasVal(v, chart.measure), formatDimVal(n, chart.dimension)]} />
-              <Pie data={data} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" onClick={(d) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, d.name);}} className={isExploreMode ? "" : "cursor-pointer"} label={chart.showDataLabels ? (props) => <text x={props.x} y={props.y} fill="var(--theme-text-muted)" fontSize={10} fontWeight="normal" textAnchor={props.textAnchor} dominantBaseline="central">{`${formatDimVal(props.name, chart.dimension)}: ${formatMeasVal(props.value, chart.measure, true)} (${(props.percent * 100).toFixed(0)}%)`}</text> : false} labelLine={false}>
-                {data.map((e, i) => <Cell key={i} fill={tColors[i % tColors.length]} opacity={!isExploreMode && activeFilterVal.length > 0 && !activeFilterVal.includes(String(e.name)) ? 0.3 : 1} style={{ outline: 'none' }} />)}
-              </Pie>
-              <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} formatter={(v) => <span style={{ color: 'var(--theme-text-main)' }}>{v}</span>} />
-            </RechartsPieChart>
-          ) : chart.type === 'treemap' ? (
+      return (
+         <ResponsiveContainer width="100%" height="100%">
+           {chart.type === 'bar' ? (
+             <BarChart data={data} margin={{ top: 45, right: 20, left: 10, bottom: 20 }}>
+               <XAxis dataKey="name" tick={chart.showXAxisLabels === false ? false : <WrappedTick textWrap={tWrap} fontSize={10} fill="var(--theme-text-muted)" />} axisLine={false} tickLine={false} tickFormatter={(v) => formatDimVal(v, chart.dimension)} />
+               <YAxis domain={[0, (max) => max * 1.25]} tick={chart.showYAxisLabels === false ? false : {fill: 'var(--theme-text-muted)', fontSize: 10}} width={chart.showYAxisLabels === false ? 10 : 65} axisLine={false} tickLine={false} tickFormatter={(v) => formatMeasVal(v, chart.measure, true)} />
+               <RechartsTooltip cursor={{fill: 'var(--theme-border)', opacity: 0.5}} contentStyle={{ borderRadius: 'var(--theme-radius-panel)', border: 'none', boxShadow: 'var(--theme-shadow)', background: 'var(--theme-panel-bg)', color: 'var(--theme-text-main)' }} labelFormatter={(v) => formatDimVal(v, chart.dimension)} formatter={(val, name) => [formatMeasVal(val, chart.measure), chart.legend ? name : (getDisplayLabel(chart.measure) || 'Value')]} />
+               {chart.legend && <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} formatter={(v) => <span style={{ color: 'var(--theme-text-main)' }}>{v}</span>} />}
+               {legendKeys.map((k, i) => (
+                  <Bar key={k} dataKey={k} name={k === 'value' ? (getDisplayLabel(chart.measure) || 'Value') : k} fill={tColors[i % tColors.length]} onClick={(d) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, d.name);}} className={isExploreMode ? "" : "cursor-pointer transition-all duration-300"}>
+                    {data.map((e, idx) => <Cell key={idx} opacity={!isExploreMode && activeFilterVal.length > 0 && !activeFilterVal.includes(String(e.name)) ? 0.3 : 1} />)}
+                    {chart.showDataLabels && <LabelList dataKey={k} position="top" fill="var(--theme-text-muted)" fontSize={10} fontWeight="normal" formatter={(v) => formatMeasVal(v, chart.measure, true)} content={(props) => <WrappedLabel {...props} value={formatMeasVal(props.value, chart.measure, true)} fill="var(--theme-text-muted)" fontWeight="normal" textWrap={textWrap} disableHalo={false} topLabel={true} />} />}
+                  </Bar>
+               ))}
+             </BarChart>
+           ) : chart.type === 'pie' ? (
+             <RechartsPieChart>
+               <RechartsTooltip contentStyle={{ borderRadius: 'var(--theme-radius-panel)', border: 'none', boxShadow: 'var(--theme-shadow)', background: 'var(--theme-panel-bg)', color: 'var(--theme-text-main)' }} formatter={(v, n) => [formatMeasVal(v, chart.measure), formatDimVal(n, chart.dimension)]} />
+               <Pie data={data} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" onClick={(d) => {if(dimOriginKey && !isExploreMode && toggleGlobalFilter) toggleGlobalFilter(dimOriginKey, d.name);}} className={isExploreMode ? "" : "cursor-pointer"} label={chart.showDataLabels ? (props) => <text x={props.x} y={props.y} fill="var(--theme-text-muted)" fontSize={10} fontWeight="normal" textAnchor={props.textAnchor} dominantBaseline="central">{`${formatDimVal(props.name, chart.dimension)}: ${formatMeasVal(props.value, chart.measure, true)} (${(props.percent * 100).toFixed(0)}%)`}</text> : false} labelLine={false}>
+                 {data.map((e, i) => <Cell key={i} fill={tColors[i % tColors.length]} opacity={!isExploreMode && activeFilterVal.length > 0 && !activeFilterVal.includes(String(e.name)) ? 0.3 : 1} style={{ outline: 'none' }} />)}
+               </Pie>
+               <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} formatter={(v) => <span style={{ color: 'var(--theme-text-main)' }}>{v}</span>} />
+             </RechartsPieChart>
+           ) : chart.type === 'treemap' ? (
             <React.Fragment>
             {console.log('TREEMAP DATA:', Array.isArray(chartData) ? chartData : chartData?.data)}
             <Treemap
@@ -1025,13 +960,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                <RechartsTooltip contentStyle={{ borderRadius: 'var(--theme-radius-panel)', border: 'none', boxShadow: 'var(--theme-shadow)', background: 'var(--theme-panel-bg)', color: 'var(--theme-text-main)' }} formatter={(v, n) => [formatMeasVal(v, chart.measure), n]} />
             </Treemap>
             </React.Fragment>
-          ) : chart.type === 'sunburst' ? (
-             <SunburstChart 
-                data={Array.isArray(chartData) ? chartData : (chartData?.data || [])}
-                colors={tColors}
-                formatMeasVal={formatMeasVal}
-                measureId={chart.measure}
-             />
+
           ) : (
             <LineChart data={data} margin={{ top: 45, right: 20, left: 10, bottom: 20 }}>
               <XAxis dataKey="name" tick={chart.showXAxisLabels === false ? false : <WrappedTick textWrap={tWrap} fontSize={10} fill="var(--theme-text-muted)" />} axisLine={false} tickLine={false} tickFormatter={(v) => formatDimVal(v, chart.dimension)} />
@@ -1365,7 +1294,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
         </div>
       </div>
      
-      <div className="w-full flex items-center justify-center transition-all duration-300 overflow-hidden" style={{ height: getWidgetHeight() }}>
+      <div className="w-full flex items-center justify-center transition-all duration-300 overflow-visible min-h-[300px]" style={{ height: getWidgetHeight() }}>
          {content}
       </div>
     </div>
