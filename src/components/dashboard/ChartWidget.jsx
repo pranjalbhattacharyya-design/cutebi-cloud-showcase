@@ -827,8 +827,16 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                           {headerIds.map((id, j) => {
                               const isMeasure = (chart.tableMeasures || []).includes(id);
                               const val = r[id];
+                              const dimProps = !isMeasure ? {
+                                  onClick: () => handleChartClick(getOriginKey(chart.datasetId, id), val),
+                                  style: { border: '1px solid rgba(0,0,0,0.05)', cursor: 'pointer' },
+                                  className: `px-3 py-2 align-top t-text-muted hover:underline`
+                              } : {
+                                  style: { border: '1px solid rgba(0,0,0,0.05)' },
+                                  className: `px-3 py-2 align-top font-medium t-text-main text-right`
+                              };
                               return (
-                                  <td key={j} className={`px-3 py-2 align-top ${isMeasure ? 'font-medium t-text-main text-right' : 't-text-muted'}`} style={{ border: '1px solid rgba(0,0,0,0.05)' }}>
+                                  <td key={j} {...dimProps}>
                                       {isMeasure ? formatMeasVal(val, id) : formatDimVal(val, id)}
                                   </td>
                               );
