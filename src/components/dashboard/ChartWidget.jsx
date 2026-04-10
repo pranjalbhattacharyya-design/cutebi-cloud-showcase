@@ -187,21 +187,38 @@ const SunburstChart = ({ data, colors, formatMeasVal, measureId }) => {
     const obs = new ResizeObserver((entries) => {
       if (entries[0]) {
         const { width, height } = entries[0].contentRect;
-        setSize({ width, height });
+        if (width > 0 && height > 0) {
+           setSize({ width, height });
+        }
       }
     });
     obs.observe(containerRef.current);
+    
+    // Initial measure
+    const rect = containerRef.current.getBoundingClientRect();
+    if (rect.width > 0) setSize({ width: rect.width, height: rect.height });
+
     return () => obs.disconnect();
   }, []);
 
   const totalValue = React.useMemo(() => (data || []).reduce((sum, d) => sum + (d.value || 0), 0), [data]);
+
+  React.useEffect(() => {
+    window.dispatchEvent(new CustomEvent('mvantage-debug', { 
+      detail: { 
+        type: 'info', 
+        category: 'Sunburst', 
+        message: `Render State - Size: ${Math.round(size.width)}x${Math.round(size.height)}, Nodes: ${data?.length}, Total: ${totalValue}` 
+      } 
+    }));
+  }, [size, data, totalValue]);
   
   const processedData = React.useMemo(() => {
     if (!data || data.length === 0 || totalValue === 0) return [];
     if (size.width === 0 || size.height === 0) return [];
     
     const segments = [];
-    const minDim = Math.min(size.width, size.height);
+    const minDim = Math.min(size.width || 300, size.height || 300);
     const levelWidth = minDim / (2 * 5); 
     
     const processLevel = (nodes, currentStart, currentEnd, level, path = []) => {
@@ -238,15 +255,20 @@ const SunburstChart = ({ data, colors, formatMeasVal, measureId }) => {
   if (!data || data.length === 0) return <div ref={containerRef} className="w-full h-full flex items-center justify-center text-[10px] t-text-muted italic">Processing...</div>;
   if (totalValue === 0) return <div ref={containerRef} className="w-full h-full flex items-center justify-center text-[10px] text-red-400 font-bold uppercase">No data values</div>;
 
+  const renderWidth = size.width || 300;
+  const renderHeight = size.height || 300;
+  const renderCx = renderWidth / 2;
+  const renderCy = renderHeight / 2;
+
   return (
-    <div ref={containerRef} className="relative w-full h-full flex items-center justify-center overflow-hidden">
+    <div ref={containerRef} className="relative w-full h-full min-h-[250px] flex items-center justify-center overflow-hidden">
       <svg 
-        width={size.width} 
-        height={size.height} 
-        viewBox={`0 0 ${size.width} ${size.height}`} 
+        width={renderWidth} 
+        height={renderHeight} 
+        viewBox={`0 0 ${renderWidth} ${renderHeight}`} 
         className="overflow-visible"
       >
-        <g transform={`translate(${cx}, ${cy})`}>
+        <g transform={`translate(${renderCx}, ${renderCy})`}>
           {/* Debug Background for Arcs */}
           <circle r={size.width > 0 ? (Math.min(size.width, size.height)/2.5) : 100} fill="currentColor" opacity={0.03} className="t-text-muted" />
 
