@@ -186,6 +186,8 @@ const SunburstChart = ({ data, colors, width, height, formatMeasVal, measureId }
     return () => clearTimeout(timer);
   }, []);
 
+  if (!width || !height) return <div className="w-full h-full" />;
+
   const totalValue = React.useMemo(() => data.reduce((sum, d) => sum + (d.value || 0), 0), [data]);
   
   const processedData = React.useMemo(() => {
@@ -996,8 +998,6 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
              <SunburstChart 
                 data={Array.isArray(chartData) ? chartData : (chartData?.data || [])}
                 colors={tColors}
-                width={800}
-                height={500}
                 formatMeasVal={formatMeasVal}
                 measureId={chart.measure}
              />
