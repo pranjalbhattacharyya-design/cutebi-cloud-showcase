@@ -540,7 +540,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
           // matrix type is handled by its own useEffect below
           setLoading(false);
           return;
-        } else if (chart.type === 'treemap' || chart.type === 'sunburst') {
+        } else if (chart.type === 'treemap' || chart.type === 'sunburst' || chart.type === 'decomptree') {
           res = await getHierarchicalData(chart.datasetId, chart.treeDimensions || [], chart.measure, chart.filters || []);
         } else {
           res = await getAggregatedData(chart.datasetId, chart.dimension, chart.measure, chart.legend, chart.filters || []);
