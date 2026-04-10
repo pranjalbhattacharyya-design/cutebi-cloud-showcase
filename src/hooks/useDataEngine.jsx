@@ -137,8 +137,8 @@ export const useDataEngine = () => {
   }, [datasets]);
 
   // --- Dynamic CTE Generator: BFS Join Traversal ---
-  const generateUnifiedCTE = useCallback((rootId = null, scopedToFactOnly = false) => {
-    const startId = rootId || activeDatasetId;
+  const generateUnifiedCTE = useCallback((rootId, scopedToFactOnly = false) => {
+    const startId = rootId;
     if (!startId) return "";
     const activeDs = datasets.find(d => d.id === startId);
     if (!activeDs) return "";
@@ -300,15 +300,15 @@ export const useDataEngine = () => {
     return fallbackDsId;
   }, [semanticModels]);
 
-  const groupMeasuresByFact = useCallback((measureIds, factTablesInGroup) => {
+  const groupMeasuresByFact = useCallback((measureIds, factTablesInGroup, contextDatasetId) => {
     const map = new Map();
     (measureIds || []).forEach(mId => {
-      const factId = resolveMeasureOrigin(mId, factTablesInGroup, activeDatasetId);
+      const factId = resolveMeasureOrigin(mId, factTablesInGroup, contextDatasetId);
       if (!map.has(factId)) map.set(factId, []);
       map.get(factId).push(mId);
     });
     return map;
-  }, [resolveMeasureOrigin, activeDatasetId]);
+  }, [resolveMeasureOrigin]);
 
   const getTableHeaders = useCallback((measures, dimensions) => {
     const resolveLabel = (id) => {
@@ -328,7 +328,7 @@ export const useDataEngine = () => {
 
   // --- SQL Generator Helper: Unified Approach ---
   const generateSQL = useCallback((datasetId, dimensions = [], measures = [], filters = [], limit = null, scopedFactId = null, overrideGlobalFilters = null) => {
-    const activeJoinGroup = getJoinGroup(activeDatasetId);
+    const activeJoinGroup = getJoinGroup(datasetId);
     const isMasterView = activeJoinGroup.includes(datasetId);
     const activeDs = datasets.find(d => d.id === datasetId);
     const sourceTable = isMasterView ? "ds_unified" : (activeDs?.tableName || datasetId);
@@ -374,9 +374,9 @@ export const useDataEngine = () => {
         }
         visited.add(measId);
         // Search across all models in the active join group to resolve the measure definition
-        const activeJoinGroup = getJoinGroup(activeDatasetId);
+        const localJoinGroup = getJoinGroup(datasetId);
         let f = null;
-        for (const dsId of activeJoinGroup) {
+        for (const dsId of localJoinGroup) {
             f = semanticModels[dsId]?.find(x => x.id === measId);
             if (f) break;
         }
@@ -681,9 +681,9 @@ export const useDataEngine = () => {
        
        if (!datasetId || (!dimensions.length && !measures.length)) return { headers: [], headerIds: [], rows: [] };
        const { headers, headerIds } = getTableHeaders(measures, dimensions);
-       const factTablesInGroup = getFactTablesInGroup(activeDatasetId || datasetId);
+       const factTablesInGroup = getFactTablesInGroup(datasetId);
        const isMultiFactModel = factTablesInGroup.length > 1;
-       const measuresByFact = groupMeasuresByFact(measures, factTablesInGroup);
+       const measuresByFact = groupMeasuresByFact(measures, factTablesInGroup, datasetId);
 
        try {
          if (isMultiFactModel) {
@@ -764,9 +764,9 @@ export const useDataEngine = () => {
      if (!datasetId || (rowDims.length === 0 && colDims.length === 0)) return { rowKeys: [], colKeys: [], matrix: {} };
 
      const allDims = [...(rowDims || []), ...(colDims || [])];
-     const factTablesInGroup = getFactTablesInGroup(activeDatasetId || datasetId);
+     const factTablesInGroup = getFactTablesInGroup(datasetId);
      const isMultiFactModel = factTablesInGroup.length > 1;
-     const measuresByFact = groupMeasuresByFact(measureIds, factTablesInGroup);
+     const measuresByFact = groupMeasuresByFact(measureIds, factTablesInGroup, datasetId);
 
      const buildMatrix = (results, measures) => {
        const matrix = {}; const rowKeysSet = new Set(); const colKeysSet = new Set();

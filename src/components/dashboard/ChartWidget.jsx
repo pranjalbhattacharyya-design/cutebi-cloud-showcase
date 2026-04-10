@@ -595,6 +595,8 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
            res = sanitizeArr(res);
         } else if (res?.data) {
            res.data = sanitizeArr(res.data);
+        } else if (res?.rows) {
+           res.rows = sanitizeArr(res.rows);
         } else if (res?.matrix) {
            Object.keys(res.matrix).forEach(rk => {
               Object.keys(res.matrix[rk]).forEach(ck => {
