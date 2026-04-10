@@ -10,6 +10,20 @@ import {
 } from 'recharts';
 
 /**
+ * Dynamic Contrast Resolver
+ * Determines whether black or white text is more readable for a given background
+ */
+const getContrastYIQ = (hex) => {
+  if (!hex || hex.startsWith('var')) return '#fff';
+  const cleanHex = hex.replace('#', '');
+  const r = parseInt(cleanHex.substring(0, 2), 16);
+  const g = parseInt(cleanHex.substring(2, 4), 16);
+  const b = parseInt(cleanHex.substring(4, 6), 16);
+  const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+  return (yiq >= 128) ? 'rgba(0,0,0,0.85)' : '#fff';
+};
+
+/**
  * Enterprise-Grade SVG Multi-line Wrapping
  * Uses Recharts <Text /> but ensures it drops logic into <tspan> based on context
  */
@@ -783,6 +797,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                    const fill = tColors[Math.max(0, colorIdx) % tColors.length] || tColors[0];
                    
                    const isLeaf = !children || children.length === 0;
+                   const labelColor = getContrastYIQ(fill);
                    
                    return (
                       <g>
@@ -790,7 +805,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
                          {isLeaf && width > 30 && height > 20 && (
                             <foreignObject x={x + 4} y={y + 4} width={width - 8} height={height - 8} style={{ pointerEvents: 'none' }}>
                                <div style={{ 
-                                  color: '#fff', 
+                                  color: labelColor, 
                                   fontFamily: 'var(--theme-font, inherit)',
                                   fontSize: '11px',
                                   lineHeight: '1.2',
