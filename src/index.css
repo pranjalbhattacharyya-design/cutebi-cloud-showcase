@@ -128,3 +128,18 @@ option {
 .chart-enter {
   animation: chartEnter 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.t-shimmer {
+  background: linear-gradient(90deg, 
+    rgba(128, 128, 128, 0.05) 25%, 
+    rgba(128, 128, 128, 0.1) 50%, 
+    rgba(128, 128, 128, 0.05) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite linear;
+}

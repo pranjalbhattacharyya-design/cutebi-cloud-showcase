@@ -16,6 +16,47 @@ import DataDetailsModal from '../modals/DataDetailsModal';
 import ThemeSelector from '../ui/ThemeSelector';
 
 
+const PortalSkeleton = ({ type = 'grid' }) => {
+  if (type === 'list') {
+    return (
+      <div className="t-panel border t-border rounded-2xl overflow-hidden divide-y t-border shadow-sm">
+        {[1, 2, 3, 4, 5].map(i => (
+          <div key={i} className="p-4 flex items-center animate-pulse">
+            <div className="w-10 h-10 bg-black/5 rounded-lg t-shimmer mr-4" />
+            <div className="flex-1 space-y-2">
+              <div className="h-3 w-48 bg-black/5 rounded t-shimmer" />
+              <div className="h-2 w-24 bg-black/5 rounded t-shimmer" />
+            </div>
+            <div className="h-2 w-16 bg-black/5 rounded t-shimmer hidden sm:block mr-10" />
+            <div className="w-4 h-4 bg-black/5 rounded t-shimmer" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  const gridCols = type === 'reports' ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
+
+  return (
+    <div className={`grid ${gridCols} gap-6`}>
+      {[1, 2, 3, 4, 5, 6].map(i => (
+        <div key={i} className="t-panel border t-border rounded-2xl overflow-hidden animate-pulse flex flex-col h-full" style={{ borderRadius: 'var(--theme-radius-panel)' }}>
+          <div className="h-32 bg-black/5 t-shimmer" />
+          <div className="p-5 flex-1 flex flex-col space-y-3">
+            <div className="h-4 w-3/4 bg-black/5 rounded t-shimmer" />
+            <div className="h-3 w-full bg-black/5 rounded t-shimmer" />
+            <div className="h-3 w-5/6 bg-black/5 rounded t-shimmer" />
+            <div className="mt-auto pt-4 border-t t-border flex justify-between">
+              <div className="h-2 w-16 bg-black/5 rounded t-shimmer" />
+              <div className="h-2 w-4 bg-black/5 rounded t-shimmer" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 export default function Portal() {
   const { 
     workspaces, setWorkspaces,
@@ -39,6 +80,7 @@ export default function Portal() {
     setRelationships,
     showToast,
     refreshData,
+    isDataLoading,
     user, userRole, setUserRole
   } = useAppState();
 
@@ -499,7 +541,9 @@ export default function Portal() {
                     </div>
                   </div>
 
-                  {currentReports.length === 0 ? (
+                  {isDataLoading ? (
+                    <PortalSkeleton type={viewMode === 'list' ? 'list' : 'reports'} />
+                  ) : currentReports.length === 0 ? (
                     <div className="bg-black/5 border-2 border-dashed t-border rounded-2xl py-20 text-center flex flex-col items-center">
                        <div className="w-16 h-16 bg-black/5 rounded-full flex items-center justify-center t-text-muted mb-4">
                           <FileText size={32} />
@@ -585,7 +629,9 @@ export default function Portal() {
                   </h2>
                 </div>
 
-                {workspaceDatasets.length === 0 ? (
+                {isDataLoading ? (
+                  <PortalSkeleton type="data" />
+                ) : workspaceDatasets.length === 0 ? (
                   <div className="bg-black/5 border-2 border-dashed t-border rounded-2xl py-20 text-center flex flex-col items-center">
                     <div className="w-16 h-16 bg-black/5 rounded-full flex items-center justify-center t-text-muted mb-4">
                       <Database size={32} />
@@ -648,7 +694,9 @@ export default function Portal() {
                       <Sparkles className="t-accent" size={20} /> Metric Library
                     </h2>
                   </div>
-                  {publishedModels.length === 0 ? (
+                  {isDataLoading ? (
+                    <PortalSkeleton type="models" />
+                  ) : publishedModels.length === 0 ? (
                     <div className="bg-black/5 border-2 border-dashed t-border rounded-2xl py-20 text-center flex flex-col items-center">
                       <div className="w-16 h-16 bg-black/5 rounded-full flex items-center justify-center t-text-muted mb-4">
                         <Sparkles size={32} />

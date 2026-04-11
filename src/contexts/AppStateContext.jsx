@@ -139,6 +139,8 @@ export const AppStateProvider = ({ children }) => {
   const [editingSlicerId, setEditingSlicerId] = useState(null);
   const [editingSlicerTitle, setEditingSlicerTitle] = useState('');
 
+  const [isDataLoading, setIsDataLoading] = useState(true);
+
   // --- Forms ---
   const initBuilderForm = {
      id: null, title: '', type: 'bar', dimension: '', measure: '', legend: '', size: 'half', verticalSize: 'normal',
@@ -306,6 +308,7 @@ export const AppStateProvider = ({ children }) => {
     const t = Date.now();
     const targetWsId = workspaceIdOverride || currentWorkspaceId;
     
+    setIsDataLoading(true);
     try {
       // 1. Fetch Cloud Workspaces - The absolute source of truth
       const [ws, f, r, ds, pm] = await Promise.all([
@@ -377,6 +380,8 @@ export const AppStateProvider = ({ children }) => {
     } catch (err) {
       console.error("Backend sync failed:", err);
       return null;
+    } finally {
+      setIsDataLoading(false);
     }
   };
 
@@ -714,6 +719,7 @@ export const AppStateProvider = ({ children }) => {
     globalSemanticFields, mergedSemanticModel, isUnified, joinGroupIds,
     // Mutation Lock
     isMutating, setIsMutating,
+    isDataLoading, setIsDataLoading,
     // Engine Warmup (shared singleton — see warmup useEffect above)
     maxDatesCache, datesReady, setDatesReady,
     // Computed & Helpers
