@@ -464,6 +464,8 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
     initBuilderForm, 
     setShowBuilder,
     globalFilters, 
+    pageFilters,
+    authoredReportFilters,
     drillThroughState,
     triggerDrillThrough,
     pages,
@@ -507,7 +509,7 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
       } else {
           if (toggleGlobalFilter) toggleGlobalFilter(dimKey, dimValue);
       }
-  }, [isExploreMode, chart.drillThroughTargetPageId, pages, globalFilters, triggerDrillThrough, toggleGlobalFilter]);
+  }, [isExploreMode, chart.drillThroughTargetPageId, pages, globalFilters, pageFilters, authoredReportFilters, activePageId, chart.filters, triggerDrillThrough, toggleGlobalFilter]);
 
   const toggleHeight = (e) => {
     e.stopPropagation();
