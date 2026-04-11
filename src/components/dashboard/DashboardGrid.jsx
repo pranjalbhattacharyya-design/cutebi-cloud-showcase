@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   MessageSquare, Loader2, X, Filter, ChevronUp, ChevronDown, Check, 
-  Sparkles, Plus, LayoutTemplate, MessageCircleHeart, Menu, Pencil, ArrowLeft, Trash2,
-  Zap, Clock, History
+  Sparkles, Plus, LayoutTemplate, MessageCircleHeart, Menu, Pencil, ArrowLeft, Trash2
 } from 'lucide-react';
 import { useAppState } from '../../contexts/AppStateContext';
 import { useDataEngine } from '../../hooks/useDataEngine';
@@ -112,8 +111,7 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
       isFilterPaneOpen, setIsFilterPaneOpen,
       pageFilters, authoredReportFilters,
       userRole,
-      drillThroughState, clearDrillThrough,
-      reportAnchorMode, setReportAnchorMode
+      drillThroughState, clearDrillThrough
   } = useAppState();
 
   const activePage = pages.find(p => p.id === activePageId);
@@ -255,27 +253,6 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
                       <span>Slicers ({slicers.length})</span>
                       {!isDrillThroughPage && (showSlicerPane ? <ChevronUp size={12} className="t-text-muted group-hover:t-text-main"/> : <ChevronDown size={12} className="t-text-muted group-hover:t-text-main"/>)}
                     </button>
-                    
-                    <div className="h-4 w-px bg-black/10 mx-1" />
-                    
-                    {/* Anchor Mode Toggle (Live vs D-1) */}
-                    <div className="flex items-center bg-black/5 p-1 rounded-lg border t-border" title="Report Timing Context">
-                      <button 
-                        onClick={() => setReportAnchorMode('live')}
-                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-tighter transition-all ${reportAnchorMode === 'live' ? 't-accent-bg text-white shadow-sm' : 't-text-muted hover:t-text-main'}`}
-                      >
-                        <Zap size={10} className={reportAnchorMode === 'live' ? 'text-white' : 't-accent'} />
-                        Live
-                      </button>
-                      <button 
-                        onClick={() => setReportAnchorMode('d-1')}
-                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-tighter transition-all ${reportAnchorMode === 'd-1' ? 't-accent-bg text-white shadow-sm' : 't-text-muted hover:t-text-main'}`}
-                      >
-                        <Clock size={10} className={reportAnchorMode === 'd-1' ? 'text-white' : 't-text-muted'} />
-                        D-1
-                      </button>
-                    </div>
-
                     {!isViewer && (
                       <div className="relative group">
                           <button className="flex items-center gap-1.5 t-text-muted hover:t-accent font-bold text-[10px] transition-all uppercase tracking-wider">

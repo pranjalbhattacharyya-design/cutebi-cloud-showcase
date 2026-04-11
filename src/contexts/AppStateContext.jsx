@@ -140,7 +140,6 @@ export const AppStateProvider = ({ children }) => {
   const [editingSlicerTitle, setEditingSlicerTitle] = useState('');
 
   const [isDataLoading, setIsDataLoading] = useState(true);
-  const [reportAnchorMode, setReportAnchorMode] = useState('live'); // 'live' | 'd-1'
 
   // --- Forms ---
   const initBuilderForm = {
@@ -213,32 +212,89 @@ export const AppStateProvider = ({ children }) => {
   useEffect(() => {
     warmupAbortRef.current = false;
 
-    const computeAnchors = () => {
-      const now = new Date();
-      if (reportAnchorMode === 'd-1') now.setDate(now.getDate() - 1);
-      const dateStr = now.toISOString().split('T')[0];
-
-      const newCache = {};
-      Object.values(semanticModels).flat().forEach(f => {
-        if (f.timeConfig?.enabled && f.timeConfig?.dateDimensionId) {
-          const originKey = `${f.originDatasetId}::${f.timeConfig.dateDimensionId}`;
-          newCache[originKey] = dateStr;
-        }
-      });
-
-      setMaxDatesCache(newCache);
-      setDatesReady(true);
+    const fetchMaxDates = async () => {
       window.dispatchEvent(new CustomEvent('mvantage-debug', {
-        detail: {
-          type: 'success', category: 'Backend',
-          message: `[${Date.now()}] Local Anchors Active (${reportAnchorMode})`,
-          details: { dateStr }
-        }
+        detail: { type: 'info', category: 'Backend', message: `[${Date.now()}] Engine Warmup Started: Scanning datasets for Time Intelligence...` }
       }));
+
+      const seen     = new Set();
+      const queries  = [];  // { key, ds_id, col }
+      const aliasMap = {};  // originKey -> [localKey]
+
+      // --- Pass 1: Build deduplicated query task list ---
+      for (const [dsId, model] of Object.entries(semanticModels)) {
+        if (warmupAbortRef.current) return;
+        const ds = datasets.find(d => d.id === dsId);
+        if (!ds) continue;
+
+        const dateFields = model.filter(f => f.format === 'date' && !f.isCalculated);
+        for (const f of dateFields) {
+          if (warmupAbortRef.current) return;
+
+          let targetDsId = dsId;
+          let col        = f.id;
+          let originKey  = `${dsId}::${f.id}`;
+          const localKey = `${dsId}::${f.id}`;
+
+          if (f.isJoined && f.originDatasetId && f.originFieldId) {
+            targetDsId = f.originDatasetId;
+            col        = f.originFieldId;
+            originKey  = `${f.originDatasetId}::${f.originFieldId}`;
+          }
+
+          if (seen.has(originKey)) {
+            if (!aliasMap[originKey]) aliasMap[originKey] = [];
+            if (localKey !== originKey) aliasMap[originKey].push(localKey);
+            continue;
+          }
+          seen.add(originKey);
+          queries.push({ key: originKey, ds_id: targetDsId, col });
+
+          if (localKey !== originKey) {
+            aliasMap[originKey] = [localKey];
+          }
+        }
+      }
+
+      if (warmupAbortRef.current || queries.length === 0) {
+        setDatesReady(true);
+        return;
+      }
+
+      // --- Pass 2: Ask backend for MAX dates (BigQuery) ---
+      try {
+        const bqResult = await apiClient.getBqMaxDates(queries);
+        if (warmupAbortRef.current) return;
+
+        const newCache = { ...bqResult };
+        // Populate aliases from the primary result
+        for (const [originKey, dateStr] of Object.entries(bqResult)) {
+          (aliasMap[originKey] || []).forEach(alias => { newCache[alias] = dateStr; });
+        }
+
+        setMaxDatesCache(newCache);
+        setDatesReady(true);
+        window.dispatchEvent(new CustomEvent('mvantage-debug', {
+          detail: {
+            type: 'success', category: 'Backend',
+            message: `[${Date.now()}] Engine Warm and Ready! Dates cached: ${Object.keys(newCache).length}`,
+            details: { cachedKeys: Object.keys(newCache) }
+          }
+        }));
+      } catch (err) {
+        console.error('[MaxDates/BQ] Failed:', err);
+        // Gracefully degrade: mark ready so charts still render
+        setDatesReady(true);
+      }
     };
 
-    computeAnchors();
-  }, [reportAnchorMode, semanticModels]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (datasets.length > 0) {
+      // Intentionally decoupled datesReady to prevent UI freezing
+      fetchMaxDates();
+    }
+
+    return () => { warmupAbortRef.current = true; };
+  }, [datasets, semanticModels]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Backend Data Sync ---
   const refreshData = async (force = false, workspaceIdOverride = null) => {
@@ -664,7 +720,6 @@ export const AppStateProvider = ({ children }) => {
     // Mutation Lock
     isMutating, setIsMutating,
     isDataLoading, setIsDataLoading,
-    reportAnchorMode, setReportAnchorMode,
     // Engine Warmup (shared singleton — see warmup useEffect above)
     maxDatesCache, datesReady, setDatesReady,
     // Computed & Helpers

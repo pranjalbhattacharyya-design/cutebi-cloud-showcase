@@ -186,6 +186,7 @@ function AppContent() {
 
   /** Auto-reload all datasets for a template using metadata-first (backend) approach */
   const handleAutoLoadTemplate = async (report) => {
+    setDatesReady(true); // Decoupled lock to prevent blocking charts while Engine Warmup scans BQ
     setIsUploading(true);
     setIsMutating(true);
     
@@ -238,7 +239,6 @@ function AppContent() {
       setPageFilters(rData.pageFilters || {});
       setAuthoredReportFilters(rData.authoredReportFilters || []);
       setCategories(rData.categories || []);
-      if (rData.reportAnchorMode) setReportAnchorMode(rData.reportAnchorMode);
       
       if (restoredDatasets.length > 0) {
         setDatasets(restoredDatasets);
@@ -534,7 +534,6 @@ function AppContent() {
       authoredReportFilters: authoredReportFilters,
       theme: theme,
       categories: categories,
-      reportAnchorMode: reportAnchorMode,
       workspaceId: currentWorkspaceId,
       folderId: currentFolderId,
       timestamp: Date.now()
