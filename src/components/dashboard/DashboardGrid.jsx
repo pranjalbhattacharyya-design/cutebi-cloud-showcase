@@ -283,7 +283,7 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
                          <ArrowLeft size={12}/> Back
                        </button>
                     )}
-                    {pages.map((p) => (
+                    {pages.filter(p => drillThroughState.active ? p.id === activePageId : !p.isDrillThrough).map((p) => (
                         <div key={p.id} className="flex items-center group/page relative">
                             {editingPageId === p.id && !isViewer ? (
                               <input
@@ -319,7 +319,7 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
                             )}
                         </div>
                     ))}
-                    {!isViewer && (
+                    {!isViewer && !drillThroughState.active && (
                       <button onClick={() => {
                           const newId = `page_${Date.now()}`;
                           setPages([...pages, { id: newId, name: `Page ${pages.length + 1}` }]);
