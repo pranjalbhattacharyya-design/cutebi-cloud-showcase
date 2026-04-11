@@ -209,7 +209,8 @@ export const AppStateProvider = ({ children }) => {
 
   useEffect(() => {
     warmupAbortRef.current = false;
-    const fetchMaxDates = async () => {
+
+    const fetchMaxDates = () => {
       window.dispatchEvent(new CustomEvent('mvantage-debug', {
         detail: { type: 'info', category: 'Backend', message: `[${Date.now()}] Engine Warmup Started: Scanning datasets for Time Intelligence...` }
       }));
@@ -228,15 +229,11 @@ export const AppStateProvider = ({ children }) => {
         for (const f of dateFields) {
           if (warmupAbortRef.current) return;
 
-          let targetDsId = dsId;
-          let col        = f.id;
           let originKey  = `${dsId}::${f.id}`;
           const localKey = `${dsId}::${f.id}`;
 
           if (f.isJoined && f.originDatasetId && f.originFieldId) {
-            targetDsId = f.originDatasetId;
-            col        = f.originFieldId;
-            originKey  = `${f.originDatasetId}::${f.originFieldId}`;
+            originKey = `${f.originDatasetId}::${f.originFieldId}`;
           }
 
           if (seen.has(originKey)) {
@@ -245,7 +242,7 @@ export const AppStateProvider = ({ children }) => {
             continue;
           }
           seen.add(originKey);
-          queries.push({ key: originKey, ds_id: targetDsId, col });
+          queries.push({ key: originKey });
 
           if (localKey !== originKey) {
             aliasMap[originKey] = [localKey];
@@ -253,41 +250,35 @@ export const AppStateProvider = ({ children }) => {
         }
       }
 
-      if (warmupAbortRef.current || queries.length === 0) {
-        setDatesReady(true);
-        return;
+      if (warmupAbortRef.current) return;
+
+      // --- Pass 2: Use Today - 1 as the anchor date (no BQ round-trip) ---
+      // Eliminates the race condition where charts fire before the BQ response
+      // arrives, causing zero-data on first load.
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const dateStr = yesterday.toISOString().split('T')[0];
+
+      const newCache = {};
+      queries.forEach(({ key }) => { newCache[key] = dateStr; });
+      // Propagate to alias keys (e.g. joined field local keys)
+      for (const originKey of Object.keys(newCache)) {
+        (aliasMap[originKey] || []).forEach(alias => { newCache[alias] = dateStr; });
       }
 
-      // --- Pass 2: Fetch MAX dates from BigQuery ---
-      // Charts are held by the restoration lock (datesReady=false in App.jsx handleAutoLoadTemplate).
-      // They will not fire until this completes, eliminating the race condition.
-      try {
-        const bqResult = await apiClient.getBqMaxDates(queries);
-        if (warmupAbortRef.current) return;
-
-        const newCache = { ...bqResult };
-        // Propagate to alias keys (e.g. joined field local keys)
-        for (const [originKey, dateStr] of Object.entries(bqResult)) {
-          (aliasMap[originKey] || []).forEach(alias => { newCache[alias] = dateStr; });
+      setMaxDatesCache(newCache);
+      setDatesReady(true);
+      window.dispatchEvent(new CustomEvent('mvantage-debug', {
+        detail: {
+          type: 'success', category: 'Backend',
+          message: `[${Date.now()}] Engine Ready (D-1 Anchor: ${dateStr}). Date keys: ${Object.keys(newCache).length}`,
+          details: { cachedKeys: Object.keys(newCache) }
         }
-
-        setMaxDatesCache(newCache);
-        setDatesReady(true);
-        window.dispatchEvent(new CustomEvent('mvantage-debug', {
-          detail: {
-            type: 'success', category: 'Backend',
-            message: `[${Date.now()}] Engine Warm and Ready! Dates cached: ${Object.keys(newCache).length}`,
-            details: { cachedKeys: Object.keys(newCache) }
-          }
-        }));
-      } catch (err) {
-        console.error('[MaxDates/BQ] Failed:', err);
-        // Gracefully degrade: mark ready so charts still render (with today as fallback)
-        setDatesReady(true);
-      }
+      }));
     };
 
     if (datasets.length > 0) {
+      // Intentionally decoupled datesReady to prevent UI freezing
       fetchMaxDates();
     }
 
