@@ -179,20 +179,22 @@ export const AppStateProvider = ({ children }) => {
   const [drillThroughState, setDrillThroughState] = useState({ 
     active: false, 
     sourcePageId: null, 
-    filters: {} // { dimensionId: [values] }
+    filters: {}, // { originKey: [values] }
+    authoredFilters: [] // [{ dimensionId, operator, value }] inherited from source
   });
 
-  const triggerDrillThrough = (targetPageId, contextFilters) => {
+  const triggerDrillThrough = (targetPageId, contextFilters, authoredFilters = []) => {
     setDrillThroughState({
       active: true,
       sourcePageId: activePageId,
-      filters: contextFilters
+      filters: contextFilters,
+      authoredFilters: authoredFilters
     });
     setActivePageId(targetPageId);
   };
 
   const clearDrillThrough = () => {
-    setDrillThroughState({ active: false, sourcePageId: null, filters: {} });
+    setDrillThroughState({ active: false, sourcePageId: null, filters: {}, authoredFilters: [] });
   };
 
   const [pendingRestore, setPendingRestore] = useState(null);

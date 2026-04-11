@@ -165,6 +165,13 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
     }
   }, [isViewer, aiMode]);
 
+  // Sync Slicer Pane with Drill-Through lifecycle
+  useEffect(() => {
+    if (drillThroughState.active) {
+        setShowSlicerPane(false);
+    }
+  }, [drillThroughState.active]);
+
   return (
     <div className="flex-1 flex flex-col min-h-0 w-full overflow-hidden">
       <div className="shrink-0 z-40 sticky top-0 transition-colors">

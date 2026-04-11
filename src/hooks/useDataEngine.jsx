@@ -528,6 +528,24 @@ export const useDataEngine = () => {
         filterParts.push(`(${visualFilterParts.join(' AND ')})`);
     }
 
+    // 5. Process Inherited Authored Filters (Drill-Through Mode)
+    if (overrideGlobalFilters && drillThroughState.active && Array.isArray(drillThroughState.authoredFilters)) {
+        const inheritedFilterParts = drillThroughState.authoredFilters.map(f => {
+            if (!f.dimensionId) return 'TRUE';
+            const colIdent = isMasterView ? `\`${f.dimensionId}\`` : `\`${sourceTable}\`.\`${f.dimensionId}\``;
+            let val = f.value;
+            if (f.operator === '=') return `CAST(${colIdent} AS STRING) = '${String(val).replace(/'/g, "''")}'`;
+            if (f.operator === '!=') return `CAST(${colIdent} AS STRING) <> '${String(val).replace(/'/g, "''")}'`;
+            if (f.operator === 'contains') return `LOWER(CAST(${colIdent} AS STRING)) LIKE LOWER('%${String(val).replace(/'/g, "''")}%')`;
+            if (f.operator === 'IN') {
+                if (!Array.isArray(val) || val.length === 0) return 'FALSE';
+                return `CAST(${colIdent} AS STRING) IN (${val.map(v => `'${String(v).replace(/'/g, "''")}'`).join(', ')})`;
+            }
+            return 'TRUE';
+        });
+        if (inheritedFilterParts.length > 0) filterParts.push(`(${inheritedFilterParts.join(' AND ')})`);
+    }
+
     // NLP/AI filter support (legacy and high-recall)
     const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     if (Array.isArray(filters)) {
@@ -947,6 +965,18 @@ export const useDataEngine = () => {
 
     if (Array.isArray(authoredReportFilters) && authoredReportFilters.length > 0) {
         authoredReportFilters.forEach(f => {
+            if (!f.dimensionId) return;
+            const colIdent = isMasterView ? `\`${f.dimensionId}\`` : `\`${sourceTable}\`.\`${f.dimensionId}\``;
+            if (f.operator === '=') slicerParts.push(`CAST(${colIdent} AS STRING) = '${String(f.value).replace(/'/g, "''")}'`);
+            else if (f.operator === 'IN' && Array.isArray(f.value)) {
+              slicerParts.push(`CAST(${colIdent} AS STRING) IN (${f.value.map(v=>`'${String(v).replace(/'/g,"''")}'`).join(',')})`);
+            }
+        });
+    }
+
+    // Process Inherited Authored Filters (Drill-Through Mode)
+    if (overrideGlobalFilters && drillThroughState.active && Array.isArray(drillThroughState.authoredFilters)) {
+        drillThroughState.authoredFilters.forEach(f => {
             if (!f.dimensionId) return;
             const colIdent = isMasterView ? `\`${f.dimensionId}\`` : `\`${sourceTable}\`.\`${f.dimensionId}\``;
             if (f.operator === '=') slicerParts.push(`CAST(${colIdent} AS STRING) = '${String(f.value).replace(/'/g, "''")}'`);

@@ -495,7 +495,15 @@ const ChartWidget = React.memo(({ chart, isExploreMode = false, toggleGlobalFilt
           if (dimValue !== undefined && dimValue !== null) {
               contextFilters[dimKey] = [String(dimValue)];
           }
-          triggerDrillThrough(targetPageId, contextFilters);
+          
+          // Collect all current authored filters from the source page/visual context
+          const inheritedAuthoredFilters = [
+              ...(authoredReportFilters || []),
+              ...(pageFilters[activePageId] || []),
+              ...(chart.filters || [])
+          ];
+
+          triggerDrillThrough(targetPageId, contextFilters, inheritedAuthoredFilters);
       } else {
           if (toggleGlobalFilter) toggleGlobalFilter(dimKey, dimValue);
       }
