@@ -670,7 +670,7 @@ export default function ChartBuilderModal() {
                     style={{ borderRadius: 'var(--theme-radius-button)' }}
                 >
                     <option value="">None (Interaction Filter Only)</option>
-                    {pages.map(p => (
+                    {pages.filter(p => p.isDrillThrough).map(p => (
                         <option key={p.id} value={p.id}>{p.name}{p.isDrillThrough ? ' (DT)' : ''}</option>
                     ))}
                 </select>
