@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   MessageSquare, Loader2, X, Filter, ChevronUp, ChevronDown, Check, 
-  Sparkles, Plus, LayoutTemplate, MessageCircleHeart, Menu, Pencil, ArrowLeft
+  Sparkles, Plus, LayoutTemplate, MessageCircleHeart, Menu, Pencil, ArrowLeft, Trash2
 } from 'lucide-react';
 import { useAppState } from '../../contexts/AppStateContext';
 import { useDataEngine } from '../../hooks/useDataEngine';
@@ -152,6 +152,28 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
           setPages(pages.map(p => p.id === id ? { ...p, name: editingPageName } : p));
       }
       setEditingPageId(null);
+  };
+  
+  const handleDeletePage = (id) => {
+    if (pages.length <= 1) {
+        return; // Prevent deleting the last page
+    }
+    if (window.confirm("Are you sure you want to delete this page? All visuals on this page will be permanently removed.")) {
+        const nextPages = pages.filter(p => p.id !== id);
+        setPages(nextPages);
+        
+        // Cleanup dashboards
+        setDashboards(prev => {
+            const next = { ...prev };
+            delete next[id];
+            return next;
+        });
+        
+        // Reset active page if the deleted one was current
+        if (activePageId === id) {
+            setActivePageId(nextPages[0].id);
+        }
+    }
   };
 
   const activeCharts = dashboards[activePageId] || [];
@@ -315,6 +337,15 @@ export default function DashboardGrid({ handleAskAI, handlePinChart }) {
                                         DT
                                       </span>
                                     )}
+                                    {!isViewer && pages.length > 1 && (
+                                       <button 
+                                         onClick={(e) => { e.stopPropagation(); handleDeletePage(p.id); }}
+                                         className="ml-1 opacity-0 group-hover/page:opacity-100 p-1 t-text-muted hover:text-red-500 transition-all"
+                                         title="Delete Page"
+                                       >
+                                         <Trash2 size={11}/>
+                                       </button>
+                                     )}
                                 </button>
                             )}
                         </div>
