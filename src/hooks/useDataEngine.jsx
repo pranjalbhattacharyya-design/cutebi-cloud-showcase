@@ -14,6 +14,7 @@ export const useDataEngine = () => {
     hiddenDatasetIds,
     globalSemanticFields, isUnified,
     isUploading, setIsUploading,
+    drillThroughState,
     maxDatesCache, datesReady,
     showToast
   } = useAppState();
@@ -585,7 +586,7 @@ export const useDataEngine = () => {
     }));
     
     return sql;
-  }, [datasets, semanticModels, activeDatasetId, relationships, globalFilters, generateUnifiedCTE, pageFilters, authoredReportFilters, activePageId, globalSemanticFields]);
+  }, [datasets, semanticModels, activeDatasetId, relationships, globalFilters, drillThroughState, generateUnifiedCTE, pageFilters, authoredReportFilters, activePageId, globalSemanticFields]);
 
   const applyFilters = useCallback((data, datasetId) => {
       let filteredData = data;
@@ -1063,7 +1064,7 @@ export const useDataEngine = () => {
         } catch (err) { console.error(`Matrix Batch failed:`, err); }
     }
     return Object.keys(mergedResult).length > 0 ? mergedResult : null;
-  }, [datasets, semanticModels, globalFilters, authoredReportFilters, getJoinGroup, generateUnifiedCTE, getFactTablesInGroup, resolveMeasureOrigin]);
+  }, [datasets, semanticModels, globalFilters, drillThroughState, authoredReportFilters, getJoinGroup, generateUnifiedCTE, getFactTablesInGroup, resolveMeasureOrigin]);
 
   return {
     datasets,
