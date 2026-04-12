@@ -485,7 +485,7 @@ function AppContent() {
           
           <div className={`flex-1 flex flex-col h-full overflow-hidden transition-all duration-500 ease-in-out ${isExploreOpen ? 'opacity-90' : ''}`}>
             {isViewer && (
-              <header className="shrink-0 h-14 t-panel border-b t-border px-6 flex items-center justify-between z-30 transition-all">
+              <header className="shrink-0 h-14 t-panel border-b t-border px-6 flex items-center justify-between z-50 transition-all">
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2 group cursor-pointer" onClick={() => setShowPortal(true)}>
                     <div className="t-accent-bg p-1.5 rounded-lg shadow-md group-hover:scale-110 transition-all">
