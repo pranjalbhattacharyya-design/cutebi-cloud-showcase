@@ -508,8 +508,8 @@ export const useDataEngine = () => {
         } else if (opLower === "in") {
            const inList = rawVal.split(',').map(v => `'${v.trim().replace(/'/g, "''")}'`).join(', ');
            filterParts.push(`CAST(${colIdent} AS STRING) IN (${inList})`);
-        } else if (opLower === "regexp_contains") {
-           filterParts.push(`REGEXP_CONTAINS(CAST(${colIdent} AS STRING), '${rawVal.replace(/'/g, "''")}')`);
+        } else if (opLower === "regexp_contains" || opLower === "regex") {
+           filterParts.push(`REGEXP_CONTAINS(LOWER(CAST(${colIdent} AS STRING)), LOWER('${rawVal.replace(/'/g, "''")}'))`);
         } else {
            filterParts.push(`CAST(${colIdent} AS STRING) ${op} '${rawVal.replace(/'/g, "''")}'`);
         }
