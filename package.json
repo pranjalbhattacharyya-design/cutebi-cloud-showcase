@@ -10,16 +10,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@duckdb/duckdb-wasm": "^1.33.1-dev20.0",
     "@tailwindcss/vite": "^4.2.2",
-    "apache-arrow": "^21.1.0",
-    "firebase": "^12.11.0",
     "lucide-react": "^1.0.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "recharts": "^3.8.0",
-    "tailwindcss": "^4.2.2",
-    "xlsx": "^0.18.5"
+    "tailwindcss": "^4.2.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
