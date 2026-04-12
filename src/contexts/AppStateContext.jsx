@@ -254,6 +254,7 @@ export const AppStateProvider = ({ children }) => {
       }
 
       if (warmupAbortRef.current || queries.length === 0) {
+        setMaxDatesCache({});
         setDatesReady(true);
         return;
       }

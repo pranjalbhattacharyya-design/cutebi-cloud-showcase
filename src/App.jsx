@@ -169,6 +169,8 @@ function AppContent() {
     setPages([{ id: 'page_1', name: 'Page 1' }]);
     setActivePageId('page_1');
     setSlicers([]);
+    setGlobalFilters({});
+    setDrillThroughState({ active: false, filters: null });
     setPendingRestore(null);
     setActiveDatasetId(null);
     
