@@ -1,6 +1,6 @@
 import { useMemo, useCallback, useEffect, useRef } from 'react';
 import { useAppState } from '../contexts/AppStateContext';
-import { initDuckDB, queryDuckDB } from '../utils/backendEngine.js';
+import { initQueryEngine, executeBatchQuery } from '../utils/backendEngine.js';
 import { apiClient } from '../services/api';
 
 export const useDataEngine = () => {
@@ -558,7 +558,7 @@ export const useDataEngine = () => {
     if (legendId) dimensions.push(legendId);
     const sql = generateSQL(datasetId, dimensions, [measureId], filters, null, null, overrideGlobalFilters);
     try {
-      const results = await queryDuckDB(sql);
+      const results = await executeBatchQuery(sql);
       const dataMap = new Map();
       
       results.forEach(row => {
@@ -589,7 +589,7 @@ export const useDataEngine = () => {
     // We group by all dimensions in the hierarchy
     const sql = generateSQL(datasetId, dimensions, [measureId], filters, null, null, overrideGlobalFilters);
     try {
-      const results = await queryDuckDB(sql);
+      const results = await executeBatchQuery(sql);
       
       const root = { name: 'root', children: [], value: 0 };
       
@@ -660,8 +660,8 @@ export const useDataEngine = () => {
                : generateSQL(datasetId, [], factMeasures, filters, null, factId, overrideGlobalFilters);
              
              const [rows, totalsResp] = await Promise.all([
-               queryDuckDB(sql),
-               queryDuckDB(totalsSql)
+               executeBatchQuery(sql),
+               executeBatchQuery(totalsSql)
              ]);
              
              const tRow = (totalsResp && totalsResp[0]) || {};
@@ -690,7 +690,7 @@ export const useDataEngine = () => {
 
            if (totalMode === 'calculated') {
              const grandSql = generateSQL(datasetId, [], measures, filters, null, null, overrideGlobalFilters);
-             const gRes = await queryDuckDB(grandSql);
+             const gRes = await executeBatchQuery(grandSql);
              if (gRes && gRes[0]) Object.assign(grandTotals, gRes[0]);
            }
 
@@ -706,8 +706,8 @@ export const useDataEngine = () => {
              : generateSQL(datasetId, [], measures, filters, null, null, overrideGlobalFilters);
          
          const [rows, totalsResp] = await Promise.all([
-            queryDuckDB(sql),
-            (measures && measures.length > 0) ? queryDuckDB(totalsSql) : Promise.resolve([])
+            executeBatchQuery(sql),
+            (measures && measures.length > 0) ? executeBatchQuery(totalsSql) : Promise.resolve([])
          ]);
          
          return { headers, headerIds, rows: rows || [], totals: (totalsResp && totalsResp[0]) || {} };
@@ -753,7 +753,7 @@ export const useDataEngine = () => {
        if (isMultiFactModel) {
          for (const [factId, factMeasures] of measuresByFact) {
            const sql = generateSQL(datasetId, allDims, factMeasures, filters, null, factId, overrideGlobalFilters);
-           const results = await queryDuckDB(sql) || [];
+           const results = await executeBatchQuery(sql) || [];
            const { rowKeysSet, colKeysSet, matrix } = buildMatrix(results, factMeasures);
            rowKeysSet.forEach(k => allRowKeys.add(k)); colKeysSet.forEach(k => allColKeys.add(k));
            Object.entries(matrix).forEach(([rk, cols]) => {
@@ -767,9 +767,9 @@ export const useDataEngine = () => {
              const grandSql = generateSQL(datasetId, [], factMeasures, filters, null, factId, overrideGlobalFilters);
              
              const [rRes, cRes, gRes] = await Promise.all([
-               queryDuckDB(rowSql),
-               colSql ? queryDuckDB(colSql) : Promise.resolve([]),
-               queryDuckDB(grandSql)
+               executeBatchQuery(rowSql),
+               colSql ? executeBatchQuery(colSql) : Promise.resolve([]),
+               executeBatchQuery(grandSql)
              ]);
              
              rRes.forEach(row => {
@@ -789,7 +789,7 @@ export const useDataEngine = () => {
          }
        } else {
          const sql = generateSQL(datasetId, allDims, measureIds, filters, null, null, overrideGlobalFilters);
-         const results = await queryDuckDB(sql) || [];
+         const results = await executeBatchQuery(sql) || [];
          const { rowKeysSet, colKeysSet, matrix } = buildMatrix(results, measureIds);
          allRowKeys = rowKeysSet; allColKeys = colKeysSet; mergedMatrix = matrix;
 
@@ -799,9 +799,9 @@ export const useDataEngine = () => {
             const grandSql = generateSQL(datasetId, [], measureIds, filters, null, null, overrideGlobalFilters);
             
             const [rRes, cRes, gRes] = await Promise.all([
-              queryDuckDB(rowSql),
-              colSql ? queryDuckDB(colSql) : Promise.resolve([]),
-              queryDuckDB(grandSql)
+              executeBatchQuery(rowSql),
+              colSql ? executeBatchQuery(colSql) : Promise.resolve([]),
+              executeBatchQuery(grandSql)
             ]);
             
             rRes.forEach(row => {
@@ -847,7 +847,7 @@ export const useDataEngine = () => {
     if (sMeas) measures.push(sMeas);
     const sql = generateSQL(datasetId, [dimensionId], measures, filters, 500, null, overrideGlobalFilters);
     try {
-      const results = await queryDuckDB(sql);
+      const results = await executeBatchQuery(sql);
       return results.map(row => ({ name: row[dimensionId], x: row[xMeas], y: row[yMeas], color: cMeas ? row[cMeas] : null, size: sMeas ? row[sMeas] : null }));
     } catch (e) { console.error("Scatter Error:", e); throw e; }
   }, [generateSQL]);
@@ -863,7 +863,7 @@ export const useDataEngine = () => {
     const sql = `SELECT DISTINCT \`${dimensionId}\` FROM \`${tableName}\` WHERE \`${dimensionId}\` IS NOT NULL ORDER BY 1 LIMIT 1000`;
     
     try {
-      const results = await queryDuckDB(sql);
+      const results = await executeBatchQuery(sql);
       const values = results.map(r => String(r[dimensionId] ?? Object.values(r)[0] ?? ''));
       slicerOptionsCache.current[cacheKey] = values;
       return values;
@@ -874,7 +874,7 @@ export const useDataEngine = () => {
   }, []);
 
   useEffect(() => {
-    initDuckDB().catch(e => console.error("DuckDB Init failed:", e));
+    initQueryEngine().catch(e => console.error("QueryEngine Init failed:", e));
   }, []);
 
   const getMatrixData = useCallback(async (chart, overrideGlobalFilters = null) => {
@@ -1002,7 +1002,7 @@ export const useDataEngine = () => {
         const renderSource = sourceTable === "ds_unified" ? sourceTable : `\`${sourceTable}\``;
         const sql = `${ctePrefix}SELECT ${selectParts.join(', ')} FROM ${renderSource}${whereClause}`;
         try {
-            const results = await queryDuckDB(sql);
+            const results = await executeBatchQuery(sql);
             if (results && results[0]) Object.assign(mergedResult, results[0]);
         } catch (err) { console.error(`Matrix Batch failed:`, err); }
     }
@@ -1026,7 +1026,7 @@ export const useDataEngine = () => {
     getTableData,
     getScatterData,
     getMatrixData,
-    executeExploreQuery: async (dsId, dims, meass, filts, limit) => await queryDuckDB(generateSQL(dsId, dims, meass, filts, limit)),
+    executeExploreQuery: async (dsId, dims, meass, filts, limit) => await executeBatchQuery(generateSQL(dsId, dims, meass, filts, limit)),
     generateUnifiedCTE,
     datesReady
   };

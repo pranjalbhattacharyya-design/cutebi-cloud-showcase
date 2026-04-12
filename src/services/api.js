@@ -84,7 +84,7 @@ export const apiClient = {
 
   /**
    * Fetch MAX(date) for a list of BQ dataset/column pairs.
-   * Replaces the browser WASM DuckDB date warmup scan.
+   * Replaces the browser WASM Query Engine date warmup scan.
    * @param {Array<{key, ds_id, col}>} queries
    * @returns {Object} e.g. { "Fact Sale::Date": "2026-03-31" }
    */

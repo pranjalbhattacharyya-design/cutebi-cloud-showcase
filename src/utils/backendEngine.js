@@ -6,7 +6,7 @@ let batchTimeout = null;
 /**
  * Execute a SQL query on the backend engine (Wait-and-Bundle approach)
  */
-export async function queryDuckDB(sql) {
+export async function executeBatchQuery(sql) {
     if (!sql) return [];
     
     return new Promise((resolve, reject) => {
@@ -32,7 +32,7 @@ async function flushQueryQueue() {
         const sqlArray = currentQueue.map(q => q.sql);
         
         window.dispatchEvent(new CustomEvent('mvantage-debug', { 
-            detail: { type: 'info', category: 'Engine', message: `Bundling ${sqlArray.length} queries into single network request...` } 
+            detail: { type: 'info', category: 'QueryEngine', message: `Bundling ${sqlArray.length} queries into single network request...` } 
         }));
 
         const results = await apiClient.post('/query/batch', { queries: sqlArray });
@@ -52,7 +52,7 @@ async function flushQueryQueue() {
         });
 
         window.dispatchEvent(new CustomEvent('mvantage-debug', { 
-            detail: { type: 'success', category: 'Engine', message: `Batch results received: ${dataArray.length}` } 
+            detail: { type: 'success', category: 'QueryEngine', message: `Batch results received: ${dataArray.length}` } 
         }));
 
 
@@ -68,11 +68,11 @@ async function flushQueryQueue() {
 /**
  * Helper to initialize (noop now as backend handles it)
  */
-export async function initDuckDB() {
+export async function initQueryEngine() {
     return { status: 'backend-ready' };
 }
 
-export async function getDuckDB() {
+export async function getQueryEngine() {
     return { status: 'backend-ready' };
 }
 

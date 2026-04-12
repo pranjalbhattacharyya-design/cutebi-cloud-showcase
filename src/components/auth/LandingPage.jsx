@@ -111,7 +111,7 @@ export default function LandingPage() {
 
         {/* Footer Info */}
         <div className="mt-12 text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] flex items-center gap-6">
-          <div className="flex items-center gap-2"><Database size={12} /> Powered by DuckDB</div>
+          <div className="flex items-center gap-2"><Database size={12} /> Powered by Query Engine</div>
           <div className="flex items-center gap-2"><BarChart3 size={12} /> Enterprise Semantic Model</div>
           <div className="flex items-center gap-2"><MessageSquare size={12} /> AI Assisted Analytics</div>
         </div>

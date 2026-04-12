@@ -55,7 +55,7 @@ export default function Sidebar({
       ? wsModel
       : generateInitModel(wsDataset.id, wsDataset.headers || [], wsDataset.sample_data || []);
 
-    // Construct a full dataset object — must include tableName so DuckDB queries work
+    // Construct a full dataset object — must include tableName so Query Engine queries work
     const newDs = {
       id: wsDataset.id,
       name: wsDataset.name,

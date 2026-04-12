@@ -200,7 +200,7 @@ export const AppStateProvider = ({ children }) => {
   const [currentTemplateId, setCurrentTemplateId] = useState(null);
 
   // --- Engine Warmup: Fetch MAX dates for Time Intelligence ---
-  // BQ mode: calls backend /api/bq/maxdates instead of browser WASM DuckDB.
+  // BQ mode: calls backend /api/bq/maxdates instead of browser WASM Query Engine.
   // This runs once whenever datasets or semantic models change.
   const [maxDatesCache, setMaxDatesCache] = useState({});
   const [datesReady, setDatesReady] = useState(true);
