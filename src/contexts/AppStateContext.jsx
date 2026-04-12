@@ -398,8 +398,10 @@ export const AppStateProvider = ({ children }) => {
     // 2. Hydrate with Published Model State (Unwrapped)
     
     // Structure A: Master Dataset Meta (the tables themselves)
-    if (model.datasetsMeta) {
-        const restored = model.datasetsMeta.map(m => {
+    // Structure A: Master Dataset Meta (the tables themselves)
+    let restored = [];
+    if (model.datasetsMeta && model.datasetsMeta.length > 0) {
+        restored = model.datasetsMeta.map(m => {
             const fromWs = (workspaceDatasets || []).find(d => d.id === m.id);
             return {
                 ...m,
@@ -408,8 +410,28 @@ export const AppStateProvider = ({ children }) => {
                 isFromLibrary: true
             };
         });
+    } else if (model.fields) {
+        // Fallback: Infer datasets from field origins
+        const uniqueDsIds = [...new Set(model.fields.map(f => f.originDatasetId || f.dsId).filter(Boolean))];
+        restored = uniqueDsIds.map(id => {
+           const fromWs = (workspaceDatasets || []).find(d => d.id === id);
+           if (!fromWs) return null;
+           return {
+               id: fromWs.id,
+               name: fromWs.name,
+               tableName: fromWs.table_name || fromWs.tableName || fromWs.id,
+               originalFileName: fromWs.original_file_name || fromWs.name,
+               headers: fromWs.headers || [],
+               data: fromWs.sample_data || [],
+               description: fromWs.description || '',
+               isFromLibrary: true
+           };
+        }).filter(Boolean);
+    }
+
+    if (restored.length > 0) {
         setDatasets(restored);
-        if (restored.length > 0) setActiveDatasetId(restored[0].id);
+        setActiveDatasetId(restored[0].id);
     }
     
     if (model.relationships) {
@@ -477,9 +499,13 @@ export const AppStateProvider = ({ children }) => {
     };
 
     setDatasets(prev => [...prev, newDs]);
-    // Generate basic semantic model from headers with Smart Typing
-    const initialModel = generateInitModel(ds.id, ds.headers || [], ds.sample_data || []);
-    setSemanticModels(prev => ({ ...prev, [ds.id]: initialModel }));
+    // Use workspace semantic model if already hydrated, otherwise generate fresh from headers
+    const wsModel = workspaceSemanticModels[ds.id];
+    const model = (wsModel && wsModel.length > 0)
+      ? wsModel
+      : generateInitModel(ds.id, ds.headers || [], ds.sample_data || []);
+
+    setSemanticModels(prev => ({ ...prev, [ds.id]: model }));
     setActiveDatasetId(ds.id);
     setIsLibraryOpen(false);
     showToast(`✨ Successfully imported "${ds.name}" from Platinum Library!`);
