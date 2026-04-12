@@ -189,6 +189,16 @@ function AppContent() {
     setDatesReady(true); // Decoupled lock to prevent blocking charts while Engine Warmup scans BQ
     setIsUploading(true);
     setIsMutating(true);
+
+    // Immediate state reset to prevent "Ghosting" of the previous report under the shimmer
+    setDatasets([]);
+    setSemanticModels({});
+    setDashboards({});
+    setPages([{ id: 'page_1', name: 'Page 1' }]);
+    setActivePageId('page_1');
+    setSlicers([]);
+    setPendingRestore(null);
+    setActiveDatasetId(null);
     
     try {
       const reportId = report.id || report.data?.id;
@@ -742,7 +752,7 @@ function AppContent() {
                       <label className="cursor-pointer t-accent-bg px-8 py-4 font-bold shadow-lg hover:shadow-xl hover:scale-105 transition-all inline-block mt-4" style={{ borderRadius: 'var(--theme-radius-button)' }}>Upload Dataset <input type="file" multiple className="hidden" accept=".csv,.txt,.xlsx,.xls" onChange={handleFileUpload} /></label>
                     </div>
                 </div>
-            ) : (!activeDatasetId && datasets?.length === 0) ? (
+            ) : (!isUploading && !activeDatasetId && datasets?.length === 0) ? (
                 <div className="flex-1 overflow-y-auto w-full p-8 scrollbar-hide">
                     <div className="relative max-w-xl mx-auto p-12 border-4 border-dashed transition-all duration-300 shadow-xl t-border t-panel">
                       <div className="absolute -top-6 -left-6 bg-yellow-100 text-yellow-600 p-4 rounded-full shadow-sm animate-bounce"><Sparkles size={32} /></div>
