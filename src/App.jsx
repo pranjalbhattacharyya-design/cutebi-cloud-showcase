@@ -52,7 +52,8 @@ function AppContent() {
     workspaces,
     refreshData, setIsMutating,
     datesReady, setDatesReady,
-    isLibraryOpen, setIsLibraryOpen, importLibraryDataset
+    isLibraryOpen, setIsLibraryOpen, importLibraryDataset,
+    drillThroughState, setDrillThroughState
   } = useAppState();
 
   const [showGetDataModal, setShowGetDataModal] = useState(false);
