@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { useAppState } from '../../../contexts/AppStateContext';
 import { apiClient } from '../../../services/api';
-import { syncSemanticModels } from '../../../utils/semanticSync';
+import { syncSemanticModels } from '../../../utils/dataParser';
 
 
 export default function SemanticModeler({ handleAutoFillDescriptions, isThinking }) {

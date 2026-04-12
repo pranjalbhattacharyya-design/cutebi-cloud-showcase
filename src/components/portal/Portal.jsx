@@ -10,8 +10,6 @@ import { useAppState } from '../../contexts/AppStateContext';
 
 import { generateInitModel } from '../../utils/dataParser';
 import { apiClient } from '../../services/api';
-import { preprocessFilesForUpload } from '../../utils/excelConverter';
-import { cloudUploadFile } from '../../utils/cloudUpload';
 import DataDetailsModal from '../modals/DataDetailsModal';
 import ThemeSelector from '../ui/ThemeSelector';
 
@@ -591,11 +589,7 @@ export default function Portal() {
                       <Database size={32} />
                     </div>
                     <h3 className="font-bold t-text-main">No shared data yet</h3>
-                    <p className="text-sm t-text-muted mt-1 mb-6">Upload datasets to the workspace so multiple reports can use them.</p>
-                    <label className="bg-emerald-600 text-white px-6 py-2 rounded-full text-sm font-bold shadow-lg shadow-emerald-500/20 hover:bg-emerald-700 transition-all cursor-pointer">
-                      Upload Workspace Data
-                      <input type="file" multiple className="hidden" accept=".csv,.txt,.xlsx,.xls" onChange={handleWorkspaceFileUpload} />
-                    </label>
+                    <p className="text-sm t-text-muted mt-1 mb-6">Connect BigQuery tables to the workspace so multiple reports can use them.</p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

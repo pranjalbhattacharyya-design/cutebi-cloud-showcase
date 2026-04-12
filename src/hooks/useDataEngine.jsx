@@ -59,66 +59,7 @@ export const useDataEngine = () => {
   }, []);
 
   // --- Dataset Loading ---
-  const loadDataset = useCallback(async (file, customName) => {
-    const { parseFileAsync } = await import('../utils/fileParser.js');
-    setIsUploading(true);
-    try {
-      const parsed = await parseFileAsync(file);
-      if (!parsed) { if (showToast) showToast('Could not parse file.'); return; }
-      
-      let backendDs;
-      try {
-          backendDs = await apiClient.upload('/upload', file);
-      } catch (err) {
-          console.error("Backend upload failed:", err);
-          if (showToast) showToast('Backend upload failed.');
-          return;
-      }
-      
-      const id = backendDs.id;
-      const tableName = backendDs.table_name;
-      const name = customName || file.name;
 
-      const newDs = { 
-        id, 
-        name, 
-        tableName,
-        originalFileName: file.name, 
-        data: parsed.data.slice(0, 5), 
-        headers: backendDs.headers || parsed.headers 
-      };
-
-      const sampleRow = parsed.data[0] || {};
-      const model = parsed.headers.map(h => {
-        const v = sampleRow[h];
-        const isNum = typeof v === 'number' || (!isNaN(Number(v)) && v !== '' && v !== null);
-        const lh = h.toLowerCase();
-        const couldBeDate = lh.includes('date') || lh.includes('time') || lh.includes('day') || lh.includes('month') || lh.includes('year');
-        return {
-          id: h, label: h, type: isNum && !couldBeDate ? 'measure' : 'dimension',
-          format: couldBeDate ? 'date' : (isNum ? 'number' : 'text'),
-          aggType: 'sum', isCalculated: false, isJoined: false, isHidden: false,
-          originDatasetId: id, originFieldId: h,
-          filters: [], filterLogic: 'AND',
-          timeConfig: { enabled: false, dateDimensionId: '', period: 'YTD' }
-        };
-      });
-
-      setDatasets(prev => {
-        const existing = prev.findIndex(d => d.id === id);
-        if (existing !== -1) { const up = [...prev]; up[existing] = newDs; return up; }
-        return [...prev, newDs];
-      });
-      setSemanticModels(prev => ({ ...prev, [id]: model }));
-      setActiveDatasetId(id);
-      if (showToast) showToast(`'${name}' loaded into SQL Engine!`);
-    } catch (e) {
-      console.error('Load failed:', e);
-      if (showToast) showToast('Error loading file.');
-    } finally {
-      setIsUploading(false);
-    }
-  }, [setDatasets, setSemanticModels, setActiveDatasetId, setIsUploading, showToast]);
 
   const deleteDataset = useCallback((datasetId) => {
     setDatasets(prev => prev.filter(d => d.id !== datasetId));

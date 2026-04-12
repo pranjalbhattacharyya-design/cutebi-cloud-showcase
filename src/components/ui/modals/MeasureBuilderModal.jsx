@@ -1,7 +1,7 @@
 import React from 'react';
 import { Calculator, Hash, Filter as FilterIcon, CalendarClock, Search, Plus, Trash2, X, Check } from 'lucide-react';
 import { useAppState } from '../../../contexts/AppStateContext';
-import { syncSemanticModels } from '../../../utils/semanticSync';
+import { syncSemanticModels } from '../../../utils/dataParser';
 import MultiSelect from '../MultiSelect';
 
 export default function MeasureBuilderModal({ getUniqueValuesForDim }) {

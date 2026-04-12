@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link as LinkIcon, X, Database, ArrowLeftRight, ArrowRight, ArrowLeft, Trash2, Plus } from 'lucide-react';
 import { useAppState } from '../../../contexts/AppStateContext';
-import { syncSemanticModels } from '../../../utils/semanticSync';
+import { syncSemanticModels } from '../../../utils/dataParser';
 
 export default function RelationshipsModal() {
   const {

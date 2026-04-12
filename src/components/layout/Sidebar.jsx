@@ -6,15 +6,13 @@ import {
 } from 'lucide-react';
 import { useAppState } from '../../contexts/AppStateContext';
 import { THEMES } from '../../utils/themeEngine';
-import { syncSemanticModels } from '../../utils/semanticSync';
-import { generateInitModel } from '../../utils/dataParser';
+import { syncSemanticModels, generateInitModel } from '../../utils/dataParser';
 
 
 export default function Sidebar({
   handleRemoveDataset,
   saveDatasetName,
   openGetDataModal,
-  handleOpenFiles,
   handleAutoLoadTemplate,
   handleImportTemplates,
   handleExportTemplate,

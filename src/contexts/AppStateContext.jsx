@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { apiClient } from '../services/api';
-import { generateInitModel, patchModels } from '../utils/dataParser';
-import { syncSemanticModels } from '../utils/semanticSync';
+import { generateInitModel, patchModels, syncSemanticModels } from '../utils/dataParser';
 import { applyTheme } from '../utils/themeEngine';
 
 

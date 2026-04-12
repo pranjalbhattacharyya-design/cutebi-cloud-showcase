@@ -4,12 +4,8 @@ import { AppStateProvider, useAppState } from './contexts/AppStateContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { THEMES } from './utils/themeEngine'
 
-import { syncSemanticModels } from './utils/semanticSync'
-import { generateInitModel, patchModels } from './utils/dataParser'
-import { storeHandle, deleteHandle, getHandlesForDatasets, requestReadPermission } from './utils/fileHandleStore'
+import { syncSemanticModels, generateInitModel, patchModels } from './utils/dataParser'
 import { apiClient } from './services/api'
-import { preprocessFilesForUpload } from './utils/excelConverter'
-import { cloudUploadFile } from './utils/cloudUpload'
 import GetDataModal from './components/ui/GetDataModal'
 
 
@@ -115,7 +111,6 @@ function AppContent() {
   const handleRemoveDataset = (e, dsId) => {
     e.stopPropagation();
     setDatasets(prev => prev.filter(d => d.id !== dsId));
-    deleteHandle(dsId); // Clean up any stored file handle
     setSemanticModels(prev => { const next = {...prev}; delete next[dsId]; return next; });
     setGlobalFilters(prev => {
         const next = {};
@@ -159,30 +154,7 @@ function AppContent() {
      setEditingSlicerId(null);
   };
 
-  /** Opens files via File System Access API (showOpenFilePicker) and stores handles for auto-reload */
-  const handleOpenFiles = async () => {
-    if (!window.showOpenFilePicker) {
-      showToast('Your browser does not support persistent file handles. Use Chrome/Edge.');
-      return;
-    }
-    let fileHandles;
-    try {
-      fileHandles = await window.showOpenFilePicker({
-        multiple: true,
-        types: [
-          { description: 'Data Files', accept: { 'text/csv': ['.csv', '.txt'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx', '.xls'] } }
-        ]
-      });
-    } catch (err) {
-      if (err.name !== 'AbortError') showToast('Could not open file picker.');
-      return;
-    }
-    // Process picked files exactly like handleFileUpload, but also store handles
-    const fakeEvent = { target: { files: await Promise.all(fileHandles.map(h => h.getFile())), value: '' }, dataTransfer: null };
-    // Store handles BEFORE upload so dsId pairing works after re-mapping
-    const pendingHandles = fileHandles; // will be matched by index after processing
-    await handleFileUpload(fakeEvent, pendingHandles);
-  };
+
 
   /** Auto-reload all datasets for a template using metadata-first (backend) approach */
   const handleAutoLoadTemplate = async (report) => {
@@ -343,160 +315,7 @@ function AppContent() {
     e.target.value = '';
   };
 
-  const handleFileUpload = async (e) => {
-    const rawFiles = Array.from(e.target?.files || e.dataTransfer?.files || []);
-    if (!rawFiles.length) return;
-    setIsUploading(true);
-    setIsMutating(true);
-    try {
-      let pendingDatasets = [];
-      let pendingSemanticModels = {};
-      let pendingRelationships = [];
-      let lastDsId = null;
-      let latestTemplateToApply = pendingRestore;
 
-      // Pre-process: convert any .xlsx/.xls files to CSV in the browser
-      // This avoids server-side Excel parsing (which times out on Vercel)
-      let files;
-      try {
-        files = await preprocessFilesForUpload(rawFiles, (msg) => {
-          window.dispatchEvent(new CustomEvent('mvantage-debug', { detail: { type: 'info', category: 'Upload', message: msg } }));
-          showToast(msg);
-        });
-      } catch (convErr) {
-        window.dispatchEvent(new CustomEvent('mvantage-debug', { detail: { type: 'error', category: 'Upload', message: `Excel conversion failed: ${convErr.message}` } }));
-        showToast(`❌ ${convErr.message}`);
-        setIsUploading(false);
-        setIsMutating(false);
-        return;
-      }
-
-      // Build a map: converted file name → original raw file name
-      // (e.g. 'Fact Sale.csv' → 'Fact Sale.xlsx')
-      const originalNameMap = new Map(
-        rawFiles.map((raw, i) => [files[i]?.name, raw.name])
-      );
-
-      for (const file of files) {
-        const originalName = originalNameMap.get(file.name) || file.name;
-        window.dispatchEvent(new CustomEvent('mvantage-debug', { detail: { type: 'info', category: 'Upload', message: `Platinum Ingestion: ${originalName}` } }));
-        
-        try {
-          // Direct upload: browser → Supabase (no Vercel relay, no 10s timeout)
-          const backendDs = await cloudUploadFile(file, originalName, (msg) => {
-            window.dispatchEvent(new CustomEvent('mvantage-debug', { detail: { type: 'info', category: 'Upload', message: msg } }));
-          });
-          
-          const dsId = backendDs.id;
-          const tableName = backendDs.table_name;
-
-          const newDataset = { 
-            id: dsId, 
-            name: backendDs.name, 
-            tableName, 
-            originalFileName: originalName,    // keep the xlsx display name
-            data: backendDs.sample_data || [],
-            headers: backendDs.headers || [], 
-            description: '' 
-          };
-          
-          pendingDatasets.push(newDataset);
-          lastDsId = dsId;
-
-          // Generate initial model from backend headers
-          pendingSemanticModels[dsId] = generateInitModel(dsId, backendDs.headers, backendDs.sample_data || []);
-
-          // Register into workspace dataset library immediately (non-blocking)
-          apiClient.post('/workspace-datasets', {
-            id: dsId,
-            name: backendDs.name,
-            workspace_id: currentWorkspaceId,
-            folder_id: currentFolderId || null,
-            table_name: tableName,
-            headers: backendDs.headers || [],
-            description: ''
-          }).catch(err => console.warn('[Upload] Workspace-dataset registration failed (non-fatal):', err));
-
-        } catch (err) {
-          window.dispatchEvent(new CustomEvent('mvantage-debug', { detail: { type: 'error', category: 'Upload', message: `Error processing ${originalName}: ${err.message}` } }));
-          showToast(`Error uploading ${originalName}: ${err.message}`);
-        }
-      }
-
-      if (latestTemplateToApply) {
-         setDashboards(latestTemplateToApply.dashboards || (Array.isArray(latestTemplateToApply.dashboard) ? { 'page_1': latestTemplateToApply.dashboard } : latestTemplateToApply.dashboard) || {});
-         if (latestTemplateToApply.pages) setPages(latestTemplateToApply.pages);
-         if (latestTemplateToApply.pages?.length > 0) setActivePageId(latestTemplateToApply.pages[0].id);
-         if (latestTemplateToApply.slicers) setSlicers(latestTemplateToApply.slicers);
-         if (latestTemplateToApply.theme) setTheme(latestTemplateToApply.theme);
-         if (latestTemplateToApply.categories) setCategories(latestTemplateToApply.categories);
-      } else {
-         if (!dashboards[activePageId]) setDashboards(prev => ({ ...prev, [activePageId]: [] }));
-         // Clean slate: clear slicers from any previously loaded report
-         setSlicers([]);
-      }
-
-      // Atomic State Flush
-      setDatasets(prev => {
-        const next = [...prev];
-        pendingDatasets.forEach(d => {
-           const idx = next.findIndex(x => x.id === d.id);
-           if (idx >= 0) next[idx] = d; else next.push(d);
-        });
-        return next;
-      });
-
-      setSemanticModels(prev => {
-        const next = { ...prev, ...pendingSemanticModels };
-        return syncSemanticModels(next, pendingRelationships);
-      });
-
-      setRelationships(prev => {
-         const existingIds = new Set(prev.map(r => r.id));
-         const newRels = pendingRelationships.filter(r => !existingIds.has(r.id));
-         return [...prev, ...newRels];
-      });
-
-      if (lastDsId) setActiveDatasetId(lastDsId);
-
-      // Final status check
-      if (latestTemplateToApply && latestTemplateToApply.datasetsMeta) {
-          const uploadedIds = new Set([...datasets, ...pendingDatasets].map(d => d.id));
-          const missingCount = latestTemplateToApply.datasetsMeta.map(m => m.id).filter(id => !uploadedIds.has(id)).length;
-          if (missingCount > 0) {
-              setPendingRestore(latestTemplateToApply);
-              showToast(`✨ Restored files. Please upload ${missingCount} more file(s).`);
-          } else {
-              setPendingRestore(null);
-              setCurrentTemplateId(latestTemplateToApply.id);
-              showToast(`✨ All files restored!`);
-          }
-      } else {
-          setPendingRestore(null);
-          if (latestTemplateToApply) setCurrentTemplateId(latestTemplateToApply.id);
-          showToast(`✨ Data loaded successfully!`);
-      }
-
-    } finally {
-      setIsUploading(false);
-      setIsMutating(false);
-      if (e.target) e.target.value = '';
-    }
-  };
-
-  const handleDrag = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") setDragActive(true);
-    else if (e.type === "dragleave") setDragActive(false);
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    handleFileUpload(e);
-  };
 
   const handleSaveReportClick = () => {
     if (datasets.length === 0) return;
@@ -715,44 +534,7 @@ function AppContent() {
                </div>
             )}
             
-            {pendingRestore ? (
-                <div className="flex-1 overflow-y-auto w-full p-8 scrollbar-hide">
-                    {!showSidebar && (
-                      <button onClick={() => setShowSidebar(true)} className="mb-4 t-text-muted hover:t-accent transition-colors">
-                        <Menu size={20} />
-                      </button>
-                    )}
-                    <div className="relative max-w-xl mx-auto p-12 border-4 border-dashed t-border t-panel text-center shadow-xl">
-                      <button onClick={() => {
-                          setPendingRestore(null);
-                          if (datasets.length > 0) setActiveDatasetId(datasets[0].id);
-                      }} className="absolute top-6 left-6 t-text-muted hover:t-accent font-bold flex items-center gap-1"><ArrowLeft size={16} /> Cancel</button>
-                      <div className="absolute -top-6 right-6 t-accent-bg p-4 rounded-full shadow-sm animate-pulse"><RotateCcw size={32} /></div>
-                      <Database size={64} className="mx-auto t-text-muted mb-6 mt-4" />
-                      <h2 className="text-3xl font-extrabold t-text-main mb-4">Restoring "{pendingRestore.name}"</h2>
-                      
-                      <div className="t-text-muted mb-4 font-medium">
-                        Please upload the required file(s) below to securely apply this template: <br/>
-                        {pendingRestore.datasetsMeta ? (
-                          <div className="mt-3 flex flex-col gap-2 items-center">
-                              {pendingRestore.datasetsMeta.map(m => {
-                                  const isUploaded = datasets.some(d => d.name === m.name || d.originalFileName === m.originalFileName);
-                                  return (
-                                     <span key={m.id} className={`font-bold px-3 py-1 shadow-sm text-sm ${isUploaded ? 'bg-green-100 text-green-900 border border-green-200' : 'bg-white text-blue-900 border border-blue-200'}`} style={{ borderRadius: 'var(--theme-radius-button)' }}>
-                                         {m.name} {isUploaded ? '✅' : '⏳'}
-                                     </span>
-                                  );
-                              })}
-                          </div>
-                        ) : (
-                          <span className="font-bold t-text-main t-panel px-3 py-1 mt-3 inline-block t-border border shadow-sm" style={{ borderRadius: 'var(--theme-radius-button)' }}>{pendingRestore.originalFileName}</span>
-                        )}
-                      </div>
-                      
-                      <label className="cursor-pointer t-accent-bg px-8 py-4 font-bold shadow-lg hover:shadow-xl hover:scale-105 transition-all inline-block mt-4" style={{ borderRadius: 'var(--theme-radius-button)' }}>Upload Dataset <input type="file" multiple className="hidden" accept=".csv,.txt,.xlsx,.xls" onChange={handleFileUpload} /></label>
-                    </div>
-                </div>
-            ) : (!isUploading && !activeDatasetId && datasets?.length === 0) ? (
+            {!isUploading && !activeDatasetId && datasets?.length === 0 ? (
                 <div className="flex-1 overflow-y-auto w-full p-8 scrollbar-hide">
                     <div className="relative max-w-xl mx-auto p-12 border-4 border-dashed transition-all duration-300 shadow-xl t-border t-panel">
                       <div className="absolute -top-6 -left-6 bg-yellow-100 text-yellow-600 p-4 rounded-full shadow-sm animate-bounce"><Sparkles size={32} /></div>

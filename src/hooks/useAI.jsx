@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import { useAppState } from '../contexts/AppStateContext';
 import { useDataEngine } from './useDataEngine';
-import { syncSemanticModels } from '../utils/semanticSync';
+import { syncSemanticModels } from '../utils/dataParser';
 import { apiClient } from '../services/api';
 
 // ---------------------------------------------------------------------------
