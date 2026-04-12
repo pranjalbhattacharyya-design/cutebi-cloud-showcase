@@ -468,7 +468,6 @@ function AppContent() {
           handleRemoveDataset={handleRemoveDataset}
           saveDatasetName={saveDatasetName}
           openGetDataModal={() => setShowGetDataModal(true)}
-          handleOpenFiles={handleOpenFiles}
           handleAutoLoadTemplate={handleAutoLoadTemplate}
           handleImportTemplates={handleImportTemplates}
           handleExportTemplate={handleExportTemplate}
