@@ -1012,7 +1012,6 @@ export const useDataEngine = () => {
     semanticModels,
     maxDatesCache,
     isLoading,
-    loadDataset,
     deleteDataset,
     joinDatasets,
     updateSemanticModel,
